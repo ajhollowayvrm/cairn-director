@@ -621,18 +621,42 @@ function simSeries(a,b,wins,ctx){
 /* events & season */
 function fieldFor(tier){
   const ranked=[...world.teams].sort((x,y)=>y.gravl-x.gravl);
-  if(tier==='WC')return ranked.slice(0,8); // the season's eight best contest the world title
-  if(tier==='SP'||tier==='S'){
+  if(tier==='SP'||tier==='WC'){ // Majors & Worlds open with a 16-team Swiss stage
     if(tier==='SP'&&world.majorChamps.length===0){
       // The inaugural Major: the founding-era headliners are seeded in by right
       const seeds=['VNG','LG','HEMI'].map(s=>world.teams.find(t=>t.short===s)).filter(Boolean);
       const rest=ranked.filter(t=>!seeds.includes(t));
-      return seeds.concat(rest).slice(0,8);
+      return seeds.concat(rest).slice(0,16);
     }
-    return ranked.slice(0,8);
+    return ranked.slice(0,16);
   }
+  if(tier==='S')return ranked.slice(0,8);
   if(tier==='A'){const top=ranked.slice(0,4);const rest=shuffle(ranked.slice(4)).slice(0,4);return shuffle(top.concat(rest));}
   const lower=shuffle(ranked.slice(4)).slice(0,6);const couple=shuffle(ranked.slice(0,4)).slice(0,2);return shuffle(lower.concat(couple));
+}
+// 16-team Swiss group stage: pair on equal records, 3 wins advance to the playoff bracket, 3 losses out.
+// High-stakes matches (a side at 2 wins or 2 losses) are best-of-3; the rest best-of-1.
+function runSwiss(field,ctx){
+  const rec=new Map();field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i}));
+  const advanced=[],eliminated=[];let active=field.slice(),round=0;
+  while(active.length&&round++<12){
+    const groups={};active.forEach(t=>{const r=rec.get(t);(groups[r.w+'-'+r.l]=groups[r.w+'-'+r.l]||[]).push(t);});
+    const pairs=[];
+    Object.keys(groups).forEach(k=>{const g=groups[k].slice().sort((a,b)=>rec.get(a).seed-rec.get(b).seed);
+      while(g.length>=2)pairs.push([g.shift(),g.pop()]);}); // top seed vs bottom seed within the record group
+    pairs.forEach(([x,y])=>{const rx=rec.get(x),ry=rec.get(y);
+      const stakes=Math.max(rx.w,rx.l,ry.w,ry.l)>=2;
+      const s=simSeries(x,y,stakes?2:1,ctx?Object.assign({},ctx,{round:'Swiss'}):null);
+      rec.get(s.winner).w++;rec.get(s.loser).l++;});
+    active=active.filter(t=>{const r=rec.get(t);if(r.w>=3){advanced.push(t);return false;}if(r.l>=3){eliminated.push(t);return false;}return true;});
+  }
+  advanced.sort((a,b)=>rec.get(a).l-rec.get(b).l||b.gravl-a.gravl); // seed playoffs by Swiss record
+  eliminated.sort((a,b)=>rec.get(b).w-rec.get(a).w||b.gravl-a.gravl);
+  return {advanced,eliminated,rec};
+}
+function swissFeed(name,tier,swiss){
+  const r=swiss.rec;const threeOh=swiss.advanced.filter(t=>r.get(t).l===0);
+  feedPush('note',`${name} — Swiss stage`,`Sixteen teams, Swiss to eight. Into the playoffs: ${swiss.advanced.map(t=>`${esc(t.name)} <span class="faint">${r.get(t).w}–${r.get(t).l}</span>`).join(', ')}.${threeOh.length?` <b>${threeOh.map(t=>esc(t.name)).join(', ')}</b> ran the table 3–0.`:''} Out of the Swiss: ${swiss.eliminated.map(t=>esc(t.short)).join(', ')}.`);
 }
 function mkEventName(tier){
   if(tier==='WC')return `${world.year} Cairn World Championship`;
@@ -839,9 +863,15 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
 }
 function runEvent(tier,name){
   const T=TIERS[tier];
-  const field=fieldFor(tier).slice(0,8).sort((x,y)=>y.gravl-x.gravl);
-  const wins=T.bo==='bo5'?3:2;
   const logMaps=(tier==='SP'||tier==='S'||tier==='WC');const cx=r=>logMaps?{event:name,tier,round:r}:null;
+  let field;
+  if(tier==='SP'||tier==='WC'){ // 16-team Swiss decides the eight playoff teams
+    const swiss=runSwiss(fieldFor(tier),cx('Swiss'));
+    swiss.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.4)); // Swiss participation points
+    swissFeed(name,tier,swiss);
+    field=swiss.advanced; // the eight survivors, seeded by Swiss record
+  } else field=fieldFor(tier).slice(0,8).sort((x,y)=>y.gravl-x.gravl);
+  const wins=T.bo==='bo5'?3:2;
   const finalRound=tier==='WC'?'World final':tier==='SP'?'Major final':'Masters final';
   const qf=[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]].map(([a,b])=>simSeries(a,b,wins,cx('QF')));
   const qfL=qf.map(s=>s.loser);
@@ -900,16 +930,19 @@ function takeFA(role){const p=bestFor(world.freeAgents,role);if(p)world.freeAgen
 const ELITE=78;
 function eliteCount(t){return contracted(t).filter(p=>skillIndex(p)>=ELITE).length;}
 function rosterStrength(t){const c=contracted(t);return c.length?c.reduce((s,p)=>s+skillIndex(p),0)/c.length:0;}
+// a player the commissioner just placed (or any fresh signing) shouldn't be auto-pulled away before they play
+function justSigned(p){return !!(p.history&&p.history.length&&p.history[p.history.length-1].season===world.season);}
+function poachable(p){return !p.injured&&!p.bb&&!p.pinned&&!justSigned(p);} // pinned = locked to roster by the commissioner
 function signFor(t,role){
-  const cap=eliteCount(t)>=2;const ok=p=>!cap||skillIndex(p)<ELITE;
+  const cap=eliteCount(t)>=2;const ok=p=>(!cap||skillIndex(p)<ELITE)&&!p.pinned&&!justSigned(p);
   const faCand=bestFor(world.freeAgents.filter(ok),role);
   let t2=null,t2team=null;
   world.teams.filter(x=>x.div===2).forEach(x=>contracted(x).filter(p=>p.role===role&&ok(p)).forEach(p=>{if(!t2||skillIndex(p)>skillIndex(t2)){t2=p;t2team=x;}}));
   const faS=faCand?skillIndex(faCand):-1,t2S=t2?skillIndex(t2):-1;
   let signed;
-  if(t2&&t2S>faS+3&&t2S>52){t2team.players=t2team.players.filter(p=>p!==t2);joinTeam(procWeak(role),t2team);signed=t2;txn('callup',`${nm(signed)} called up to ${t.short} (Div 1) from ${t2team.short}.`);feedPush('small','Called up',`${t.short} sign ${nm(signed)} (${role}) out of tier 2.`);}
+  if(t2&&t2S>faS+3&&t2S>52){t2team.players=t2team.players.filter(p=>p!==t2);joinTeam(procWeak(role),t2team);signed=t2;txn('callup',`${nm(signed)} called up to ${t.short} (Div 1) from ${t2team.short}.`);feedPush('small','Called up',`${esc(t.name)} call up ${nm(signed)} <span class="role">${role}</span> from ${esc(t2team.name)} (tier 2).`);}
   else if(faCand){world.freeAgents=world.freeAgents.filter(p=>p!==faCand);signed=faCand;txn('sign',`${t.short} sign ${nm(signed)} (${role}) from free agency.`);}
-  else{signed=proc(role,16+Math.floor(rnd()*3));txn('rookie',`${t.short} promote rookie ${nm(signed)} (${role}).`);feedPush('small','A rookie arrives',`${t.short} sign ${nm(signed)} (${role}) — unproven, on clean stone.`);}
+  else{signed=proc(role,16+Math.floor(rnd()*3));txn('rookie',`${t.short} promote rookie ${nm(signed)} (${role}).`);feedPush('small','A rookie arrives',`${esc(t.name)} sign rookie ${nm(signed)} <span class="role">${role}</span> — unproven, on clean stone.`);}
   joinTeam(signed,t);
 }
 function setDiv(t,d){if(t.div!==d){t.div=d;(t.divHistory=t.divHistory||[]).push({season:world.season,div:d});}}
@@ -973,10 +1006,10 @@ function poach(){
     if(done>=maxPoach)break;if(rnd()>0.5)continue;
     const c=contracted(buyer);if(c.length<5)continue;
     const atCap=eliteCount(buyer)>=2;
-    const star=starOf(buyer);const weak=c.filter(p=>p!==star&&!p.injured).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
+    const star=starOf(buyer);const weak=c.filter(p=>p!==star&&!p.injured&&!p.pinned).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
     if(!weak)continue;const role=weak.role;
     let target=null,seller=null;
-    world.teams.filter(t=>t!==buyer).forEach(t=>{contracted(t).filter(p=>p.role===role&&!p.injured&&!p.bb&&!(p.history&&p.history.length&&p.history[p.history.length-1].season===world.season)).forEach(p=>{
+    world.teams.filter(t=>t!==buyer).forEach(t=>{contracted(t).filter(p=>p.role===role&&poachable(p)).forEach(p=>{
       if(t.heart&&p===starOf(t))return;
       if(atCap&&skillIndex(p)>=ELITE)return;
       if(skillIndex(p)>skillIndex(weak)+6&&(!target||skillIndex(p)>skillIndex(target))){target=p;seller=t;}});});
@@ -1014,13 +1047,13 @@ function transactionWindow(){
   world.teams.filter(t=>t._disbandSoon).forEach(t=>{t._disbandSoon=false;disbandTeam(t,'champ');});
   if(rnd()<0.7)poach();
   world.teams.filter(t=>t.div===1).forEach(t=>{if(rnd()<0.10){const c=contracted(t);if(c.length<5)return;const star=starOf(t);
-    const cand=c.filter(p=>p!==star&&!p.injured&&!p.bb).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
+    const cand=c.filter(p=>p!==star&&!p.injured&&!p.bb&&!p.pinned).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
     if(cand&&(skillIndex(cand)<58||cand.age>=29)){t.players=t.players.filter(p=>p!==cand);
       if(rnd()<0.35){const t2=pick(world.teams.filter(x=>x.div===2));const bump=contracted(t2).slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];if(bump){t2.players=t2.players.filter(x=>x!==bump);toFA(bump);}cand.formerTeams=cand.formerTeams||[];cand.formerTeams.push(t.short);joinTeam(cand,t2);txn('drop',`${t.short} drop ${nm(cand)} (${cand.role}); he resurfaces in tier 2 with ${t2.short}.`);}
       else{toFA(cand);txn('drop',`${t.short} part ways with ${nm(cand)} (${cand.role}).`);}}}});
   // tier-2 sides shop free agency — pulls faded ex-Div1 names down a tier
   world.teams.filter(t=>t.div===2).forEach(t=>{if(rnd()<0.16){const c=contracted(t);if(c.length<5)return;
-    const weak=c.slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];const fa=bestFor(world.freeAgents,weak.role);
+    const weak=c.filter(p=>!p.pinned).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];if(!weak)return;const fa=bestFor(world.freeAgents,weak.role);
     if(fa&&skillIndex(fa)>skillIndex(weak)+5){world.freeAgents=world.freeAgents.filter(x=>x!==fa);t.players=t.players.filter(p=>p!==weak);toFA(weak);joinTeam(fa,t);
       txn('sign',`${t.short} (Div 2) bring in ${nm(fa)} (${fa.role})${fa.formerTeams&&fa.formerTeams.length?` — a step down from Div 1`:''}.`);}}});
   disbandCheck();
@@ -1095,7 +1128,7 @@ function renderFeed(){const el=$("p-feed");
   if(!world.feed.length){el.innerHTML=hint+`<div class="feed-empty">The Yard is quiet. Press "Sim season" to set the circuit in motion.</div>`;return;}
   el.innerHTML=hint+world.feed.slice(0,50).map(f=>{const cls=f.kind==='final'?'final':f.kind==='note'?'note':f.kind==='small'?'small':'';
     let body;
-    if(f.kind==='small')body='';
+    if(f.kind==='small')body=f.body?`<p>${f.body}</p>`:'';
     else if(f.kind==='final'&&f.data){
       if(f.narrated)body=`<div class="desk"><div class="desk-label">From the desk</div>${fmtAI(f.narrated)}</div>`;
       else if(f.narrating)body=`<p>${f.body}</p><div class="desk-loading">the desk is calling it…</div>`;
@@ -1494,13 +1527,20 @@ function seedField(){return [...world.teams].sort((a,b)=>b.gravl-a.gravl).slice(
 function pushLog(L,text,kind){L.log.unshift({text,kind});if(L.log.length>140)L.log.pop();}
 function liveSetup(name,tier){
   transactionWindow();
-  const field=seedField();
-  const L={name,tier:tier||'SP',field,stage:'qf',matchIdx:0,
+  tier=tier||'SP';
+  // the 16-team Swiss is auto-resolved, then the eight survivors are broadcast through the playoff bracket
+  const swiss=runSwiss(fieldFor(tier),{event:name,tier,round:'Swiss'});
+  swiss.eliminated.forEach(t=>t.gravl+=Math.round(TIERS[tier].pts[8]*0.4));
+  swissFeed(name,tier,swiss);
+  const field=swiss.advanced;
+  const L={name,tier,field,swiss,stage:'qf',matchIdx:0,
     qfPairs:[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]],
     qfWinners:[],qfLosers:[],sfPairs:[],sfWinners:[],sfLosers:[],fPair:null,
     match:null,matchVigils:[],log:[],done:false};
   world.live=L;
-  pushLog(L,`The ${name} begins. Eight teams, one Yard. Top seed: ${field[0].name}.`,'map');
+  const r=swiss.rec;
+  pushLog(L,`Swiss complete — eight advance to the ${name} playoffs: ${field.map(t=>`${t.short} (${r.get(t).w}–${r.get(t).l})`).join(', ')}.`,'map');
+  pushLog(L,`The ${name} playoffs begin. Top Swiss seed: ${field[0].name}.`,'map');
   startMatch(L);render();switchTab('cast');
 }
 function startMatch(L){
@@ -1619,7 +1659,10 @@ function boxTable(m,mp,L){
 }
 function bracketStrip(L){
   const tie=(p,w,live)=>`<span class="brk-tie ${live?'live':''}">${p[0].short}/${p[1].short}${w?` → <b>${w.short}</b>`:''}</span>`;
-  let h=`<div class="bracket"><div class="brk-row"><span class="brk-lab">QF</span> ${L.qfPairs.map((p,i)=>tie(p,L.qfWinners[i],L.stage==='qf'&&i===L.matchIdx)).join(" ")}</div>`;
+  let h=`<div class="bracket">`;
+  if(L.swiss){const r=L.swiss.rec;
+    h+=`<div class="brk-row"><span class="brk-lab">SW</span> <span class="faint">Swiss → 8:</span> ${L.swiss.advanced.map(t=>`<span class="brk-tie"><b>${t.short}</b> <span class="faint">${r.get(t).w}–${r.get(t).l}</span></span>`).join(" ")}</div>`;}
+  h+=`<div class="brk-row"><span class="brk-lab">QF</span> ${L.qfPairs.map((p,i)=>tie(p,L.qfWinners[i],L.stage==='qf'&&i===L.matchIdx)).join(" ")}</div>`;
   if(L.stage!=='qf')h+=`<div class="brk-row"><span class="brk-lab">SF</span> ${L.sfPairs.map((p,i)=>tie(p,L.sfWinners[i],L.stage==='sf'&&i===L.matchIdx)).join(" ")}</div>`;
   if(L.stage==='f')h+=`<div class="brk-row"><span class="brk-lab">F</span> ${tie(L.fPair,null,true)}</div>`;
   return h+`</div>`;
