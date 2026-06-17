@@ -23,7 +23,7 @@ Explore the rest through the tabs: the story feed, live broadcast, calendar, sta
 
 All historical data is kept for the life of the run (nothing is evicted), so deep analytics accumulate over dozens of seasons:
 
-- **Timeline** — significant milestones in chronological order: a team's first-ever cairn, a finals drought finally broken, back-to-back titles and dynasties, a tier-2 side crashing a Major, a deadlift in a final, an unmarked star finally marked, and head-to-head reversals (*"after losing the last 3 Major finals to them, they finally turn it around"*).
+- **Timeline** — significant milestones in chronological order: a team's first-ever Major, a finals drought of 3+ finally broken, back-to-back titles and dynasties, a tier-2 side crashing a Major, a deadlift in a final, an unmarked star finally marked, and head-to-head reversals (*"after losing the last 3 Major finals to them, they finally turn it around"*).
 - **Best games** — the greatest individual single-map performances ever (Masters & Majors), ranked by map Gravity.
 - **Best Majors** — the biggest individual showings in a Major final, win or lose, ranked by series Gravity.
 - **GOATs, Upsets, Chokes, Moments** — all-time leaderboards that grow as the league plays on.

@@ -541,25 +541,26 @@ function recordMajorPerfs(name,champ,run,F){
 function recordMajorTimeline(name,champ,run,F,ctx){
   const founded=(champ.divHistory&&champ.divHistory[0])?champ.divHistory[0].season:1;
   if(champ.majors===1){const dr=Math.max(1,world.season-founded);
-    timelinePush({kind:'first',icon:'▲',short:champ.short,title:`${champ.name} raise their first cairn`,
+    timelinePush({kind:'first',icon:'▲',short:champ.short,title:`${champ.name} win their first Major`,
       text:`${champ.name} win the ${name}${dr>1?` — ${dr} seasons in the making`:' in their debut season'}. First Major, first stone on the Yard.`});}
   if(champ.div===2)timelinePush({kind:'upset',icon:'⚡',short:champ.short,title:`A tier-2 side wins a Major`,
-    text:`${champ.name} climb out of the second division and take the ${name} outright — a feeder team raising a cairn.`});
+    text:`${champ.name} climb out of the second division and take the ${name} outright — a feeder team winning a Major.`});
   else if(run.div===2)timelinePush({kind:'upset',icon:'⚡',short:run.short,title:`A tier-2 side reaches a Major final`,
     text:`${run.name} crash the ${name} final from tier 2 before falling ${F.scoreStr}.`});
   if(F.deadlift)timelinePush({kind:'deadlift',icon:'⟲',short:champ.short,title:`${champ.short} deadlift the ${name} final`,
-    text:`${champ.name} climb off an 0–2 floor to beat ${run.name} ${F.scoreStr} — a reverse sweep with a cairn on the line.`});
-  if(ctx.priorStreak>=2)timelinePush({kind:'streak',icon:'✦',short:champ.short,title:`${champ.short} break a ${ctx.priorStreak}-final drought`,
-    text:`${champ.name} had lost ${ctx.priorStreak} straight Major finals. At the ${name} they finally close one out, def. ${run.name} ${F.scoreStr}.`});
+    text:`${champ.name} climb off an 0–2 floor to beat ${run.name} ${F.scoreStr} — a reverse sweep with a Major on the line.`});
   if(ctx.champStarBreakthrough&&ctx.starC)timelinePush({kind:'marked',icon:'●',short:champ.short,title:`${ctx.starC.tag} is marked at last`,
     text:`${ctx.starC.first} "${ctx.starC.tag}" ${ctx.starC.last} wins a first Major after years unmarked — the cruelest label, shed at the ${name}.`});
+  // finals droughts: only a genuine run of losses (3+) is a milestone. A same-opponent reversal tells the better story, so it wins out.
   const prior=world.majorFinals.filter(f=>(f.champ===champ.short&&f.run===run.short)||(f.champ===run.short&&f.run===champ.short));
   let lossesVsRun=0;for(let i=prior.length-1;i>=0;i--){if(prior[i].champ===run.short&&prior[i].run===champ.short)lossesVsRun++;else break;}
-  if(lossesVsRun>=2)timelinePush({kind:'rivalry',icon:'⚔',short:champ.short,title:`${champ.short} finally get ${run.short}`,
+  if(lossesVsRun>=3)timelinePush({kind:'rivalry',icon:'⚔',short:champ.short,title:`${champ.short} finally get ${run.short}`,
     text:`After losing the last ${lossesVsRun} Major finals to ${run.name}, ${champ.name} turn it around at the ${name}, ${F.scoreStr}. The hex is broken.`});
+  else if(ctx.priorStreak>=3)timelinePush({kind:'streak',icon:'✦',short:champ.short,title:`${champ.short} break a ${ctx.priorStreak}-final drought`,
+    text:`${champ.name} had lost ${ctx.priorStreak} straight Major finals. At the ${name} they finally close one out, def. ${run.name} ${F.scoreStr}.`});
   let streak=0;for(let i=world.majorChamps.length-1;i>=0;i--){if(world.majorChamps[i].team===champ.short)streak++;else break;}
   if(streak===2)timelinePush({kind:'dynasty',icon:'♛',short:champ.short,title:`${champ.short} go back-to-back`,
-    text:`${champ.name} win consecutive Majors — two cairns running, the latest at the ${name}.`});
+    text:`${champ.name} win consecutive Majors — back-to-back, the latest at the ${name}.`});
   else if(streak>=3)timelinePush({kind:'dynasty',icon:'♛',short:champ.short,title:`${champ.short} make it ${streak} straight`,
     text:`${champ.name} win their ${streak}th Major in a row at the ${name}. A dynasty on the Yard.`});
   world.majorFinals.push({season:world.season,year:world.year,champ:champ.short,run:run.short,event:name});}
@@ -602,7 +603,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
   if(a1&&b1){const key=[a1.id,b1.id].sort().join('-');world.rivalries[key]=world.rivalries[key]||{a:a1,b:b1,count:0,name:rivName(a1,b1)};const r=world.rivalries[key];r.count++;riv={name:r.name,chapter:r.count,a:a1.tag,b:b1.tag};if(r.count>1)feedPush('note','Rivalry renewed',`${r.name} ${roman(r.count)} — met again with a title on the line (${name}).`);}
   const starC=starOf(champ),starR=starOf(run);const champStarBefore=starC?starC.titles:0;
   const triv=regTeamRiv(champ,run,champ);
-  if(triv.count>1)feedPush('note','A rivalry deepens',`${triv.a}–${triv.b} meet again with a cairn at stake (${name}) — ${triv.count} title clashes now, ${triv.wins[champ.short]||0}–${triv.wins[run.short]||0} ${champ.short}.`);
+  if(triv.count>1)feedPush('note','A rivalry deepens',`${triv.a}–${triv.b} meet again with a Major at stake (${name}) — ${triv.count} title clashes now, ${triv.wins[champ.short]||0}–${triv.wins[run.short]||0} ${champ.short}.`);
   champ.majors++;const winLine=lineup(champ);winLine.forEach(p=>{p.titles++;});const usedStandin=winLine.some(p=>p.standinFor);
   if(!champ.bbTeam&&rnd()<0.05)champ._disbandSoon=true;
   const loud=!champ.heart,zone=F.lastZone;
@@ -629,8 +630,8 @@ function commitMajor(name,champ,run,sfL,qfL,F){
   run.finalsLost=(run.finalsLost||0)+1;run.finalLossStreak=(run.finalLossStreak||0)+1;
   const founded=(champ.divHistory&&champ.divHistory[0])?champ.divHistory[0].season:1;
   let ms=0;const mr=[];
-  if(priorStreak>=1){const art=/^(8|11|18)$/.test(''+priorStreak)?'an':'a';ms+=priorStreak*14;mr.push(`broke ${art} ${priorStreak}-final losing streak`);}
-  if(champ.majors===1){const dr=Math.max(1,world.season-founded);ms+=Math.min(dr,12)*3;mr.push(`raised a first-ever cairn ${dr>1?`after ${dr} seasons`:'in their debut season'}`);}
+  if(priorStreak>=3){const art=/^(8|11|18)$/.test(''+priorStreak)?'an':'a';ms+=priorStreak*14;mr.push(`broke ${art} ${priorStreak}-final losing streak`);}
+  if(champ.majors===1){const dr=Math.max(1,world.season-founded);ms+=Math.min(dr,12)*3;mr.push(`won a first-ever Major ${dr>1?`after ${dr} seasons`:'in their debut season'}`);}
   if(F.deadlift){ms+=24;mr.push('stormed back from 0–2 down in the final — a deadlift');}
   const cgStar=starC&&starC.games?careerGrav(starC):0;
   if(data.champStarBreakthrough&&cgStar>=1.15){ms+=18;mr.push(`${starC.tag} finally shed the unmarked label (${cgStar.toFixed(2)} career Gravity)`);}
@@ -638,7 +639,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
     text:`${champ.name} ${mr.join(', and ')} — ${name}, def. ${run.name} ${F.scoreStr}.`},Infinity);
   lineup(run).forEach(p=>{const fg=F.sg[p.id];if(fg==null)return;const cg=p.games?careerGrav(p):1;const drop=cg-fg;
     if((cg>=1.05&&drop>=0.28)||(cg>=1.12&&fg<0.92))pushCapped(world.chokes,{kind:'ind',season:world.season,event:name,id:p.id,score:Math.round(drop*100*(cg-0.4)),tag:p.tag,short:run.short,
-      text:`${pname(p)} (${run.short}) posted ${fg.toFixed(2)} in the ${name} final — ${drop.toFixed(2)} under a ${cg.toFixed(2)} career. The no-show that cost the cairn.`},Infinity);});
+      text:`${pname(p)} (${run.short}) posted ${fg.toFixed(2)} in the ${name} final — ${drop.toFixed(2)} under a ${cg.toFixed(2)} career. The no-show that cost the Major.`},Infinity);});
   recordMajorPerfs(name,champ,run,F);
   recordMajorTimeline(name,champ,run,F,{priorStreak,starC,champStarBreakthrough:data.champStarBreakthrough});
   return data;
@@ -716,10 +717,10 @@ function promoteRelegate(){
 /* anytime transactions */
 function retire(p,t,opts){opts=opts||{};p.retired=true;p.standinFor=null;
   if(opts.toCoach&&t){t.coach=mkCoach(p.first,p.tag,p.last,{prep:clamp(p.r.read+gauss()*4,58,96),composure:clamp(p.r.consistency,55,95)},true);
-    feedPush('note','To the touchline',`${nm(p)} hangs up the mouse and takes the ${t.short} coaching chair${p.titles?` — ${p.titles} cairn${p.titles>1?'s':''} as a player`:', still unmarked'}. The read never really leaves.`);}
-  else if(!opts.silent)feedPush('note','A long walk',`${nm(p)} retires${p.titles===0?" — unmarked to the end.":` with ${p.titles} cairn${p.titles>1?"s":""} to his name.`}`);
+    feedPush('note','To the touchline',`${nm(p)} hangs up the mouse and takes the ${t.short} coaching chair${p.titles?` — ${p.titles} Major${p.titles>1?'s':''} as a player`:', still unmarked'}. The read never really leaves.`);}
+  else if(!opts.silent)feedPush('note','A long walk',`${nm(p)} retires${p.titles===0?" — unmarked to the end.":` with ${p.titles} Major${p.titles>1?"s":""} to his name.`}`);
   txn('retire',`${nm(p)} retires${t?` from ${t.short}`:''}.`);
-  if(p.titles>=4)timelinePush({kind:'retire',icon:'⚑',short:t?t.short:'—',title:`${p.tag} walks away`,text:`${p.first} "${p.tag}" ${p.last} retires with ${p.titles} cairns — one of the marked greats steps off the Yard.`});}
+  if(p.titles>=4)timelinePush({kind:'retire',icon:'⚑',short:t?t.short:'—',title:`${p.tag} walks away`,text:`${p.first} "${p.tag}" ${p.last} retires with ${p.titles} Majors — one of the marked greats steps off the Yard.`});}
 function unretire(p){p.retired=false;p.injured=0;if(p.age>33)p.age=33;const t=findHolderTeam(p);if(t)t.players=t.players.filter(x=>x!==p);if(!world.freeAgents.includes(p))world.freeAgents.push(p);}
 function toFA(p){p.faAge=0;p.standinFor=null;world.freeAgents.push(p);}
 function joinTeam(p,t){if(!t.players.includes(p))t.players.push(p);const h=p.history=p.history||[];if(!h.length||h[h.length-1].short!==t.short)h.push({short:t.short,name:t.name,season:world.season});}
@@ -748,7 +749,7 @@ function poach(){
     if(!target)continue;
     buyer.players=buyer.players.filter(p=>p!==weak);toFA(weak);
     transfer(target,seller,buyer);regTeamRiv(buyer,seller,buyer);
-    const hist=target.titles>0?` — ${target.titles} cairn${target.titles>1?'s':''} to his name`:(careerGrav(target)>=1.15?' — an unmarked star, still chasing his first':'');
+    const hist=target.titles>0?` — ${target.titles} Major${target.titles>1?'s':''} to his name`:(careerGrav(target)>=1.15?' — an unmarked star, still chasing his first':'');
     txn('poach',`${buyer.short} sign ${nm(target)} (${role}) from ${seller.short}.`);
     feedPush('note','A raid',`${buyer.short} prise ${nm(target)} out of ${seller.short}${hist}. To clear the slot, ${buyer.short} move on from ${nm(weak)} — to free agency.`);
     done++;
@@ -761,14 +762,14 @@ function disbandTeam(t,reason){
   t.players.filter(p=>p.retired&&p.bb).forEach(p=>toFA(p));
   world.teams=world.teams.filter(x=>x!==t);
   world.defunct.unshift({name:t.name,short:t.short,heart:t.heart,founded,folded:world.season,reason,alumni,
-    endNote:reason==='champ'?`Disbanded at the summit in S${world.season}, weeks after their last cairn — out on top, and gone.`:`Folded in S${world.season}; the roster scattered to free agency.`});
+    endNote:reason==='champ'?`Disbanded at the summit in S${world.season}, weeks after their last Major — out on top, and gone.`:`Folded in S${world.season}; the roster scattered to free agency.`});
   const up=world.teams.filter(x=>x.div===2).sort((a,b)=>b.gravl-a.gravl)[0];
   if(up){setDiv(up,1);txn('promote',`${up.short} pulled up to Div 1 to fill ${t.short}'s slot.`);}
   spawnT2();
   feedPush('note',reason==='champ'?'Out on top, and gone':'The lights go off',
-    reason==='champ'?`${t.name} disband at the summit — weeks after the cairn, the roster scatters to free agency. ${up?`${up.name} are pulled up to take the slot. `:''}The stones stay on the Yard; the name doesn't.`
-    :`${t.name} fold and release their roster to free agency. ${up?`${up.name} are promoted to take their place. `:''}Whatever cairns they own remain — the org that raised them won't.`);
-  if(reason==='champ')timelinePush({kind:'disband',icon:'☄',short:t.short,title:`${t.name} disband at the summit`,text:`Weeks after their last cairn, ${t.name} walk away on top — champions, then gone.`});
+    reason==='champ'?`${t.name} disband at the summit — weeks after the Major, the roster scatters to free agency. ${up?`${up.name} are pulled up to take the slot. `:''}The stones stay on the Yard; the name doesn't.`
+    :`${t.name} fold and release their roster to free agency. ${up?`${up.name} are promoted to take their place. `:''}Whatever Majors they won still stand on the Yard — the org that raised them won't.`);
+  if(reason==='champ')timelinePush({kind:'disband',icon:'☄',short:t.short,title:`${t.name} disband at the summit`,text:`Weeks after their last Major, ${t.name} walk away on top — champions, then gone.`});
   txn('disband',`${t.short} disband; roster released to free agency.`);
 }
 function disbandCheck(){
@@ -860,10 +861,10 @@ function renderCal(){const el=$("p-cal");
   if(!world.thisSeasonEvents.length){el.innerHTML=`<div class="feed-empty">No calendar yet — sim a season.</div>`;return;}
   el.innerHTML=`<p class="hint">Season ${world.season} circuit, in order. Every result feeds the GRAVL Standings; only the Major marks the Yard.</p>`+
    world.thisSeasonEvents.map(e=>`<div class="match"><span class="side"><span class="tag-pill">${TIERS[e.tier].name}</span> ${e.name}</span>
-     <span class="side"><span class="win">${e.champ.short}</span><span class="ms">${e.score}</span><span class="lose">${e.run.short}</span>${e.cairn?' <span class="unmarked">▲ cairn</span>':''}</span></div>`).join("");}
+     <span class="side"><span class="win">${e.champ.short}</span><span class="ms">${e.score}</span><span class="lose">${e.run.short}</span>${e.cairn?' <span class="unmarked">▲ Major</span>':''}</span></div>`).join("");}
 function renderStandings(){const el=$("p-gravl");const ranked=[...world.teams].sort((x,y)=>y.gravl-x.gravl);
-  el.innerHTML=`<p class="hint">GRAVL Standings — a rolling tally of circuit results (decays each year). Top 8 qualify for every Major. Cairns count only Majors won.</p>
-   <table><thead><tr><th>#</th><th>Team</th><th>GRAVL</th><th>Cairns</th></tr></thead><tbody>
+  el.innerHTML=`<p class="hint">GRAVL Standings — a rolling tally of circuit results (decays each year). Top 8 qualify for every Major. The Majors column counts titles won.</p>
+   <table><thead><tr><th>#</th><th>Team</th><th>GRAVL</th><th>Majors</th></tr></thead><tbody>
    ${ranked.map((t,i)=>`<tr class="${i===7?'cut':''} ${i>7?'below':''}"><td class="grav">${i+1}</td><td>${t.name} <span class="role">${t.short}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</td><td class="grav">${t.majors||'—'}</td></tr>`).join("")}
    </tbody></table><p class="hint" style="margin-top:8px">The amber line is the Major cut — below it, you watch from home. A <b>T2</b> tag is a tier-2 side; bank enough GRAVL and they crash the party.</p>`;}
 let sortKey="grav";let selectedPid=null;let playerFilter="active";let movePid=null;let editPid=null;let showCreate=false;
@@ -886,7 +887,7 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
       +`<div class="editmeta">age <button class="step" data-act="agedn" data-p="${p.id}">−</button> ${p.age} <button class="step" data-act="ageup" data-p="${p.id}">+</button> · role <button class="mact" data-act="rolecycle" data-p="${p.id}">${p.role}</button></div>`
     : bar('Aim',r.aim)+bar('Read',r.read)+bar('Entry',r.entry)+bar('Clutch',r.clutch)+bar('Util',r.util)+bar('Consist',r.consistency);
   return `<div class="scout">
-    <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?t.name:'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':p.titles?` · <span class="good">${p.titles} cairn${p.titles>1?'s':''}</span>`:''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
+    <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?t.name:'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':p.titles?` · <span class="good">${p.titles} Major${p.titles>1?'s':''}</span>`:''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
     ${careerPath(p)}
     <div class="scout-cols">
       <div class="scout-attrs">${attrs}</div>
@@ -927,7 +928,7 @@ function renderPlayers(){const el=$("p-players");const rows=allPlayers();
   el.innerHTML=h;}
 function txnBadge(k){const m={drop:'drop',sign:'sign',callup:'call-up',rookie:'rookie',injury:'injury',return:'return',standin:'stand-in',promote:'promo',relegate:'releg',retire:'retire'};return m[k]||k;}
 function renderMarket(){const el=$("p-market");
-  let h=`<p class="hint">Players move. Tier-2 sides grind the lower events for GRAVL — climb the Standings and you reach the Majors. Injuries force stand-ins; a borrowed name can leave with a cairn.</p>`;
+  let h=`<p class="hint">Players move. Tier-2 sides grind the lower events for GRAVL — climb the Standings and you reach the Majors. Injuries force stand-ins; a borrowed name can leave with a Major.</p>`;
   // active injuries / standins
   const inj=[];world.teams.forEach(t=>contracted(t).filter(p=>p.injured).forEach(p=>inj.push({t,p})));
   const subs=[];world.teams.forEach(t=>(t.standins||[]).forEach(s=>subs.push({t,s})));
@@ -965,12 +966,12 @@ function renderStory(){const el=$("p-story");
   let h="";
   h+=`<div class="story-card"><div class="lede">The Unmarked Watch · Players</div>`;
   if(!watch.length)h+=`<p>Nobody carries the curse yet.</p>`;
-  else{const k=watch[0];h+=`<h4>${k.p.first} "${k.p.tag}" ${k.p.last}</h4><p>Career Gravity ${k.cg.toFixed(2)}, ${k.p.games} season${k.p.games>1?"s":""} in, <b>zero cairns</b>. The math says great; the Yard says nothing.</p>
+  else{const k=watch[0];h+=`<h4>${k.p.first} "${k.p.tag}" ${k.p.last}</h4><p>Career Gravity ${k.cg.toFixed(2)}, ${k.p.games} season${k.p.games>1?"s":""} in, <b>zero Majors</b>. The math says great; the Yard says nothing.</p>
      <p style="margin-top:8px;color:var(--faint)">${watch.length} on watch: ${watch.slice(0,7).map(x=>x.p.tag).join(", ")}.</p>`;}
   h+=`</div>`;
   h+=`<div class="story-card"><div class="lede">The Unmarked Watch · Teams</div>`;
   if(teamWatch)h+=`<p><b>${teamWatch.name}</b> — ${Math.round(teamWatch.gravl)} GRAVL, still no Major. The best team yet to write itself into the ground.</p>`;
-  else h+=`<p>Every standing team has a cairn.</p>`;
+  else h+=`<p>Every standing team has a Major.</p>`;
   h+=`</div>`;
   h+=`<div class="story-card"><div class="lede">Rivalries · Teams</div>`;
   const trivs=Object.values(world.teamRivalries).filter(r=>r.count>=2).sort((a,b)=>b.count-a.count);
@@ -987,7 +988,7 @@ function renderStory(){const el=$("p-story");
   h+=(world.casters&&world.casters.length)?world.casters.map(c=>`<div class="row2"><span>${esc(c.name)} <span class="faint">· ${c.former?'ex-'+esc(c.former)+' ':''}${c.role||''}</span></span><span class="ct">caster</span></div>`).join(""):`<p>No casters yet.</p>`;
   h+=`</div>`;
   h+=`<div class="story-card"><div class="lede">The Marked — Major champions</div>`;
-  h+=marked.length?marked.map(([t,n])=>`<div class="row2"><span>${t}</span><span class="ct">${n} cairn${n>1?"s":""}</span></div>`).join(""):`<p>No Major has been won yet.</p>`;
+  h+=marked.length?marked.map(([t,n])=>`<div class="row2"><span>${t}</span><span class="ct">${n} Major${n>1?"s":""}</span></div>`).join(""):`<p>No Major has been won yet.</p>`;
   h+=`</div>`;
   el.innerHTML=h;}
 
@@ -1006,7 +1007,7 @@ function teamCard(t,rankAll){
     <div class="scout-cols"><div class="scout-stats" style="flex:1">
       <div class="ss"><span>GRAVL</span><b class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</b></div>
       <div class="ss"><span>Standings rank</span><b class="grav">#${rk}</b></div>
-      <div class="ss"><span>Cairns</span><b class="grav">${t.majors||'—'}</b></div>
+      <div class="ss"><span>Majors</span><b class="grav">${t.majors||'—'}</b></div>
       <div class="ss"><span>Roster rating</span><b class="grav">${rating}</b></div>
       <div class="ss"><span>Chemistry</span><b class="grav">${Math.round((t.chem||0)*100)}</b></div>
     </div></div>
@@ -1014,7 +1015,7 @@ function teamCard(t,rankAll){
     ${roster.map(p=>{const cg=p.games>=1?careerGrav(p):null;const unmp=cg!==null&&cg>=1.15&&p.titles===0;
       return `<div class="trow" data-tpid="${p.id}"><span class="trole">${p.role.slice(0,3)}</span><span class="tnm">${nm(p)}${p===star?' <span class="t2pill">★</span>':''}${p.standinFor?' <span class="t2pill">sub</span>':''}${p.injured?' <span class="t2pill" style="color:var(--unmarked);border-color:var(--unmarked)">inj</span>':''}${unmp?' <span class="unmarked">●</span>':p.titles?` <span class="good">▲${p.titles}</span>`:''}</span><span class="tstat grav">${cg!==null?cg.toFixed(2):'—'}</span><span class="tstat grav">${p.stat.rounds?kd(p.stat).toFixed(2):'—'}</span></div>`;}).join("")}
     <div class="hint" style="margin-top:4px">Gravity · K/D. Tap a player for the full scouting card.</div></div>
-    <div class="tc-sec"><div class="lede">Club cairns</div>
+    <div class="tc-sec"><div class="lede">Majors won</div>
     ${cairns.length?cairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — no Major won yet.</p>`}</div>
     <div class="tc-sec"><div class="lede">Rivalries · head-to-head</div>
     ${trivs.length?trivs.map(r=>{const opp=r.a===t.short?r.b:r.a;const mine=r.wins[t.short]||0,his=r.wins[opp]||0;return `<div class="row2"><span>vs ${esc(opp)} <span class="faint">(${mine}–${his})</span></span><span class="ct">met ${roman(r.count)}</span></div>`;}).join(""):`<p class="faint">No title rivalries yet.</p>`}</div>
@@ -1037,8 +1038,8 @@ function defunctCard(d){
       <div class="scout-sub"><span class="unmarked">● defunct</span> · ${era} · ${d.heart?'<span class="good">♥ heart side</span>':'<span class="faint">money side</span>'}${d.short==='BB'?' · <span class="t2pill">founding org</span>':''}</div></div>
       <button class="ctl" data-tclose="1">close</button></div>`;
   if(d.note)h+=`<p class="df-note">${esc(d.note)}</p>`;
-  h+=`<div class="tc-sec"><div class="lede">Cairns</div>`;
-  h+=cairns.length?cairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — never built a cairn.</p>`;
+  h+=`<div class="tc-sec"><div class="lede">Majors</div>`;
+  h+=cairns.length?cairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — never won a Major.</p>`;
   h+=`</div>`;
   if(d.alumni&&d.alumni.length){h+=`<div class="tc-sec"><div class="lede">The diaspora · where they are now</div>`;
     h+=d.alumni.map(a=>{const loc=locate(a.tag);return `<div class="trow${loc.pid?'':' nolink'}"${loc.pid?` data-tpid="${loc.pid}"`:''}><span class="trole">${(a.role||'').slice(0,3)}</span><span class="tnm">${esc(a.name||a.tag)}</span><span class="tstat" style="width:auto;color:var(--muted);font-size:11.5px">${esc(loc.where)}</span></div>`;}).join("");
@@ -1049,7 +1050,7 @@ function renderTeams(){const el=$("p-teams");
   const rankAll=[...world.teams].sort((a,b)=>b.gravl-a.gravl);
   const activeSel=selectedTid?world.teams.find(t=>t.short===selectedTid):null;
   const defunctSel=(!activeSel&&selectedTid)?world.defunct.find(d=>d.short===selectedTid):null;
-  let h=`<p class="hint">Tap a club for its page — roster, cairns, head-to-head rivalries, and the moves that built it. The roster taps through to player cards.</p>`;
+  let h=`<p class="hint">Tap a club for its page — roster, Majors, head-to-head rivalries, and the moves that built it. The roster taps through to player cards.</p>`;
   h+=`<div class="pfilter">${[['all','All'],['d1','Div 1'],['d2','Div 2'],['defunct','Defunct']].map(([f,lab])=>`<button class="ctab ${teamFilter===f?'on':''}" data-tfilter="${f}">${lab}</button>`).join("")}</div>`;
   if(activeSel)h+=teamCard(activeSel,rankAll);else if(defunctSel)h+=defunctCard(defunctSel);
   if(teamFilter==='defunct'){
@@ -1076,7 +1077,7 @@ function goatsHtml(){
     const log=(world.goatLog[role]||[]);const seasons=log.slice(-14);
     let h=`<div class="story-card"><div class="lede">${role.toUpperCase()} — GOAT conversation</div>`;
     h+=convo.length?convo.map(({p,s},i)=>{const cg=p.games?careerGrav(p):0;
-      return `<div class="trow" data-tpid="${p.id}"><span class="trole">${i+1}</span><span class="tnm">${nm(p)}${p.retired?' <span class="faint">·ret</span>':''}</span><span class="tstat grav" title="career Gravity">${cg.toFixed(2)}</span><span class="tstat grav" title="cairns">${p.titles}▲</span><span class="tstat grav" title="GOAT score" style="color:var(--ember)">${s.toFixed(0)}</span></div>`;}).join(''):`<p class="faint">No qualified ${role}s yet — play more seasons.</p>`;
+      return `<div class="trow" data-tpid="${p.id}"><span class="trole">${i+1}</span><span class="tnm">${nm(p)}${p.retired?' <span class="faint">·ret</span>':''}</span><span class="tstat grav" title="career Gravity">${cg.toFixed(2)}</span><span class="tstat grav" title="Majors won">${p.titles}▲</span><span class="tstat grav" title="GOAT score" style="color:var(--ember)">${s.toFixed(0)}</span></div>`;}).join(''):`<p class="faint">No qualified ${role}s yet — play more seasons.</p>`;
     if(seasons.length)h+=`<div class="goat-seasons"><span class="cp-l">Season #1s</span> ${seasons.map(e=>`<span class="gs"><span class="cp-s">S${e.season}</span> ${esc(e.tag)}</span>`).join('')}</div>`;
     h+=`</div>`;return h;
   }).join('');
@@ -1087,7 +1088,7 @@ function chokesHtml(){
 }
 function timelineHtml(){
   const tl=world.timeline||[];
-  if(!tl.length)return `<p class="faint">No milestones yet — the timeline fills as teams raise first cairns, break finals droughts, go back-to-back, and finally beat the rival that kept beating them.</p>`;
+  if(!tl.length)return `<p class="faint">No milestones yet — the timeline fills as teams win first Majors, break finals droughts, go back-to-back, and finally beat the rival that kept beating them.</p>`;
   return `<p class="hint">Significant events, newest first — the moments the sport remembers, written as they happen and kept for all time.</p><div class="tline">`+
     [...tl].reverse().map(e=>`<div class="tl-row tl-${esc(e.kind)}"><div class="tl-when"><span class="tl-ic">${e.icon||'•'}</span><span class="tl-s">S${e.season}</span></div><div class="tl-b"><div class="tl-t">${esc(e.title)}</div><div class="tl-x">${esc(e.text)}</div></div></div>`).join('')+
     `</div>`;}
