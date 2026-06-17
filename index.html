@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CAIRN — Director Console</title>
+<style>
+  :root{
+    --stone-0:#15130f;--stone-1:#1d1a14;--stone-2:#272219;--line:#33291d;
+    --bone:#ece5d6;--muted:#9d9384;--faint:#6f675a;
+    --ember:#e6913f;--ember-dim:#a9692f;--cold:#7d93a3;--good:#9bb38b;--bad:#c1736a;--cairn:#bcae96;--gravl:#d9c24a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--stone-0);color:var(--bone);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 16px 90px;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:22px 16px 16px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#1a1711,#15130f);}
+  .head-inner{max-width:1000px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;justify-content:space-between;}
+  .brand{display:flex;align-items:baseline;gap:12px;}
+  .brand h1{font-family:Georgia,serif;font-size:30px;letter-spacing:.16em;margin:0;font-weight:600;}
+  .brand h1 .em{color:var(--ember);}
+  .brand .sub{color:var(--muted);font-size:12px;letter-spacing:.22em;text-transform:uppercase;}
+  .season-tag{font-family:Georgia,serif;color:var(--bone);font-size:13px;}
+  .season-tag b{color:var(--ember);}
+  .gravl-mark{color:var(--gravl);font-weight:600;letter-spacing:.05em;}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+  button.ctl{appearance:none;border:1px solid var(--line);background:var(--stone-2);color:var(--bone);
+    font-size:12.5px;letter-spacing:.04em;padding:9px 13px;border-radius:2px;cursor:pointer;
+    transition:border-color .15s,background .15s,transform .05s;}
+  button.ctl:hover{border-color:var(--ember-dim);background:#2c2519;}
+  button.ctl:active{transform:translateY(1px);}
+  button.ctl.primary{border-color:var(--ember-dim);color:#f6e9d6;background:linear-gradient(180deg,#3a2c18,#2a2013);}
+  button.ctl.primary:hover{border-color:var(--ember);}
+  button.ctl:focus-visible{outline:2px solid var(--ember);outline-offset:2px;}
+  nav.tabs{display:flex;flex-wrap:wrap;gap:2px;margin:18px 0 14px;border-bottom:1px solid var(--line);}
+  .tab{padding:9px 14px;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    cursor:pointer;border-bottom:2px solid transparent;user-select:none;}
+  .tab:hover{color:var(--bone);}
+  .tab.active{color:var(--ember);border-bottom-color:var(--ember);}
+  .panel{display:none;}
+  .panel.active{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.panel.active{animation:none}}
+  .feed-item{border:1px solid var(--line);border-radius:3px;background:var(--stone-1);padding:14px 16px;margin-bottom:12px;}
+  .feed-item .kicker{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);margin-bottom:6px;display:flex;gap:8px;align-items:center;}
+  .feed-item.final .kicker{color:var(--ember);}
+  .feed-item.note .kicker{color:var(--cold);}
+  .feed-item.small{padding:9px 14px;opacity:.82;}
+  .feed-item h3{font-family:Georgia,serif;font-size:17px;margin:0 0 6px;font-weight:600;}
+  .feed-item.small h3{font-size:14px;margin:0;}
+  .feed-item p{margin:6px 0 0;color:var(--muted);font-size:14px;line-height:1.55;}
+  .feed-empty{color:var(--faint);font-style:italic;padding:30px 6px;text-align:center;}
+  .tag-pill{font-size:10px;letter-spacing:.1em;border:1px solid var(--line);border-radius:10px;padding:1px 7px;color:var(--muted);text-transform:uppercase;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;color:var(--faint);font-weight:600;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;}
+  th:hover{color:var(--muted);}
+  td{padding:8px 10px;border-bottom:1px solid #221c14;}
+  tr:hover td{background:#1b1812;}
+  tr.cut td{border-bottom:1px solid var(--ember-dim);}
+  tr.below td{color:var(--faint);}
+  .grav{font-family:ui-monospace,monospace;font-weight:600;}
+  .role{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);}
+  .unmarked{color:var(--ember);}
+  .good{color:var(--good);}
+  .nm{color:var(--bone);} .nm .tg{color:var(--ember);} .age{color:var(--faint);}
+  .match{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);background:var(--stone-1);border-radius:3px;padding:9px 12px;margin-bottom:7px;font-size:14px;flex-wrap:wrap;}
+  .match .side{display:flex;align-items:center;gap:8px;}
+  .match .win{color:var(--bone);font-weight:600;}
+  .match .lose{color:var(--faint);}
+  .match .ms{font-family:ui-monospace,monospace;color:var(--muted);font-size:13px;}
+  .yard{border:1px solid var(--line);border-radius:4px;background:radial-gradient(120% 80% at 50% 120%, #20180f 0%, #16120c 60%);padding:20px 16px;min-height:120px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;}
+  .cairn{display:flex;flex-direction:column;align-items:center;gap:6px;width:64px;text-align:center;}
+  .stones{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .stones i{display:block;background:var(--cairn);border-radius:40% 40% 30% 30%;opacity:.9;}
+  .cairn:hover .stones i{background:var(--ember);}
+  .cairn .clabel{font-size:9.5px;color:var(--muted);letter-spacing:.04em;line-height:1.25;}
+  .cairn .cyear{font-family:ui-monospace,monospace;font-size:10px;color:var(--faint);}
+  .yard-empty{color:var(--faint);font-style:italic;}
+  .story-card{border:1px solid var(--line);border-radius:3px;background:var(--stone-1);padding:14px 16px;margin-bottom:12px;}
+  .story-card h4{margin:0 0 4px;font-family:Georgia,serif;font-size:15px;}
+  .story-card .lede{color:var(--ember);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;}
+  .story-card p{margin:4px 0;color:var(--muted);font-size:13.5px;line-height:1.5;}
+  .row2{display:flex;justify-content:space-between;border-bottom:1px solid #221c14;padding:7px 0;font-size:14px;}
+  .row2:last-child{border-bottom:none;}
+  .row2 .ct{font-family:ui-monospace,monospace;color:var(--ember);}
+  .hint{color:var(--faint);font-size:12px;margin:2px 0 14px;}
+  .desk{border-left:2px solid var(--ember);padding:8px 0 2px 14px;margin-top:10px;}
+  .desk-label{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ember);margin-bottom:6px;}
+  .desk p{font-family:Georgia,serif;color:var(--bone);font-size:14.5px;line-height:1.62;margin:0 0 9px;}
+  .desk-loading{margin-top:9px;color:var(--ember);font-style:italic;font-size:13px;animation:pulse 1.2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){.desk-loading{animation:none}}
+  .desk-err{color:var(--bad);font-size:12px;margin-top:7px;}
+  button.ctl.narrate{margin-top:10px;border-color:var(--ember-dim);}
+  .cast-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px;}
+  .cast-title{font-family:Georgia,serif;font-size:18px;}
+  .cast-stage{color:var(--ember);font-size:12px;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;}
+  .bracket{font-size:12px;color:var(--muted);background:var(--stone-1);border:1px solid var(--line);border-radius:3px;padding:8px 10px;margin-bottom:10px;}
+  .brk-row{padding:2px 0;}
+  .brk-lab{color:var(--faint);display:inline-block;width:26px;}
+  .brk-tie{display:inline-block;margin:1px 4px 1px 0;padding:1px 6px;border-radius:8px;border:1px solid transparent;}
+  .brk-tie b{color:var(--bone);}
+  .brk-tie.live{border-color:var(--ember-dim);color:var(--bone);}
+  .scoreboard{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:4px;background:radial-gradient(120% 140% at 50% 0%,#231a10,#16120c);padding:12px 16px;margin-bottom:12px;}
+  .sb-team{font-family:Georgia,serif;font-size:19px;flex:0 0 auto;}
+  .sb-mid{text-align:center;flex:1;}
+  .sb-series{font-family:ui-monospace,monospace;font-size:13px;color:var(--muted);}
+  .sb-map{font-family:ui-monospace,monospace;font-size:22px;color:var(--ember);margin:2px 0;}
+  .sb-zone{font-size:11px;color:var(--faint);}
+  .cast-ctl{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}
+  .pbp{display:flex;flex-direction:column;max-height:330px;overflow:auto;border:1px solid var(--line);border-radius:3px;background:var(--stone-1);}
+  .pbp-line{font-size:12.5px;padding:7px 11px;border-bottom:1px solid #211b13;color:var(--muted);font-family:ui-monospace,monospace;line-height:1.45;}
+  .pbp-line.mapend{color:var(--bone);background:#1d1810;}
+  .pbp-line.win{color:var(--ember);background:#211a10;font-family:inherit;}
+  .pbp-line.champion{color:var(--cairn);background:#231d12;font-family:Georgia,serif;}
+  .pbp-line.map{color:var(--faint);}
+  .champ-banner{border:1px solid var(--ember-dim);border-radius:4px;background:radial-gradient(120% 160% at 50% 0%,#2a2012,#16120c);padding:16px;text-align:center;margin-bottom:12px;}
+  .champ-name{font-family:Georgia,serif;font-size:22px;color:#f6e9d6;}
+  .champ-sub{color:var(--muted);font-size:13px;margin-top:5px;}
+  .faint{color:var(--faint);}
+  .cast-tabs{display:flex;gap:6px;margin-bottom:8px;}
+  .ctab{font:inherit;font-size:12px;color:var(--muted);background:var(--stone-1);border:1px solid var(--line);border-radius:3px;padding:5px 12px;cursor:pointer;}
+  .ctab.on{color:var(--bg);background:var(--ember);border-color:var(--ember);}
+  .boxwrap{border:1px solid var(--line);border-radius:3px;background:var(--stone-1);padding:8px 10px;}
+  .bx-cap{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;}
+  .bx-team{font-family:Georgia,serif;font-size:14px;color:var(--bone);margin:8px 0 3px;}
+  .bx-coach{font-family:inherit;font-size:11px;color:var(--faint);}
+  table.bx{width:100%;border-collapse:collapse;font-family:ui-monospace,monospace;font-size:12px;}
+  table.bx th{text-align:right;color:var(--faint);font-weight:400;padding:2px 6px;font-size:10.5px;}
+  table.bx th:first-child{text-align:left;}
+  table.bx td{text-align:right;padding:3px 6px;border-bottom:1px solid #211b13;}
+  table.bx td.bx-nm{text-align:left;}table.bx td.bx-k{color:var(--ember);}td.bx-v{color:var(--cairn);}
+  .scout{border:1px solid var(--ember-dim);border-radius:4px;background:radial-gradient(120% 160% at 50% 0%,#221a10,#15110b);padding:12px 14px;margin-bottom:12px;}
+  .scout-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;}
+  .scout-nm{font-family:Georgia,serif;font-size:16px;}
+  .scout-sub{color:var(--muted);font-size:12px;margin-top:2px;}
+  .scout-cols{display:flex;gap:16px;flex-wrap:wrap;}
+  .scout-attrs{flex:1;min-width:180px;}
+  .atr{display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11px;}
+  .atr-l{width:54px;color:var(--muted);}
+  .atr-bar{flex:1;height:6px;background:#241d13;border-radius:3px;overflow:hidden;}
+  .atr-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--ember-dim),var(--ember));}
+  .atr-v{width:22px;text-align:right;font-family:ui-monospace,monospace;color:var(--bone);}
+  .scout-stats{flex:1;min-width:150px;}
+  .ss{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #211b13;}
+  .ss span{color:var(--muted);}.ss b{font-family:ui-monospace,monospace;}
+  tr.sel{background:#241c10;}
+  tr[data-pid]{cursor:pointer;}
+  .pfilter{display:flex;gap:6px;margin-bottom:10px;}
+  .scout-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:11px;}
+  .mact{font:inherit;font-size:12px;color:var(--bone);background:var(--stone-1);border:1px solid var(--ember-dim);border-radius:3px;padding:5px 11px;cursor:pointer;}
+  .mact:hover{border-color:var(--ember);}
+  .move-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:5px;margin-top:9px;}
+  .movebtn{font:inherit;font-size:11px;font-family:ui-monospace,monospace;color:var(--muted);background:var(--stone-1);border:1px solid var(--line);border-radius:3px;padding:6px 4px;cursor:pointer;}
+  .movebtn.t2{opacity:.62;}
+  .movebtn.cur{border-color:var(--ember);color:var(--ember);}
+  .movebtn:hover{border-color:var(--ember);color:var(--bone);}
+  .mact.on{background:var(--ember);color:var(--bg);border-color:var(--ember);}
+  .step{font:inherit;font-size:14px;min-width:26px;height:24px;line-height:1;color:var(--bone);background:var(--stone-1);border:1px solid var(--ember-dim);border-radius:3px;cursor:pointer;padding:0;}
+  .atr.edit{gap:5px;}
+  .editmeta{display:flex;gap:8px;align-items:center;margin-top:9px;font-size:12px;color:var(--muted);flex-wrap:wrap;}
+  .createfa{border:1px solid var(--ember-dim);border-radius:4px;padding:10px;margin-bottom:12px;background:var(--stone-1);}
+  .cf-row{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;align-items:center;}
+  .cf-row input,.cf-row select{font:inherit;font-size:13px;background:#15110b;border:1px solid var(--line);border-radius:3px;color:var(--bone);padding:6px 8px;flex:1;min-width:64px;}
+  .cf-row input[type=number]{max-width:64px;flex:0 0 auto;}
+  .career-path{font-size:11.5px;color:var(--muted);margin:8px 0 2px;line-height:1.7;}
+  .cp-l{color:var(--faint);text-transform:uppercase;letter-spacing:.1em;font-size:10px;margin-right:4px;}
+  .cp-tm{font-family:ui-monospace,monospace;color:var(--bone);}
+  .cp-s{color:var(--faint);font-size:10px;margin-left:2px;}
+  .cp-arr{color:var(--ember-dim);margin:0 3px;}
+  .teamcard .tc-sec{border-top:1px solid var(--line);margin-top:12px;padding-top:10px;}
+  .teamcard .tc-sec .lede{margin-bottom:6px;}
+  .trow{display:flex;align-items:center;gap:8px;padding:7px 6px;border-radius:4px;cursor:pointer;border:1px solid transparent;}
+  .trow:hover{background:var(--stone-1);border-color:var(--ember-dim);}
+  .trow .trole{font-family:ui-monospace,monospace;font-size:10px;color:var(--faint);text-transform:uppercase;width:30px;flex:0 0 auto;}
+  .trow .tnm{flex:1;min-width:0;}
+  .trow .tstat{width:46px;text-align:right;flex:0 0 auto;font-size:12px;}
+  .trow.nolink{cursor:default;}
+  .trow.nolink:hover{background:none;border-color:transparent;}
+  .df-note{margin:11px 0 0;color:var(--muted);font-size:13.5px;line-height:1.62;font-style:italic;}
+  .dflist{margin-top:4px;}
+  .dfrow.sel{background:var(--stone-1);border-color:var(--ember);}
+  .rec{display:flex;gap:10px;align-items:flex-start;padding:9px 4px;border-bottom:1px solid var(--line);}
+  .rec.tap{cursor:pointer;border-radius:4px;}
+  .rec.tap:hover{background:var(--stone-1);}
+  .rec-sc{flex:0 0 auto;min-width:34px;text-align:center;font-family:ui-monospace,monospace;font-weight:700;color:var(--ember);background:var(--stone-1);border:1px solid var(--ember-dim);border-radius:4px;padding:3px 4px;font-size:13px;}
+  .rec-b{flex:1;min-width:0;}
+  .rec-x{font-size:13.5px;line-height:1.5;color:var(--bone);}
+  .rec-m{font-size:11px;color:var(--faint);margin-top:2px;text-transform:uppercase;letter-spacing:.06em;}
+  .goat-seasons{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:11.5px;line-height:1.9;color:var(--muted);}
+  .goat-seasons .gs{margin-right:9px;white-space:nowrap;}
+  .goat-seasons .gs .cp-s{margin-right:1px;}
+  .t2pill{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);border:1px solid var(--line);border-radius:6px;padding:0 4px;margin-left:3px;vertical-align:middle;}
+  .txn{font-size:12.5px;color:var(--muted);padding:5px 0;border-bottom:1px solid #211b13;line-height:1.4;}
+  .txn-s{color:var(--faint);font-family:ui-monospace,monospace;font-size:11px;margin-right:4px;}
+  .txn-b{display:inline-block;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:1px 5px;border-radius:7px;margin-right:6px;border:1px solid var(--line);color:var(--muted);}
+  .txn-drop,.txn-relegate{color:#d98a8a;border-color:#5a3030;}
+  .txn-sign,.txn-callup,.txn-promote{color:var(--cairn);border-color:var(--ember-dim);}
+  .txn-injury{color:var(--unmarked);border-color:#5a3030;}
+  .txn-standin{color:var(--ember);border-color:var(--ember-dim);}
+  .txn-return,.txn-rookie{color:var(--good,#8fb98f);}
+</style>
+</head>
+<body>
+<header>
+  <div class="head-inner">
+    <div class="brand">
+      <h1>CAIR<span class="em">N</span></h1>
+      <div>
+        <div class="sub">Director Console</div>
+        <div class="season-tag">Season <b id="seasonNo">1</b> · <span id="yearNo">2016</span> · powered by <span class="gravl-mark">GRAVL</span></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="ctl primary" id="btnSeason">Sim season</button>
+      <button class="ctl" id="btnFive">Skip 5 seasons</button>
+      <button class="ctl" id="btnReset">Reset to Season Zero</button>
+    </div>
+  </div>
+</header>
+<div class="wrap">
+  <nav class="tabs" id="tabs">
+    <div class="tab active" data-p="feed">The Story</div>
+    <div class="tab" data-p="cast">Broadcast</div>
+    <div class="tab" data-p="cal">Calendar</div>
+    <div class="tab" data-p="gravl">GRAVL Standings</div>
+    <div class="tab" data-p="players">Players</div>
+    <div class="tab" data-p="teams">Teams</div>
+    <div class="tab" data-p="market">Market</div>
+    <div class="tab" data-p="yard">The Yard</div>
+    <div class="tab" data-p="story">Storylines</div>
+    <div class="tab" data-p="annals">Annals</div>
+  </nav>
+  <section class="panel active" id="p-feed"></section>
+  <section class="panel" id="p-cast"></section>
+  <section class="panel" id="p-cal"></section>
+  <section class="panel" id="p-gravl"></section>
+  <section class="panel" id="p-players"></section>
+  <section class="panel" id="p-teams"></section>
+  <section class="panel" id="p-market"></section>
+  <section class="panel" id="p-yard"></section>
+  <section class="panel" id="p-story"></section>
+  <section class="panel" id="p-annals"></section>
+</div>
+<script>
+"use strict";
+const rnd=()=>Math.random();
+const pick=a=>a[Math.floor(rnd()*a.length)];
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+const gauss=()=>{let u=0,v=0;while(!u)u=rnd();while(!v)v=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);};
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+function pickW(arr,wf){let tot=0;const ws=arr.map(x=>{const w=Math.max(0.0001,wf(x));tot+=w;return w;});let r=rnd()*tot;for(let i=0;i<arr.length;i++){r-=ws[i];if(r<=0)return arr[i];}return arr[arr.length-1];}
+function sampleN(arr,n,wf){const pool=arr.slice(),out=[];n=Math.min(n,pool.length);for(let i=0;i<n;i++){const p=pickW(pool,wf);out.push(p);pool.splice(pool.indexOf(p),1);}return out;}
+function blankBox(){return {k:0,d:0,a:0,entry:0,vigils:0};}
+function accStat(p,e){const s=p.stat;s.k+=e.k;s.d+=e.d;s.a+=e.a;s.entry+=e.entry;if(e.clutch)s.vigils++;s.rounds++;}
+function kd(s){return s.d?s.k/s.d:s.k;}
+function kda(s){return (s.k+s.a)/Math.max(1,s.d);}
+
+const ZONES=[
+  {name:"the Gallery",w:{aim:1.5,read:.6,entry:.8,util:.5}},
+  {name:"the Warren", w:{aim:.8,read:.9,entry:1.3,util:1.1}},
+  {name:"the Stack",  w:{aim:.9,read:1.4,entry:.8,util:1.0}},
+  {name:"the Aisle",  w:{aim:1.0,read:1.0,entry:1.0,util:1.0}},
+  {name:"the Mouth",  w:{aim:.9,read:.8,entry:1.4,util:.9}},
+  {name:"B-Side River",w:{aim:1.1,read:1.0,entry:.9,util:.9}},
+];
+const TIERS={
+  B :{name:"B-Tier", pts:{1:100,2:55,4:25,8:10}, bo:"bo3", cairn:false},
+  A :{name:"A-Tier", pts:{1:210,2:115,4:60,8:25}, bo:"bo3", cairn:false},
+  S :{name:"Masters",pts:{1:420,2:240,4:130,8:60},bo:"bo3", cairn:false},
+  SP:{name:"Major",  pts:{1:760,2:430,4:240,8:120},bo:"bo5",cairn:true},
+};
+const CITIES=["Orlando","Cologne","Katowice","Rio","Austin","Seoul","Lisbon","Dallas","Malmö","Shanghai","Belgrade","Toronto"];
+const MSPON=["GRAVL","Pepsi","Intel","Red Bull","Vantablack"];
+const FIRST=["Marco","Theo","Dane","Kai","Niko","Sten","Ravi","Owen","Jae","Luca","Pax","Cy","Rune","Mads","Tobin","Arlo","Dex","Hugo","Sol","Bram","Iggy","Nash","Reed","Vance","Emre","Yuki","Dario","Phin","Wes","Oslo"];
+const LAST=["Ferro","Vance","Okafor","Sato","Mraz","Delgado","Holt","Park","Costa","Ríos","Mireles","Beck","Falk","Quill","Ade","Nair","Stride","Karras","Boone","Lim","Drozd","Sable","Mensah","Hahn","Vidic","Okonkwo"];
+const TAGS=["spire","null","koff","vael","drey","rin","sled","mox","crow","plume","tilt","hex","glint","ozo","veer","quill","nyx","ridge","loom","gust","brim","pact","stilt","koi","vow","ash","reign","mist","clef","vane"];
+const ROLES=["read","reach","breaker","anchor","set"];
+const ORGS=["Sentinel","Nightfall","Granite","Tidewater","Halcyon","Borealis","Koi","Driftwood"];
+const ORGS2=["Ashfall","Lowtide","Cinder","Pinewood","Gantry","Marrow","Saltbox","Undertow"];
+
+let world=null;
+let pid=1;
+
+function ratingsFor(role){
+  const b=()=>55+rnd()*22;
+  let r={aim:b(),read:b(),clutch:b(),entry:b(),util:b(),consistency:b()};
+  if(role==="reach"){r.aim+=18;r.clutch+=12;}
+  if(role==="breaker"){r.entry+=20;r.aim+=8;}
+  if(role==="anchor"){r.util+=12;r.consistency+=15;}
+  if(role==="set"){r.util+=20;r.read+=10;}
+  if(role==="read"){r.read+=22;r.aim-=10;}
+  for(const k in r)r[k]=clamp(r[k],30,99);
+  return r;
+}
+function mkPlayer(first,tag,last,role,age,rt){
+  return {id:pid++,first,tag,last,role,age,r:rt||ratingsFor(role),titles:0,gravs:[],games:0,retired:false,stat:blankBox2(),history:[]};
+}
+function blankBox2(){return {k:0,d:0,a:0,entry:0,vigils:0,rounds:0};}
+function proc(role,age){return mkPlayer(pick(FIRST),pick(TAGS)+(rnd()<.25?Math.floor(rnd()*9):""),pick(LAST),role,age||16+Math.floor(rnd()*8));}
+function procWeak(role,age){const p=proc(role,age||16+Math.floor(rnd()*4));for(const k in p.r)p.r[k]=clamp(p.r[k]-(8+rnd()*12),28,99);return p;}
+function fillRoles(players){ROLES.forEach(role=>{if(!players.some(p=>p.role===role))players.push(proc(role));});return players;}
+function mkCoach(first,tag,last,rt,former){return {first,tag:tag||null,last,prep:clamp((rt&&rt.prep)||58+rnd()*32,50,97),composure:clamp((rt&&rt.composure)||58+rnd()*32,50,97),former:!!former};}
+function procCoach(){return mkCoach(pick(FIRST),null,pick(LAST),null,false);}
+function coachMult(t){const c=t.coach;return c?1+((c.prep-70)/520):1;}
+function coachName(c){return c.tag?`${c.first} "${c.tag}" ${c.last}`:`${c.first} ${c.last}`;}
+
+function canonTeams(){
+  const T=[];const P=mkPlayer;
+  T.push({name:"Vantage Gaming",short:"VNG",chem:.62,heart:false,star:"Kaiser",coach:mkCoach("Dieter",null,"Falk",{prep:87,composure:72},false),players:fillRoles([
+    P("Brian","Voss","Keller","read",27,{aim:60,read:92,clutch:72,entry:58,util:78,consistency:85}),
+    P("Jordan","kitt","Vasquez","reach",22,{aim:92,read:68,clutch:80,entry:75,util:60,consistency:80}),
+    P("Andrei","Clock","Volkov","anchor",33,{aim:78,read:75,clutch:76,entry:66,util:85,consistency:90}),
+    P("Bryce","Kaiser","Holloway","breaker",21,{aim:90,read:72,clutch:84,entry:93,util:62,consistency:82}),
+    P("Theo","Patch","Adeyemi","set",21,{aim:74,read:76,clutch:70,entry:64,util:90,consistency:82}),
+  ])});
+  T.push({name:"Luminosity",short:"LG",chem:.78,heart:false,star:"vell",coach:mkCoach("Sun-woo",null,"Park",{prep:81,composure:84},false),players:fillRoles([
+    P("Sang-min","vell","Cho","reach",17,{aim:95,read:70,clutch:96,entry:78,util:60,consistency:88}),
+    P("Aiden","bishop","Tran","read",17,{aim:64,read:84,clutch:70,entry:60,util:76,consistency:75}),
+    P("Mateo","rook","Salinas","breaker",16,{aim:90,read:60,clutch:82,entry:88,util:55,consistency:62}),
+    proc("anchor",18),proc("set",19),
+  ])});
+  T.push({name:"FaZe",short:"FAZE",chem:.85,heart:false,star:null,coach:procCoach(),players:fillRoles([proc("reach",20),proc("breaker",19),proc("read",23),proc("anchor",22),proc("set",20)])});
+  T.push({name:"100 Thieves",short:"100T",chem:.74,heart:false,star:"Riptide",coach:procCoach(),players:fillRoles([
+    P("Dontae","Riptide","Sloane","reach",24,{aim:93,read:66,clutch:90,entry:85,util:58,consistency:74}),
+    proc("read",24),proc("breaker",21),proc("anchor",26),proc("set",22)])});
+  T.push({name:"Hemisphere",short:"HEMI",chem:.90,heart:true,star:null,coach:mkCoach("Solomon",null,"Adeyemi",{prep:88,composure:89},false),players:fillRoles([
+    P("Tomás","Gordo","Reyes","breaker",22,{aim:80,read:64,clutch:74,entry:90,util:60,consistency:66}),
+    P("Priya","lan","Venkatesan","set",23,{aim:70,read:82,clutch:70,entry:62,util:92,consistency:84}),
+    proc("reach",20),proc("read",25),proc("anchor",24)])});
+  T.push({name:"Meridian",short:"MRD",chem:.80,heart:false,star:null,coach:procCoach(),players:fillRoles([proc("reach",21),proc("breaker",20),proc("read",26),proc("anchor",23),proc("set",21)])});
+  T.push({name:"Cloud9",short:"C9",chem:.72,heart:false,star:null,coach:procCoach(),players:fillRoles([proc("reach",22),proc("breaker",23),proc("read",27),proc("anchor",24),proc("set",22)])});
+  T.push({name:"Dust Choir",short:"DC",chem:.83,heart:true,star:null,coach:procCoach(),players:fillRoles([proc("reach",17),proc("breaker",17),proc("read",18),proc("anchor",19),proc("set",18)])});
+  ORGS.forEach(o=>{T.push({name:o,short:o.slice(0,4).toUpperCase(),chem:.62+rnd()*.28,heart:rnd()<.3,star:null,coach:procCoach(),players:fillRoles([proc("reach"),proc("breaker"),proc("read"),proc("anchor"),proc("set")])});});
+  return T;
+}
+function teamPower(t){
+  const ps=t.players.filter(p=>!p.retired);
+  const avg=ps.reduce((s,p)=>s+(p.r.aim+p.r.read+p.r.entry+p.r.util+p.r.clutch+p.r.consistency)/6,0)/ps.length;
+  return avg*(0.7+0.6*t.chem);
+}
+function fillRoles2(){return ROLES.map(role=>procWeak(role));}
+function tier2Teams(){return ORGS2.map(o=>({name:o,short:o.slice(0,4).toUpperCase(),chem:.55+rnd()*.25,heart:rnd()<.4,star:null,div:2,coach:procCoach(),players:fillRoles2(),standins:[]}));}
+function lineup(t){const healthy=t.players.filter(p=>!p.retired&&!p.injured);const sis=t.standins||[];return healthy.concat(sis).slice(0,5);}
+function contracted(t){return t.players.filter(p=>!p.retired);}
+function newWorld(){
+  pid=1;
+  const d1=canonTeams();d1.forEach(t=>{t.div=1;if(!t.standins)t.standins=[];});
+  const d2=tier2Teams();
+  const teams=d1.concat(d2);
+  const freeAgents=[];for(let i=0;i<12;i++)freeAgents.push(procWeak(pick(ROLES),17+Math.floor(rnd()*4)));
+  const w={season:1,year:2016,started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[]};
+  w.teams.forEach(t=>{t.gravl=teamPower(t)*4*(t.div===2?0.7:1);t.majors=0;t.divHistory=[{season:1,div:t.div}];t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:1}];});});
+  // Season Zero (2015) origins — the founding DreamHack LA final
+  const findP=(short,tag)=>{const t=w.teams.find(x=>x.short===short);return t?t.players.find(p=>p.tag===tag):null;};
+  [['LG','vell'],['HEMI','Gordo'],['HEMI','lan']].forEach(([s,tag])=>{const p=findP(s,tag);if(p){p.bb=true;p.history.unshift({short:'BB',name:'Beastie Bois',season:0});}});
+  ['Voss','kitt','Clock','Kaiser','Patch'].forEach(tag=>{const p=findP('VNG',tag);if(p)p.history=[{short:'VNG',name:'Vantage Gaming',season:0}];});
+  const dad=mkPlayer('Curtis','DadBod','Whitfield','anchor',31,{aim:74,read:80,clutch:78,entry:64,util:84,consistency:86});
+  dad.bb=true;dad.history=[{short:'BB',name:'Beastie Bois',season:0}];w.freeAgents.push(dad);
+  // The broadcast desk — former players who call games now (not on any staff)
+  w.casters=[
+    {name:'Reza "Books" Haddad',tag:'Books',role:'read',former:'BB',bb:true,note:'Beastie Bois read and IGL — now the desk\u2019s lead analyst.'},
+    {name:'Reverend',tag:'Reverend',role:'read',former:'PALL',note:'Pallbearers\u2019 old caller — the calm, sermonous voice of the broadcast.'}
+  ];
+  // The founding stone — the first cairn ever placed on the Yard
+  w.cairns.push({season:0,event:'DreamHack LA',team:'Beastie Bois',short:'BB',zone:'the Mouth',style:'quiet'});
+  // Non-active clubs: legends that no longer field a roster
+  w.defunct=[
+    {name:'Beastie Bois',short:'BB',heart:true,founded:0,folded:1,reason:'founding',
+     note:'The founding heart underdogs. At DreamHack LA they beat the bought-and-paid VNG 3–2 and laid the first cairn — the stone that started the sport. They never defended it; the five originals scattered into the league, and the name stepped back as the circuit grew up around the thing they built.',
+     endNote:'No fold, no scandal — just five careers pulling in five directions. The org dissolved into the league it founded.',
+     alumni:[
+       {name:'Reza "Books" Haddad',tag:'Books',role:'read'},
+       {name:'Sang-min "vell" Cho',tag:'vell',role:'reach'},
+       {name:'Tomás "Gordo" Reyes',tag:'Gordo',role:'breaker'},
+       {name:'Curtis "DadBod" Whitfield',tag:'DadBod',role:'anchor'},
+       {name:'Priya "lan" Venkatesan',tag:'lan',role:'set'}]},
+    {name:'Pallbearers',short:'PALL',heart:false,founded:0,folded:1,reason:'disbanded',
+     note:'A Season Zero original — bankrolled, heavy, built to grind teams into dust. They loomed over the founding year and never once turned a Major, then folded the instant the league grew past S0. The first great unmarked club. Their caller, Reverend, works the desk now.',
+     endNote:'Went defunct right after Season Zero, still without a stone — the first name the Yard ever forgot.',
+     alumni:[{name:'Reverend',tag:'Reverend',role:'read'}]}
+  ];
+  return w;
+}
+function txn(kind,text){world.transactions.unshift({season:world.season,kind,text});if(world.transactions.length>240)world.transactions.pop();}
+
+/* match engine */
+function zoneSkill(p,z){const w=z.w,r=p.r;const num=r.aim*w.aim+r.read*w.read+r.entry*w.entry+r.util*w.util+r.clutch*0.7;const den=w.aim+w.read+w.entry+w.util+0.7;return num/den;}
+function skillIndex(p){const r=p.r;return (r.aim*1.15+r.clutch*0.75+r.entry*0.6+r.read*0.55+r.util*0.45+r.consistency*0.55)/4.05;}
+function roleWeight(role){return role==="read"?1.06:role==="set"?1.03:role==="anchor"?1.01:role==="breaker"?0.99:1.0;}
+function simRound(a,b){
+  const z=pick(ZONES);
+  const A=lineup(a),B=lineup(b);
+  let pa=0,pb=0;
+  A.forEach(p=>pa+=zoneSkill(p,z)*(0.85+0.30*rnd()));
+  B.forEach(p=>pb+=zoneSkill(p,z)*(0.85+0.30*rnd()));
+  pa*=(0.75+0.5*a.chem)*coachMult(a);pb*=(0.75+0.5*b.chem)*coachMult(b);
+  const winA=rnd()<pa/(pa+pb);const winT=winA?a:b;
+  const win=winA?A:B, lose=winA?B:A;
+  const box={};A.concat(B).forEach(p=>box[p.id]={k:0,d:0,a:0,entry:0,clutch:0});
+  const dieW=p=>1/(0.45+(p.r.read*0.4+p.r.consistency*0.4+p.r.clutch*0.2)/100);
+  const fragW=p=>(p.r.aim*1.2+p.r.entry*0.6+p.r.clutch*0.4)*(0.5+z.w.aim);
+  const loseDeadN=Math.min(lose.length,2+Math.floor(Math.pow(rnd(),0.8)*4));
+  const winDeadN=Math.min(win.length-1,Math.floor(Math.pow(rnd(),2.2)*5));
+  const losersDied=sampleN(lose,loseDeadN,dieW),winnersDied=sampleN(win,winDeadN,dieW);
+  losersDied.forEach(p=>box[p.id].d++);winnersDied.forEach(p=>box[p.id].d++);
+  let vigil=null,closer=null;
+  if(winDeadN>=win.length-1){const surv=win.filter(p=>!winnersDied.includes(p));closer=surv.length?pickW(surv,p=>p.r.clutch):null;}
+  let assigned=0;
+  if(closer){const cn=Math.min(loseDeadN,Math.max(2,Math.round(loseDeadN*0.7)));for(let i=0;i<cn;i++)box[closer.id].k++;assigned=cn;}
+  for(let i=assigned;i<loseDeadN;i++){const p=pickW(win,fragW);box[p.id].k++;}
+  for(let i=0;i<winDeadN;i++){const p=pickW(lose,fragW);box[p.id].k++;}
+  [[win,loseDeadN],[lose,winDeadN]].forEach(([roster,n])=>{for(let i=0;i<n;i++){if(rnd()<0.3){const m=pickW(roster,p=>p.r.util);box[m.id].a++;}}});
+  const killers=A.concat(B).filter(p=>box[p.id].k>0);
+  if(killers.length){const ek=pickW(killers,p=>p.r.entry);box[ek.id].entry++;}
+  if(closer){const x=clamp(loseDeadN,2,4);box[closer.id].clutch=x;vigil={pid:closer.id,x,name:closer.tag,zone:z.name};}
+  const grav={};
+  [[win,true],[lose,false]].forEach(([roster,won])=>roster.forEach(p=>{const e=box[p.id];
+    const anchor=-0.6+skillIndex(p)/42.5;
+    const boxg=1.0+(e.k-e.d)*0.18+e.entry*0.04+e.a*0.03+(e.clutch?0.25+0.05*e.clutch:0)+(won?0.04:-0.04);
+    let g=(anchor*0.8+boxg*0.2)*roleWeight(p.role);
+    grav[p.id]=clamp(g,0.2,2.6);}));
+  let star=win[0];win.forEach(p=>{if(grav[p.id]>grav[star.id])star=p;});
+  if(closer)star=closer;
+  return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star};
+}
+function addBox(dst,e){dst.k+=e.k;dst.d+=e.d;dst.a+=e.a;dst.entry+=e.entry;dst.vigils+=(e.clutch?1:0);}
+function simMap(a,b){
+  let sa=0,sb=0;const perf={},mbox={};const vigils=[];let lastZone="the Aisle";
+  const roster=lineup(a).concat(lineup(b));
+  roster.forEach(p=>mbox[p.id]=blankBox());
+  while(sa<15&&sb<15){const r=simRound(a,b);lastZone=r.zone;if(r.winA)sa++;else sb++;
+    for(const id in r.grav)(perf[id]=perf[id]||[]).push(r.grav[id]);
+    roster.forEach(p=>{const e=r.box[p.id];if(e){addBox(mbox[p.id],e);accStat(p,e);}});
+    if(r.vigil)vigils.push(r.vigil);}
+  const grav={};for(const id in perf){const arr=perf[id];grav[id]=arr.length?arr.reduce((s,x)=>s+x,0)/arr.length:1.0;}
+  return {winner:sa>sb?a:b,sa,sb,grav,vigils,zone:lastZone,box:mbox};
+}
+function mapMVP(a,b,grav){let best=null,bg=-1;[a,b].forEach(t=>t.players.forEach(p=>{if(!p.retired&&grav[p.id]>bg){bg=grav[p.id];best={p,g:grav[p.id]};}}));return best;}
+function findPlayer(id){for(const t of world.teams){const p=t.players.find(x=>x.id===id);if(p)return p;}return null;}
+function teamOf(p){return world.teams.find(t=>t.players.some(q=>q.id===p.id));}
+function simSeries(a,b,wins){
+  wins=wins||3;let wa=0,wb=0;const maps=[];const sgA={},sbox={};
+  const acc=g=>{for(const id in g){(sgA[id]=sgA[id]||[]).push(g[id]);}};
+  while(wa<wins&&wb<wins){const m=simMap(a,b);const aWon=m.winner===a;if(aWon)wa++;else wb++;acc(m.grav);
+    for(const id in m.box){const e=m.box[id];sbox[id]=sbox[id]||blankBox();sbox[id].k+=e.k;sbox[id].d+=e.d;sbox[id].a+=e.a;sbox[id].entry+=e.entry;sbox[id].vigils+=e.vigils;}
+    maps.push({aWon,sa:aWon?m.sa:m.sb,sb:aWon?m.sb:m.sa,vigils:m.vigils,zone:m.zone});}
+  let ra=0,rb=0,downA=false,downB=false;
+  for(const m of maps){if(m.aWon)ra++;else rb++;if(ra===0&&rb===2)downA=true;if(rb===0&&ra===2)downB=true;}
+  const winner=wa>wb?a:b;
+  const deadlift=wins>=3&&((winner===a&&downA)||(winner===b&&downB));
+  const sg={};for(const id in sgA){const arr=sgA[id];sg[id]=arr.reduce((s,x)=>s+x,0)/arr.length;}
+  for(const id in sg){const p=findPlayer(+id);if(p)p.gravs.push(sg[id]);}
+  return {winner,loser:winner===a?b:a,wa,wb,maps,sg,deadlift,box:sbox};
+}
+
+/* events & season */
+function fieldFor(tier){
+  const ranked=[...world.teams].sort((x,y)=>y.gravl-x.gravl);
+  if(tier==='SP'||tier==='S'){
+    if(tier==='SP'&&world.majorChamps.length===0){
+      // The inaugural Major: the founding-era headliners are seeded in by right
+      const seeds=['VNG','LG','HEMI'].map(s=>world.teams.find(t=>t.short===s)).filter(Boolean);
+      const rest=ranked.filter(t=>!seeds.includes(t));
+      return seeds.concat(rest).slice(0,8);
+    }
+    return ranked.slice(0,8);
+  }
+  if(tier==='A'){const top=ranked.slice(0,4);const rest=shuffle(ranked.slice(4)).slice(0,4);return shuffle(top.concat(rest));}
+  const lower=shuffle(ranked.slice(4)).slice(0,6);const couple=shuffle(ranked.slice(0,4)).slice(0,2);return shuffle(lower.concat(couple));
+}
+function mkEventName(tier){
+  if(tier==='SP')return `${pick(CITIES)} Major`;
+  if(tier==='S')return `${pick(MSPON)} Cairn Masters · ${pick(CITIES)}`;
+  if(tier==='A')return `${pick(CITIES)} Open`;
+  return `${pick(CITIES)} Cup`;
+}
+function starOf(t){
+  if(t.star){const p=t.players.find(x=>x.tag===t.star&&!x.retired);if(p)return p;}
+  const c=t.players.filter(p=>!p.retired).sort((x,y)=>(y.r.aim+y.r.clutch)-(x.r.aim+x.r.clutch));return c[0];
+}
+function rivName(a,b){return a.tag+' v '+b.tag;}
+function teamRivKey(a,b){return [a.short,b.short].sort().join('|');}
+function regTeamRiv(a,b,winner){const k=teamRivKey(a,b);const r=world.teamRivalries[k]||(world.teamRivalries[k]={a:a.short,aName:a.name,b:b.short,bName:b.name,count:0,wins:{}});r.count++;r.wins[winner.short]=(r.wins[winner.short]||0)+1;r.last=world.season;return r;}
+function roman(n){return ["","I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII"][n]||(""+n);}
+function seriesBlurb(s){
+  const parts=[];const score=`${s.wa>s.wb?s.wa:s.wb}–${s.wa>s.wb?s.wb:s.wa}`;
+  if(s.deadlift)parts.push(`A deadlift — off an 0–2 floor.`);
+  const hi=mapMVP(s.winner,s.loser,s.sg);
+  if(hi){if(teamOf(hi.p)!==s.winner)parts.push(`${nm(hi.p)} posted the series-high ${hi.g.toFixed(2)} in a loss.`);else parts.push(`${nm(hi.p)} led it at ${hi.g.toFixed(2)}.`);}
+  const vs=[].concat(...s.maps.map(m=>m.vigils));if(vs.length){const v=pick(vs);parts.push(`${v.name} kept a 1v${v.x} at ${v.zone}.`);}
+  return {score,text:parts.join(" ")};
+}
+function nm(p){return `<span class="nm">${p.first} "<span class="tg">${p.tag}</span>" ${p.last}</span>`;}
+let feedId=1;
+function feedPush(kind,title,body,stage,data){world.feed.unshift({id:feedId++,kind,title,body,stage,season:world.season,data:data||null,narrated:null,narrating:false,narrateError:null});}
+
+function pushCapped(arr,item,cap){arr.push(item);if(arr.length>cap){arr.sort((a,b)=>b.score-a.score);arr.length=cap;}}
+function goatScore(p){
+  const cg=p.games?careerGrav(p):0;const log=(world.goatLog&&world.goatLog[p.role])||[];
+  const bests=log.filter(e=>e.id===p.id).length;const longevity=Math.min(p.gravs.length,160)/40;
+  return +(p.titles*4 + Math.max(0,cg-0.9)*34 + bests*2.2 + longevity).toFixed(2);
+}
+function endSeasonRecords(){
+  const s=world.season;world.goatLog=world.goatLog||{};
+  ROLES.forEach(role=>{let best=null,bestG=-1;
+    world.teams.forEach(t=>contracted(t).forEach(p=>{if(p.role!==role)return;const arr=p.gravs.slice(p._gravMark||0);
+      if(arr.length<4)return;const g=arr.reduce((x,y)=>x+y,0)/arr.length;if(g>bestG){bestG=g;best=p;}}));
+    if(best){world.goatLog[role]=world.goatLog[role]||[];const tm=teamOf(best);
+      world.goatLog[role].push({season:s,id:best.id,tag:best.tag,name:`${best.first} "${best.tag}" ${best.last}`,short:tm?tm.short:'—',grav:+bestG.toFixed(2),titles:best.titles});}
+  });
+}
+function detectUpsetsChokes(tier,name,qf,sf,fin){
+  if(tier!=='SP'&&tier!=='S')return;
+  const rankMap=new Map();[...world.teams].sort((a,b)=>b.gravl-a.gravl).forEach((t,i)=>rankMap.set(t,i+1));
+  const tierMult=tier==='SP'?2:1.1;const finalLabel=tier==='SP'?'Major final':'Masters final';
+  const series=[].concat(qf.map(s=>['QF',s]),sf.map(s=>['SF',s]),[[finalLabel,fin]]);
+  series.forEach(([round,s])=>{const w=s.winner,l=s.loser;const rw=rankMap.get(w)||16,rl=rankMap.get(l)||16;
+    const isFinal=/final/i.test(round);const roundMult=isFinal?3:round==='SF'?1.8:1.2;const gap=rw-rl;
+    if(gap>=3){const score=Math.round((gap*roundMult+(w.div===2?20:0))*tierMult);
+      pushCapped(world.upsets,{season:world.season,event:name,round,score,
+        text:`${w.short} (#${rw}) over ${l.short} (#${rl}) ${Math.max(s.wa,s.wb)}–${Math.min(s.wa,s.wb)} — ${round==='QF'?'opening round':round} at ${name}.${w.div===2?' A tier-2 side crashing the bracket.':''}`},150);}
+    const favEdge=rl<rw?(rw-rl):0;let cs=0;const cr=[];
+    if(s.deadlift){cs+=28;cr.push('led 2–0 and lost the series');}
+    if(isFinal&&favEdge>=4){cs+=Math.round(favEdge*2);cr.push(`fell as the favorite (#${rl} losing to #${rw})`);}
+    else if(favEdge>=7){cs+=Math.round(favEdge*1.2);cr.push(`fell to a far lower seed (#${rl} to #${rw})`);}
+    if(cs>=20&&cr.length)pushCapped(world.chokes,{kind:'team',season:world.season,event:name,round,score:Math.round(cs*tierMult/1.4),short:l.short,
+      text:`${l.short} ${cr.join(', and ')} — ${round} at ${name}.`},150);
+  });
+}
+function commitMajor(name,champ,run,sfL,qfL,F){
+  const T=TIERS.SP;
+  champ.gravl+=T.pts[1];run.gravl+=T.pts[2];sfL.forEach(t=>t.gravl+=T.pts[4]);qfL.forEach(t=>t.gravl+=T.pts[8]);
+  let riv=null;const a1=starOf(champ),b1=starOf(run);
+  if(a1&&b1){const key=[a1.id,b1.id].sort().join('-');world.rivalries[key]=world.rivalries[key]||{a:a1,b:b1,count:0,name:rivName(a1,b1)};const r=world.rivalries[key];r.count++;riv={name:r.name,chapter:r.count,a:a1.tag,b:b1.tag};if(r.count>1)feedPush('note','Rivalry renewed',`${r.name} ${roman(r.count)} — met again with a title on the line (${name}).`);}
+  const starC=starOf(champ),starR=starOf(run);const champStarBefore=starC?starC.titles:0;
+  const triv=regTeamRiv(champ,run,champ);
+  if(triv.count>1)feedPush('note','A rivalry deepens',`${triv.a}–${triv.b} meet again with a cairn at stake (${name}) — ${triv.count} title clashes now, ${triv.wins[champ.short]||0}–${triv.wins[run.short]||0} ${champ.short}.`);
+  champ.majors++;const winLine=lineup(champ);winLine.forEach(p=>{p.titles++;});const usedStandin=winLine.some(p=>p.standinFor);
+  if(!champ.bbTeam&&rnd()<0.05)champ._disbandSoon=true;
+  const loud=!champ.heart,zone=F.lastZone;
+  const cairn={season:world.season,team:champ.name,short:champ.short,zone,style:loud?'loud':'quiet',event:name};
+  world.cairns.push(cairn);world.majorChamps.push({season:world.season,team:champ.short});
+  let topId=null,topG=-1;for(const id in F.sg){if(F.sg[id]>topG){topG=F.sg[id];topId=+id;}}
+  const tp=topId?findPlayer(topId):null;const pname=p=>`${p.first} "${p.tag}" ${p.last}`;
+  const tb=tp&&F.box?F.box[tp.id]:null;
+  const vg=F.vigilsAll&&F.vigilsAll.length?pick(F.vigilsAll):null;
+  const data={type:'major',season:world.season,year:world.year,eventName:name,zone,cairnStyle:loud?'loud':'quiet',
+    champ:{name:champ.name,short:champ.short,heart:champ.heart},runner:{name:run.name,short:run.short},
+    score:F.scoreStr,deadlift:F.deadlift,
+    top:tp?{name:pname(tp),g:topG.toFixed(2),won:teamOf(tp)===champ,kd:tb?kd(tb).toFixed(2):null,k:tb?tb.k:null,d:tb?tb.d:null,vigils:tb?tb.vigils:0}:null,
+    vigil:vg?{name:vg.name,x:vg.x,zone:vg.zone}:null,
+    champStar:starC?pname(starC):null,champStarBreakthrough:!!(starC&&champStarBefore===0),
+    runnerStarUnmarked:(starR&&starR.titles===0)?pname(starR):null,rivalry:riv,
+    teamRivalry:triv.count>1?{a:triv.a,b:triv.b,count:triv.count,champLeads:`${triv.wins[champ.short]||0}–${triv.wins[run.short]||0}`}:null,
+    champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former),
+    standin:usedStandin?(winLine.find(p=>p.standinFor)?`${winLine.find(p=>p.standinFor).first} "${winLine.find(p=>p.standinFor).tag}" ${winLine.find(p=>p.standinFor).last}`:null):null};
+  feedPush('final',`${champ.name} win the ${name}`,`<b>Major champions.</b> def. ${run.name} ${F.scoreStr}. They raise a <b>${data.cairnStyle}</b> cairn at ${zone}.`,'Major',data);
+  if(usedStandin){const s=winLine.find(p=>p.standinFor);if(s)feedPush('note','A cairn for a borrowed name',`${nm(s)} came in as a stand-in and leaves with a Major. The rarest line in the sport — a cairn raised by someone who wasn't even on the wall a month ago.`);}
+  // significant-moment + individual-choke detection
+  const priorStreak=champ.finalLossStreak||0;champ.finalLossStreak=0;
+  run.finalsLost=(run.finalsLost||0)+1;run.finalLossStreak=(run.finalLossStreak||0)+1;
+  const founded=(champ.divHistory&&champ.divHistory[0])?champ.divHistory[0].season:1;
+  let ms=0;const mr=[];
+  if(priorStreak>=1){const art=/^(8|11|18)$/.test(''+priorStreak)?'an':'a';ms+=priorStreak*14;mr.push(`broke ${art} ${priorStreak}-final losing streak`);}
+  if(champ.majors===1){const dr=Math.max(1,world.season-founded);ms+=Math.min(dr,12)*3;mr.push(`raised a first-ever cairn ${dr>1?`after ${dr} seasons`:'in their debut season'}`);}
+  if(F.deadlift){ms+=24;mr.push('stormed back from 0–2 down in the final — a deadlift');}
+  const cgStar=starC&&starC.games?careerGrav(starC):0;
+  if(data.champStarBreakthrough&&cgStar>=1.15){ms+=18;mr.push(`${starC.tag} finally shed the unmarked label (${cgStar.toFixed(2)} career Gravity)`);}
+  if(ms>=18&&mr.length)pushCapped(world.moments,{season:world.season,event:name,score:Math.round(ms),short:champ.short,
+    text:`${champ.name} ${mr.join(', and ')} — ${name}, def. ${run.name} ${F.scoreStr}.`},150);
+  lineup(run).forEach(p=>{const fg=F.sg[p.id];if(fg==null)return;const cg=p.games?careerGrav(p):1;const drop=cg-fg;
+    if((cg>=1.05&&drop>=0.28)||(cg>=1.12&&fg<0.92))pushCapped(world.chokes,{kind:'ind',season:world.season,event:name,id:p.id,score:Math.round(drop*100*(cg-0.4)),tag:p.tag,short:run.short,
+      text:`${pname(p)} (${run.short}) posted ${fg.toFixed(2)} in the ${name} final — ${drop.toFixed(2)} under a ${cg.toFixed(2)} career. The no-show that cost the cairn.`},150);});
+  return data;
+}
+function runEvent(tier,name){
+  const T=TIERS[tier];
+  const field=fieldFor(tier).slice(0,8).sort((x,y)=>y.gravl-x.gravl);
+  const wins=T.bo==='bo5'?3:2;
+  const qf=[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]].map(([a,b])=>simSeries(a,b,wins));
+  const qfL=qf.map(s=>s.loser);
+  const sf=[simSeries(qf[0].winner,qf[1].winner,wins),simSeries(qf[2].winner,qf[3].winner,wins)];
+  const sfL=sf.map(s=>s.loser);
+  const fin=simSeries(sf[0].winner,sf[1].winner,tier==='SP'?3:wins);
+  const champ=fin.winner,run=fin.loser;
+  const b=seriesBlurb(fin);
+  detectUpsetsChokes(tier,name,qf,sf,fin);
+  let cairn=null;
+  if(T.cairn){
+    const F={scoreStr:b.score,deadlift:fin.deadlift,lastZone:fin.maps[fin.maps.length-1].zone,vigilsAll:[].concat(...fin.maps.map(m=>m.vigils)),sg:fin.sg,box:fin.box};
+    commitMajor(name,champ,run,sfL,qfL,F);cairn=world.cairns[world.cairns.length-1];
+  } else {
+    const add=(t,p)=>t.gravl+=p;
+    add(champ,T.pts[1]);add(run,T.pts[2]);sfL.forEach(t=>add(t,T.pts[4]));qfL.forEach(t=>add(t,T.pts[8]));
+    if(tier==='S'){
+      const a1=starOf(champ),b1=starOf(run);
+      if(a1&&b1){const key=[a1.id,b1.id].sort().join('-');world.rivalries[key]=world.rivalries[key]||{a:a1,b:b1,count:0,name:rivName(a1,b1)};const r=world.rivalries[key];r.count++;if(r.count>1)feedPush('note','Rivalry renewed',`${r.name} ${roman(r.count)} — met again with a title on the line (${name}).`);}
+      regTeamRiv(champ,run,champ);
+      feedPush('match',`${champ.name} take ${name}`,`def. ${run.name} ${b.score} — Masters gold, big GRAVL, no cairn. ${b.text}`,'Masters');
+    } else {
+      feedPush('small',`${champ.short} win ${name}`,`over ${run.name} ${b.score}. GRAVL banked.`,T.name);
+    }
+  }
+  return {tier,name,champ,run,score:b.score,cairn};
+}
+function calendarFor(s){
+  const cal=['B'];
+  const aN=Math.min(1+Math.floor(s/3),2);for(let i=0;i<aN;i++)cal.push('A');
+  const mN=Math.min(1+Math.floor(s/2),3);for(let i=0;i<mN;i++)cal.push('S');
+  const majN=s>=5?2:1;for(let i=0;i<majN;i++)cal.push('SP');
+  return cal;
+}
+function runRegular(){
+  const cal=calendarFor(world.season);world.thisSeasonEvents=[];world.pendingMajors=[];
+  world.teams.forEach(t=>t.players.forEach(p=>{p._gravMark=p.gravs.length;}));
+  const mj=cal.filter(t=>t==='SP').length;
+  feedPush('note',`Season ${world.season} opens`,`${cal.length} events on the GRAVL circuit. ${mj} Major${mj>1?'s':''} ahead — broadcast ${mj>1?'them':'it'} live or auto-sim. Top 8 of the Standings qualify.`);
+  cal.forEach(tier=>{transactionWindow();if(tier==='SP'){world.pendingMajors.push(mkEventName('SP'));}else{world.thisSeasonEvents.push(runEvent(tier,mkEventName(tier)));}});
+  world.teams.forEach(t=>lineup(t).forEach(p=>{p.games++;}));
+}
+function autoOneMajor(name){world.thisSeasonEvents.push(runEvent('SP',name));world.pendingMajors=(world.pendingMajors||[]).filter(n=>n!==name);}
+function autoResolveMajors(){if((world.pendingMajors||[]).length)transactionWindow();(world.pendingMajors||[]).slice().forEach(n=>autoOneMajor(n));world.pendingMajors=[];}
+function bestFor(pool,role){const av=pool.filter(p=>!p.retired);const exact=av.filter(p=>p.role===role);const c=exact.length?exact:av;if(!c.length)return null;return c.reduce((m,p)=>skillIndex(p)>skillIndex(m)?p:m,c[0]);}
+function takeFA(role){const p=bestFor(world.freeAgents,role);if(p)world.freeAgents=world.freeAgents.filter(x=>x!==p);return p;}
+function signFor(t,role){
+  const faCand=bestFor(world.freeAgents,role);
+  let t2=null,t2team=null;
+  world.teams.filter(x=>x.div===2).forEach(x=>contracted(x).filter(p=>p.role===role).forEach(p=>{if(!t2||skillIndex(p)>skillIndex(t2)){t2=p;t2team=x;}}));
+  const faS=faCand?skillIndex(faCand):-1,t2S=t2?skillIndex(t2):-1;
+  let signed;
+  if(t2&&t2S>faS+3&&t2S>52){t2team.players=t2team.players.filter(p=>p!==t2);joinTeam(procWeak(role),t2team);signed=t2;txn('callup',`${nm(signed)} called up to ${t.short} (Div 1) from ${t2team.short}.`);feedPush('small','Called up',`${t.short} sign ${nm(signed)} (${role}) out of tier 2.`);}
+  else if(faCand){world.freeAgents=world.freeAgents.filter(p=>p!==faCand);signed=faCand;txn('sign',`${t.short} sign ${nm(signed)} (${role}) from free agency.`);}
+  else{signed=proc(role,16+Math.floor(rnd()*3));txn('rookie',`${t.short} promote rookie ${nm(signed)} (${role}).`);feedPush('small','A rookie arrives',`${t.short} sign ${nm(signed)} (${role}) — unproven, on clean stone.`);}
+  joinTeam(signed,t);
+}
+function setDiv(t,d){if(t.div!==d){t.div=d;(t.divHistory=t.divHistory||[]).push({season:world.season,div:d});}}
+function promoteRelegate(){
+  const d1=world.teams.filter(t=>t.div===1).sort((a,b)=>a.gravl-b.gravl);
+  const d2=world.teams.filter(t=>t.div===2).sort((a,b)=>b.gravl-a.gravl);
+  for(let i=0;i<2;i++){const down=d1[i],up=d2[i];if(up&&down&&up.gravl>down.gravl){setDiv(down,2);setDiv(up,1);
+    feedPush('note','Movement between tiers',`${up.name} earn promotion to the first division on circuit points; ${down.name} fall to tier 2.`);
+    txn('promote',`${up.short} promoted to Div 1.`);txn('relegate',`${down.short} relegated to Div 2.`);}}
+}
+/* anytime transactions */
+function retire(p,t,opts){opts=opts||{};p.retired=true;p.standinFor=null;
+  if(opts.toCoach&&t){t.coach=mkCoach(p.first,p.tag,p.last,{prep:clamp(p.r.read+gauss()*4,58,96),composure:clamp(p.r.consistency,55,95)},true);
+    feedPush('note','To the touchline',`${nm(p)} hangs up the mouse and takes the ${t.short} coaching chair${p.titles?` — ${p.titles} cairn${p.titles>1?'s':''} as a player`:', still unmarked'}. The read never really leaves.`);}
+  else if(!opts.silent)feedPush('note','A long walk',`${nm(p)} retires${p.titles===0?" — unmarked to the end.":` with ${p.titles} cairn${p.titles>1?"s":""} to his name.`}`);
+  txn('retire',`${nm(p)} retires${t?` from ${t.short}`:''}.`);}
+function unretire(p){p.retired=false;p.injured=0;if(p.age>33)p.age=33;const t=findHolderTeam(p);if(t)t.players=t.players.filter(x=>x!==p);if(!world.freeAgents.includes(p))world.freeAgents.push(p);}
+function toFA(p){p.faAge=0;p.standinFor=null;world.freeAgents.push(p);}
+function joinTeam(p,t){if(!t.players.includes(p))t.players.push(p);const h=p.history=p.history||[];if(!h.length||h[h.length-1].short!==t.short)h.push({short:t.short,name:t.name,season:world.season});}
+function transfer(p,from,to){from.players=from.players.filter(x=>x!==p);p.formerTeams=p.formerTeams||[];if(from.short!==to.short)p.formerTeams.push(from.short);joinTeam(p,to);}
+function uniqueShort(base){let s=base,n=2;const used=new Set([...world.teams.map(t=>t.short),...world.defunct.map(d=>d.short)]);while(used.has(s)){s=base.slice(0,3)+n;n++;}return s;}
+function spawnT2(){const used=new Set(world.teams.map(x=>x.name));const pool=ORGS2.concat(ORGS).concat(CITIES.map(c=>c+" GC"));const name=pool.find(n=>!used.has(n))||("Expansion "+world.teams.length);
+  const t={name,short:uniqueShort(name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()),chem:.55+rnd()*.22,heart:rnd()<.4,star:null,div:2,coach:procCoach(),players:fillRoles2(),standins:[]};
+  t.gravl=teamPower(t)*4*0.6;t.majors=0;t.divHistory=[{season:world.season,div:2}];world.teams.push(t);t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:world.season}];});return t;}
+function fillHoles(){
+  world.teams.forEach(t=>{let guard=0;while(contracted(t).length<5&&guard++<8){const role=ROLES.find(r=>!contracted(t).some(p=>p.role===r))||pick(ROLES);
+    if(t.div===1)signFor(t,role);
+    else{const fa=bestFor(world.freeAgents,role);if(fa&&rnd()<0.7){world.freeAgents=world.freeAgents.filter(x=>x!==fa);joinTeam(fa,t);txn('sign',`${t.short} (Div 2) sign ${nm(fa)} (${role}).`);}else joinTeam(procWeak(role),t);}}});
+}
+function poach(){
+  const buyers=shuffle(world.teams.filter(t=>t.div===1&&!t.heart).sort((a,b)=>b.gravl-a.gravl).slice(0,7));
+  let done=0;const maxPoach=rnd()<0.25?2:1;
+  for(const buyer of buyers){
+    if(done>=maxPoach)break;if(rnd()>0.5)continue;
+    const c=contracted(buyer);if(c.length<5)continue;
+    const star=starOf(buyer);const weak=c.filter(p=>p!==star&&!p.injured).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
+    if(!weak)continue;const role=weak.role;
+    let target=null,seller=null;
+    world.teams.filter(t=>t!==buyer).forEach(t=>{contracted(t).filter(p=>p.role===role&&!p.injured&&!p.bb&&!(p.history&&p.history.length&&p.history[p.history.length-1].season===world.season)).forEach(p=>{
+      if(t.heart&&p===starOf(t))return;
+      if(skillIndex(p)>skillIndex(weak)+6&&(!target||skillIndex(p)>skillIndex(target))){target=p;seller=t;}});});
+    if(!target)continue;
+    buyer.players=buyer.players.filter(p=>p!==weak);toFA(weak);
+    transfer(target,seller,buyer);regTeamRiv(buyer,seller,buyer);
+    const hist=target.titles>0?` — ${target.titles} cairn${target.titles>1?'s':''} to his name`:(careerGrav(target)>=1.15?' — an unmarked star, still chasing his first':'');
+    txn('poach',`${buyer.short} sign ${nm(target)} (${role}) from ${seller.short}.`);
+    feedPush('note','A raid',`${buyer.short} prise ${nm(target)} out of ${seller.short}${hist}. To clear the slot, ${buyer.short} move on from ${nm(weak)} — to free agency.`);
+    done++;
+  }
+}
+function disbandTeam(t,reason){
+  const alumni=contracted(t).map(p=>({name:`${p.first} "${p.tag}" ${p.last}`,tag:p.tag,role:p.role}));
+  const founded=(t.divHistory&&t.divHistory[0])?t.divHistory[0].season:1;
+  contracted(t).forEach(p=>toFA(p));(t.standins||[]).forEach(s=>toFA(s));
+  t.players.filter(p=>p.retired&&p.bb).forEach(p=>toFA(p));
+  world.teams=world.teams.filter(x=>x!==t);
+  world.defunct.unshift({name:t.name,short:t.short,heart:t.heart,founded,folded:world.season,reason,alumni,
+    endNote:reason==='champ'?`Disbanded at the summit in S${world.season}, weeks after their last cairn — out on top, and gone.`:`Folded in S${world.season}; the roster scattered to free agency.`});
+  const up=world.teams.filter(x=>x.div===2).sort((a,b)=>b.gravl-a.gravl)[0];
+  if(up){setDiv(up,1);txn('promote',`${up.short} pulled up to Div 1 to fill ${t.short}'s slot.`);}
+  spawnT2();
+  feedPush('note',reason==='champ'?'Out on top, and gone':'The lights go off',
+    reason==='champ'?`${t.name} disband at the summit — weeks after the cairn, the roster scatters to free agency. ${up?`${up.name} are pulled up to take the slot. `:''}The stones stay on the Yard; the name doesn't.`
+    :`${t.name} fold and release their roster to free agency. ${up?`${up.name} are promoted to take their place. `:''}Whatever cairns they own remain — the org that raised them won't.`);
+  txn('disband',`${t.short} disband; roster released to free agency.`);
+}
+function disbandCheck(){
+  const ranked=[...world.teams].sort((a,b)=>b.gravl-a.gravl);let did=false;
+  world.teams.filter(t=>t.div===1&&!t.bbTeam).forEach(t=>{if(did)return;const rank=ranked.indexOf(t);if(rank>13&&rnd()<0.04){disbandTeam(t,'decline');did=true;}});
+}
+function transactionWindow(){
+  world.teams.filter(t=>t._disbandSoon).forEach(t=>{t._disbandSoon=false;disbandTeam(t,'champ');});
+  if(rnd()<0.7)poach();
+  world.teams.filter(t=>t.div===1).forEach(t=>{if(rnd()<0.10){const c=contracted(t);if(c.length<5)return;const star=starOf(t);
+    const cand=c.filter(p=>p!==star&&!p.injured&&!p.bb).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
+    if(cand&&(skillIndex(cand)<58||cand.age>=29)){t.players=t.players.filter(p=>p!==cand);
+      if(rnd()<0.35){const t2=pick(world.teams.filter(x=>x.div===2));const bump=contracted(t2).slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];if(bump){t2.players=t2.players.filter(x=>x!==bump);toFA(bump);}cand.formerTeams=cand.formerTeams||[];cand.formerTeams.push(t.short);joinTeam(cand,t2);txn('drop',`${t.short} drop ${nm(cand)} (${cand.role}); he resurfaces in tier 2 with ${t2.short}.`);}
+      else{toFA(cand);txn('drop',`${t.short} part ways with ${nm(cand)} (${cand.role}).`);}}}});
+  // tier-2 sides shop free agency — pulls faded ex-Div1 names down a tier
+  world.teams.filter(t=>t.div===2).forEach(t=>{if(rnd()<0.16){const c=contracted(t);if(c.length<5)return;
+    const weak=c.slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];const fa=bestFor(world.freeAgents,weak.role);
+    if(fa&&skillIndex(fa)>skillIndex(weak)+5){world.freeAgents=world.freeAgents.filter(x=>x!==fa);t.players=t.players.filter(p=>p!==weak);toFA(weak);joinTeam(fa,t);
+      txn('sign',`${t.short} (Div 2) bring in ${nm(fa)} (${fa.role})${fa.formerTeams&&fa.formerTeams.length?` — a step down from Div 1`:''}.`);}}});
+  disbandCheck();
+  fillHoles();
+}
+function anyPlayerById(id){for(const t of world.teams){const p=t.players.find(x=>x.id===id)||(t.standins||[]).find(x=>x.id===id);if(p)return p;}return world.freeAgents.find(x=>x.id===id)||null;}
+function findHolderTeam(p){for(const t of world.teams){if(t.players.includes(p)||(t.standins||[]).includes(p))return t;}return null;}
+function forceMove(p,to){
+  const from=findHolderTeam(p);if(p.retired)p.retired=false;p.injured=0;
+  world.freeAgents=world.freeAgents.filter(x=>x!==p);
+  if(from){from.players=from.players.filter(x=>x!==p);from.standins=(from.standins||[]).filter(x=>x!==p);}
+  if(!to){toFA(p);txn('drop',`${nm(p)} released to free agency.`);return;}
+  let roster=contracted(to);
+  if(roster.length>=5){const same=roster.filter(x=>x.role===p.role);const bump=(same.length?same:roster).slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];if(bump){to.players=to.players.filter(x=>x!==bump);toFA(bump);}}
+  joinTeam(p,to);
+  p.formerTeams=p.formerTeams||[];if(from&&from!==to&&from.short)p.formerTeams.push(from.short);
+  txn('poach',`Blockbuster: ${nm(p)} moves to ${to.short}${from?` from ${from.short}`:''}.`);
+  feedPush('note','Blockbuster',`${nm(p)} ${from?`leaves ${from.short} and `:''}joins ${to.short}.`);
+  fillHoles();
+}
+function advanceCareers(){
+  endSeasonRecords();
+  // release last season's stand-ins, recover injuries
+  world.teams.forEach(t=>{(t.standins||[]).forEach(s=>{s.standinFor=null;world.freeAgents.push(s);});t.standins=[];
+    t.players.forEach(p=>{if(p.injured){p.injured--;if(p.injured<=0){p.injured=0;txn('return',`${nm(p)} returns to ${t.short} from injury.`);}}});});
+  // decay + age + develop + retire
+  world.teams.forEach(t=>{t.gravl*=0.6;
+    t.players.forEach(p=>{if(p.retired)return;p.age++;
+      const young=p.age<=21,old=p.age>=29;const d=(k,v)=>p.r[k]=clamp(p.r[k]+v,28,99);
+      if(young){d("aim",1.2+rnd());d("read",1.5+rnd());d("consistency",1.8+rnd());}
+      else if(old){d("aim",-(0.8+rnd()*1.6));d("consistency",-(0.5+rnd()));d("read",0.4);}
+      else{d("read",0.6);d("consistency",0.4);}
+      if(!p.pinned&&p.age>=31&&rnd()<0.10+(p.age-31)*0.06){
+        retire(p,t,{toCoach:(p.role==='read'||p.r.read>=80)&&rnd()<0.55});
+      }
+    });
+  });
+  // drops & signings now happen in transaction windows between events; fill retirement holes here
+  fillHoles();
+  // free agency upkeep
+  world.freeAgents.forEach(p=>{p.faAge=(p.faAge||0)+1;});
+  world.freeAgents=world.freeAgents.filter(p=>p.bb||(p.age<33&&!(p.faAge>3&&rnd()<0.5)));
+  for(let i=0;i<2+Math.floor(rnd()*3);i++)world.freeAgents.push(procWeak(pick(ROLES),17+Math.floor(rnd()*4)));
+  if(world.freeAgents.length>40)world.freeAgents=world.freeAgents.sort((a,b)=>skillIndex(b)-skillIndex(a)).slice(0,40);
+  // new injuries (rare) + stand-ins
+  world.teams.forEach(t=>{contracted(t).forEach(p=>{if(!p.injured&&rnd()<0.02){p.injured=1;
+    txn('injury',`${nm(p)} (${t.short}) is ruled out — injured for the season.`);
+    if(rnd()<0.6)feedPush('note','Ruled out',`${nm(p)} of ${t.short} goes down injured, out for the season. A stand-in steps in.`);}});
+    contracted(t).filter(p=>p.injured).forEach(inj=>{let s=takeFA(inj.role)||procWeak(inj.role,18+Math.floor(rnd()*4));s.standinFor=t.short;t.standins.push(s);
+      txn('standin',`${t.short} bring in ${nm(s)} as a stand-in for ${inj.tag} (${inj.role}).`);});});
+  promoteRelegate();
+}
+
+/* rendering */
+function $(id){return document.getElementById(id);}
+function careerGrav(p){return p.gravs.length?p.gravs.reduce((s,x)=>s+x,0)/p.gravs.length:0;}
+function render(){$("seasonNo").textContent=world.season;$("yearNo").textContent=world.year;
+  renderFeed();renderCast();renderCal();renderStandings();renderPlayers();renderTeams();renderMarket();renderYard();renderStory();renderAnnals();}
+function renderFeed(){const el=$("p-feed");
+  const hint=`<p class="hint">The desk can narrate any Major final with Claude — sim a Major, then press "Have the desk call it." (Runs inside the Claude app.)</p>`;
+  if(!world.feed.length){el.innerHTML=hint+`<div class="feed-empty">The Yard is quiet. Press "Sim season" to set the circuit in motion.</div>`;return;}
+  el.innerHTML=hint+world.feed.slice(0,50).map(f=>{const cls=f.kind==='final'?'final':f.kind==='note'?'note':f.kind==='small'?'small':'';
+    let body;
+    if(f.kind==='small')body='';
+    else if(f.kind==='final'&&f.data){
+      if(f.narrated)body=`<div class="desk"><div class="desk-label">From the desk</div>${fmtAI(f.narrated)}</div>`;
+      else if(f.narrating)body=`<p>${f.body}</p><div class="desk-loading">the desk is calling it…</div>`;
+      else body=`<p>${f.body}</p>${f.narrateError?`<div class="desk-err">${esc(f.narrateError)}</div>`:''}<button class="ctl narrate" data-narrate="${f.id}">✦ Have the desk call it</button>`;
+    } else body=`<p>${f.body}</p>`;
+    return `<div class="feed-item ${cls}"><div class="kicker"><span>S${f.season}</span><span class="tag-pill">${f.stage||'Dispatch'}</span></div><h3>${f.title}</h3>${body}</div>`;}).join("");}
+function renderCal(){const el=$("p-cal");
+  if(!world.thisSeasonEvents.length){el.innerHTML=`<div class="feed-empty">No calendar yet — sim a season.</div>`;return;}
+  el.innerHTML=`<p class="hint">Season ${world.season} circuit, in order. Every result feeds the GRAVL Standings; only the Major marks the Yard.</p>`+
+   world.thisSeasonEvents.map(e=>`<div class="match"><span class="side"><span class="tag-pill">${TIERS[e.tier].name}</span> ${e.name}</span>
+     <span class="side"><span class="win">${e.champ.short}</span><span class="ms">${e.score}</span><span class="lose">${e.run.short}</span>${e.cairn?' <span class="unmarked">▲ cairn</span>':''}</span></div>`).join("");}
+function renderStandings(){const el=$("p-gravl");const ranked=[...world.teams].sort((x,y)=>y.gravl-x.gravl);
+  el.innerHTML=`<p class="hint">GRAVL Standings — a rolling tally of circuit results (decays each year). Top 8 qualify for every Major. Cairns count only Majors won.</p>
+   <table><thead><tr><th>#</th><th>Team</th><th>GRAVL</th><th>Cairns</th></tr></thead><tbody>
+   ${ranked.map((t,i)=>`<tr class="${i===7?'cut':''} ${i>7?'below':''}"><td class="grav">${i+1}</td><td>${t.name} <span class="role">${t.short}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</td><td class="grav">${t.majors||'—'}</td></tr>`).join("")}
+   </tbody></table><p class="hint" style="margin-top:8px">The amber line is the Major cut — below it, you watch from home. A <b>T2</b> tag is a tier-2 side; bank enough GRAVL and they crash the party.</p>`;}
+let sortKey="grav";let selectedPid=null;let playerFilter="active";let movePid=null;let editPid=null;let showCreate=false;
+let selectedTid=null;let teamFilter="all";let teamSortKey="gravl";let annalsView="goats";
+function mkFreeAgent(first,tag,last,role,rating){role=role||pick(ROLES);const base=clamp(rating||62,28,99);const r={};
+  ['aim','read','entry','util','clutch','consistency'].forEach(k=>r[k]=clamp(base+Math.round(gauss()*6),28,99));
+  const p=mkPlayer(first||pick(FIRST),tag||pick(TAGS),last||pick(LAST),role,18,r);world.freeAgents.push(p);return p;}
+function editRow(label,attr,val,pid){return `<div class="atr edit"><span class="atr-l">${label}</span><button class="step" data-act="atrdn" data-attr="${attr}" data-p="${pid}">−</button><span class="atr-bar"><i style="width:${Math.round(val)}%"></i></span><span class="atr-v">${Math.round(val)}</span><button class="step" data-act="atrup" data-attr="${attr}" data-p="${pid}">+</button></div>`;}
+function careerPath(p){const h=p.history||[];if(!h.length)return `<div class="career-path"><span class="cp-l">Path</span> <span class="faint">no club yet</span></div>`;
+  const show=h.slice(-8),extra=h.length-show.length;
+  return `<div class="career-path"><span class="cp-l">Path</span> ${extra>0?`<span class="faint">+${extra} earlier</span> <span class="cp-arr">→</span> `:''}${show.map((e,i)=>`${i?'<span class="cp-arr">→</span>':''}<span class="cp-tm">${esc(e.short)}</span><span class="cp-s">S${e.season}</span>`).join(' ')}</div>`;}
+function allPlayers(){const a=[];
+  if(playerFilter==='retired'){world.teams.forEach(t=>t.players.forEach(p=>{if(p.retired)a.push({p,t});}));return a;}
+  if(playerFilter==='fa'){world.freeAgents.forEach(p=>a.push({p,t:null}));return a;}
+  world.teams.forEach(t=>{t.players.forEach(p=>{if(!p.retired)a.push({p,t});});(t.standins||[]).forEach(s=>a.push({p:s,t,sub:true}));});return a;}
+function bar(label,v){return `<div class="atr"><span class="atr-l">${label}</span><span class="atr-bar"><i style="width:${Math.round(v)}%"></i></span><span class="atr-v">${Math.round(v)}</span></div>`;}
+function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!==null&&cg>=1.15&&p.titles===0;const r=p.r;const editing=editPid===p.id;
+  const attrs=editing
+    ? editRow('Aim','aim',r.aim,p.id)+editRow('Read','read',r.read,p.id)+editRow('Entry','entry',r.entry,p.id)+editRow('Clutch','clutch',r.clutch,p.id)+editRow('Util','util',r.util,p.id)+editRow('Consist','consistency',r.consistency,p.id)
+      +`<div class="editmeta">age <button class="step" data-act="agedn" data-p="${p.id}">−</button> ${p.age} <button class="step" data-act="ageup" data-p="${p.id}">+</button> · role <button class="mact" data-act="rolecycle" data-p="${p.id}">${p.role}</button></div>`
+    : bar('Aim',r.aim)+bar('Read',r.read)+bar('Entry',r.entry)+bar('Clutch',r.clutch)+bar('Util',r.util)+bar('Consist',r.consistency);
+  return `<div class="scout">
+    <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?t.name:'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':p.titles?` · <span class="good">${p.titles} cairn${p.titles>1?'s':''}</span>`:''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
+    ${careerPath(p)}
+    <div class="scout-cols">
+      <div class="scout-attrs">${attrs}</div>
+      <div class="scout-stats">
+        <div class="ss"><span>Gravity</span><b class="grav">${cg!==null?cg.toFixed(2):'—'}</b></div>
+        <div class="ss"><span>K / D / A</span><b>${s.k} / ${s.d} / ${s.a}</b></div>
+        <div class="ss"><span>K/D · KDA</span><b>${s.rounds?kd(s).toFixed(2):'—'} · ${s.rounds?kda(s).toFixed(2):'—'}</b></div>
+        <div class="ss"><span>Entries</span><b>${s.entry}</b></div>
+        <div class="ss"><span>Vigils (1vX)</span><b class="${s.vigils?'bx-v':''}">${s.vigils}</b></div>
+        <div class="ss"><span>Rounds</span><b>${s.rounds}</b></div>
+      </div>
+    </div>
+    <div class="scout-actions">
+      <button class="mact ${editing?'on':''}" data-act="edit" data-p="${p.id}">${editing?'✓ Done':'✎ Edit stats'}</button>
+      ${p.retired?`<button class="mact" data-act="unretire" data-p="${p.id}">Un-retire</button>`:`<button class="mact" data-act="retire" data-p="${p.id}">Retire</button>`}
+      <button class="mact" data-act="movestart" data-p="${p.id}">⇄ Move to…</button>
+      <button class="mact" data-act="pin" data-p="${p.id}">${p.pinned?'Unpin':'Pin'}</button>
+      ${t?`<button class="mact" data-act="release" data-p="${p.id}">Release</button>`:''}
+    </div>
+    ${movePid===p.id?`<div class="move-grid">${[...world.teams].sort((a,b)=>(a.div-b.div)||(b.gravl-a.gravl)).map(tm=>`<button class="movebtn ${tm.div===2?'t2':''} ${t===tm?'cur':''}" data-act="moveto" data-p="${p.id}" data-to="${esc(tm.short)}">${esc(tm.short)}</button>`).join("")}</div>`:''}
+    </div>`;}
+function renderPlayers(){const el=$("p-players");const rows=allPlayers();
+  rows.sort((A,B)=>sortKey==="titles"?B.p.titles-A.p.titles:sortKey==="age"?A.p.age-B.p.age:sortKey==="kd"?kd(B.p.stat)-kd(A.p.stat):careerGrav(B.p)-careerGrav(A.p));
+  const sel=selectedPid?rows.find(x=>x.p.id===selectedPid):null;
+  let h=`<p class="hint">Tap a player for the scouting card — hidden attributes, full box, and commissioner controls (retire, move, build super-teams).</p>`;
+  h+=`<div class="pfilter">${[['active','Active'],['retired','Retired'],['fa','Free agents']].map(([f,lab])=>`<button class="ctab ${playerFilter===f?'on':''}" data-filter="${f}">${lab}</button>`).join("")}</div>`;
+  if(playerFilter==='fa'){h+=`<button class="mact" data-act="newfa" style="margin-bottom:10px">${showCreate?'✕ Cancel':'＋ Create free agent'}</button>`;
+    if(showCreate)h+=`<div class="createfa">
+      <div class="cf-row"><input id="cf-first" placeholder="First name"/><input id="cf-tag" placeholder="tag"/><input id="cf-last" placeholder="Last name"/></div>
+      <div class="cf-row"><select id="cf-role">${ROLES.map(r=>`<option value="${r}">${r}</option>`).join("")}</select><input id="cf-rating" type="number" value="65" min="30" max="95" title="overall rating"/><button class="mact" data-act="docreate">Create</button></div>
+      <div class="hint" style="margin:2px 0 0">Leave names blank to roll random ones. Rating sets the baseline for all six attributes.</div></div>`;}
+  if(sel)h+=scoutCard(sel.p,sel.t);
+  h+=`<table><thead><tr><th>Player</th><th>Tm</th><th>Role</th><th data-s="grav">Grav</th><th data-s="kd">K/D</th><th>Vg</th><th data-s="titles">▲</th></tr></thead><tbody>
+   ${rows.map(({p,t})=>{const cg=p.games>=1?careerGrav(p):null;const unm=cg!==null&&cg>=1.15&&p.titles===0;const s=p.stat;
+     return `<tr data-pid="${p.id}" class="${selectedPid===p.id?'sel':''}"><td>${nm(p)} ${unm?'<span class="unmarked">●</span>':''}${p.standinFor?'<span class="t2pill">sub</span>':''}${p.injured?'<span class="t2pill" style="color:var(--unmarked);border-color:var(--unmarked)">inj</span>':''}${p.pinned?'<span class="t2pill">📌</span>':''}</td><td>${t?t.short:'<span class="faint">FA</span>'}</td><td class="role">${p.role.slice(0,3)}</td>
+       <td class="grav">${cg!==null?cg.toFixed(2):"—"}</td><td class="grav">${s.rounds?kd(s).toFixed(2):"—"}</td><td class="grav ${s.vigils?'bx-v':''}">${s.vigils||"·"}</td><td class="grav">${p.titles||"—"}</td></tr>`;}).join("")}
+   </tbody></table>`;
+  el.innerHTML=h;}
+function txnBadge(k){const m={drop:'drop',sign:'sign',callup:'call-up',rookie:'rookie',injury:'injury',return:'return',standin:'stand-in',promote:'promo',relegate:'releg',retire:'retire'};return m[k]||k;}
+function renderMarket(){const el=$("p-market");
+  let h=`<p class="hint">Players move. Tier-2 sides grind the lower events for GRAVL — climb the Standings and you reach the Majors. Injuries force stand-ins; a borrowed name can leave with a cairn.</p>`;
+  // active injuries / standins
+  const inj=[];world.teams.forEach(t=>contracted(t).filter(p=>p.injured).forEach(p=>inj.push({t,p})));
+  const subs=[];world.teams.forEach(t=>(t.standins||[]).forEach(s=>subs.push({t,s})));
+  h+=`<div class="story-card"><div class="lede">Out & Standing In</div>`;
+  if(!inj.length&&!subs.length)h+=`<p>Full-strength league — nobody's hurt.</p>`;
+  else{h+=subs.map(({t,s})=>`<div class="row2"><span><span class="tag-pill">sub</span> ${nm(s)} <span class="faint">${s.role} · for ${t.short}</span></span><span class="ct">stand-in</span></div>`).join("");
+    h+=inj.filter(({p})=>true).map(({t,p})=>`<div class="row2"><span>${nm(p)} <span class="faint">${p.role} · ${t.short}</span></span><span class="ct" style="color:var(--unmarked)">injured</span></div>`).join("");}
+  h+=`</div>`;
+  // recent moves
+  h+=`<div class="story-card"><div class="lede">Recent Moves</div>`;
+  h+=world.transactions.length?world.transactions.slice(0,26).map(x=>`<div class="txn"><span class="txn-b txn-${x.kind}">${txnBadge(x.kind)}</span><span class="txn-s">S${x.season}</span> ${x.text}</div>`).join(""):`<p>No moves yet — sim a season.</p>`;
+  h+=`</div>`;
+  // free agents
+  const fas=[...world.freeAgents].sort((a,b)=>skillIndex(b)-skillIndex(a)).slice(0,12);
+  h+=`<div class="story-card"><div class="lede">Free Agents</div>`;
+  h+=fas.length?`<table><thead><tr><th>Player</th><th>Role</th><th>Age</th><th>Skill</th></tr></thead><tbody>${fas.map(p=>`<tr><td>${nm(p)}</td><td class="role">${p.role}</td><td class="age">${p.age}</td><td class="grav">${Math.round(skillIndex(p))}</td></tr>`).join("")}</tbody></table>`:`<p>No free agents available.</p>`;
+  h+=`</div>`;
+  // tier 2 standings
+  const d2=world.teams.filter(t=>t.div===2).sort((a,b)=>b.gravl-a.gravl);
+  h+=`<div class="story-card"><div class="lede">Tier 2 · the climb</div><table><thead><tr><th>#</th><th>Team</th><th>GRAVL</th></tr></thead><tbody>
+   ${d2.map((t,i)=>`<tr><td class="grav">${i+1}</td><td>${t.name} <span class="role">${t.short}</span></td><td class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</td></tr>`).join("")}</tbody></table>
+   <p class="hint" style="margin-top:6px">Top tier-2 sides promote each offseason; bank enough GRAVL and a feeder team can gatecrash a Major.</p></div>`;
+  el.innerHTML=h;}
+function renderYard(){const el=$("p-yard");
+  if(!world.cairns.length){el.innerHTML=`<p class="hint">Only Majors leave a mark here. None yet.</p><div class="yard"><span class="yard-empty">Clean stone.</span></div>`;return;}
+  const stones=loud=>{let h="",n=loud?5:3;for(let i=0;i<n;i++){const w=22-i*3;h+=`<i style="width:${w}px;height:${6+(loud?2:0)}px"></i>`;}return h;};
+  el.innerHTML=`<p class="hint">Each stack is a Major, placed at the callout where the title turned. Loud cairns tower; quiet ones keep the founders' tradition.</p>
+   <div class="yard">${world.cairns.map(c=>`<div class="cairn" title="S${c.season} · ${c.event} · ${c.team} at ${c.zone}"><div class="stones">${stones(c.style==='loud')}</div><div class="clabel">${c.short}<br>${c.zone}</div><div class="cyear">S${c.season}</div></div>`).join("")}</div>`;}
+function renderStory(){const el=$("p-story");
+  const watch=allPlayers().map(({p})=>({p,cg:careerGrav(p)})).filter(x=>x.p.games>=1&&x.cg>=1.15&&x.p.titles===0).sort((a,b)=>b.cg-a.cg);
+  const teamWatch=[...world.teams].filter(t=>t.majors===0).sort((a,b)=>b.gravl-a.gravl)[0];
+  const rivs=Object.values(world.rivalries).filter(r=>r.count>=1).sort((a,b)=>b.count-a.count);
+  const counts={};world.majorChamps.forEach(c=>counts[c.team]=(counts[c.team]||0)+1);
+  const marked=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  let h="";
+  h+=`<div class="story-card"><div class="lede">The Unmarked Watch · Players</div>`;
+  if(!watch.length)h+=`<p>Nobody carries the curse yet.</p>`;
+  else{const k=watch[0];h+=`<h4>${k.p.first} "${k.p.tag}" ${k.p.last}</h4><p>Career Gravity ${k.cg.toFixed(2)}, ${k.p.games} season${k.p.games>1?"s":""} in, <b>zero cairns</b>. The math says great; the Yard says nothing.</p>
+     <p style="margin-top:8px;color:var(--faint)">${watch.length} on watch: ${watch.slice(0,7).map(x=>x.p.tag).join(", ")}.</p>`;}
+  h+=`</div>`;
+  h+=`<div class="story-card"><div class="lede">The Unmarked Watch · Teams</div>`;
+  if(teamWatch)h+=`<p><b>${teamWatch.name}</b> — ${Math.round(teamWatch.gravl)} GRAVL, still no Major. The best team yet to write itself into the ground.</p>`;
+  else h+=`<p>Every standing team has a cairn.</p>`;
+  h+=`</div>`;
+  h+=`<div class="story-card"><div class="lede">Rivalries · Teams</div>`;
+  const trivs=Object.values(world.teamRivalries).filter(r=>r.count>=2).sort((a,b)=>b.count-a.count);
+  h+=trivs.length?trivs.slice(0,8).map(r=>{const aw=r.wins[r.a]||0,bw=r.wins[r.b]||0;return `<div class="row2"><span>${r.a}–${r.b} <span class="faint">(${aw}–${bw})</span></span><span class="ct">${roman(r.count)}</span></div>`;}).join(""):`<p>No team has met another twice with a title on the line yet.</p>`;
+  h+=`</div>`;
+  h+=`<div class="story-card"><div class="lede">Rivalries · Players</div>`;
+  h+=rivs.length?rivs.slice(0,8).map(r=>`<div class="row2"><span>${r.name}</span><span class="ct">${roman(r.count)}</span></div>`).join(""):`<p>No repeat title clashes between stars yet.</p>`;
+  h+=`</div>`;
+  h+=`<div class="story-card"><div class="lede">The Touchline · Coaches</div>`;
+  const coaches=world.teams.map(t=>({t,c:t.coach})).sort((a,b)=>(b.c.former-a.c.former)||(b.c.prep-a.c.prep));
+  h+=coaches.slice(0,9).map(({t,c})=>`<div class="row2"><span>${esc(coachName(c))} <span class="faint">· ${t.short}</span>${c.former?' <span class="good">◇ ex-player</span>':''}</span><span class="ct">prep ${Math.round(c.prep)}</span></div>`).join("");
+  h+=`</div>`;
+  h+=`<div class="story-card"><div class="lede">On the Desk · Casters</div>`;
+  h+=(world.casters&&world.casters.length)?world.casters.map(c=>`<div class="row2"><span>${esc(c.name)} <span class="faint">· ${c.former?'ex-'+esc(c.former)+' ':''}${c.role||''}</span></span><span class="ct">caster</span></div>`).join(""):`<p>No casters yet.</p>`;
+  h+=`</div>`;
+  h+=`<div class="story-card"><div class="lede">The Marked — Major champions</div>`;
+  h+=marked.length?marked.map(([t,n])=>`<div class="row2"><span>${t}</span><span class="ct">${n} cairn${n>1?"s":""}</span></div>`).join(""):`<p>No Major has been won yet.</p>`;
+  h+=`</div>`;
+  el.innerHTML=h;}
+
+function teamCard(t,rankAll){
+  const rk=rankAll.indexOf(t)+1;
+  const lu=lineup(t);const rating=lu.length?Math.round(lu.reduce((s,p)=>s+skillIndex(p),0)/lu.length):0;
+  const cairns=world.cairns.filter(c=>c.short===t.short);
+  const moves=world.transactions.filter(x=>x.text.includes(t.short)).slice(0,8);
+  const trivs=Object.values(world.teamRivalries).filter(r=>(r.a===t.short||r.b===t.short)&&r.count>=1).sort((a,b)=>b.count-a.count).slice(0,6);
+  const dh=t.divHistory||[];const star=starOf(t);
+  const roster=contracted(t).concat(t.standins||[]);
+  let h=`<div class="scout teamcard">
+    <div class="scout-top"><div><div class="scout-nm">${t.name} <span class="role">${t.short}</span></div>
+      <div class="scout-sub"><span class="${t.div===2?'t2pill':'role'}">Div ${t.div}</span> · ${t.heart?'<span class="good">♥ heart side</span>':'<span class="faint">money side</span>'} · coach ${esc(coachName(t.coach))}${t.coach.former?' <span class="good">◇ ex-player</span>':''}${t.bb?' · <span class="t2pill">Beastie Bois</span>':''}</div></div>
+      <button class="ctl" data-tclose="1">close</button></div>
+    <div class="scout-cols"><div class="scout-stats" style="flex:1">
+      <div class="ss"><span>GRAVL</span><b class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</b></div>
+      <div class="ss"><span>Standings rank</span><b class="grav">#${rk}</b></div>
+      <div class="ss"><span>Cairns</span><b class="grav">${t.majors||'—'}</b></div>
+      <div class="ss"><span>Roster rating</span><b class="grav">${rating}</b></div>
+      <div class="ss"><span>Chemistry</span><b class="grav">${Math.round((t.chem||0)*100)}</b></div>
+    </div></div>
+    <div class="tc-sec"><div class="lede">Roster</div>
+    ${roster.map(p=>{const cg=p.games>=1?careerGrav(p):null;const unmp=cg!==null&&cg>=1.15&&p.titles===0;
+      return `<div class="trow" data-tpid="${p.id}"><span class="trole">${p.role.slice(0,3)}</span><span class="tnm">${nm(p)}${p===star?' <span class="t2pill">★</span>':''}${p.standinFor?' <span class="t2pill">sub</span>':''}${p.injured?' <span class="t2pill" style="color:var(--unmarked);border-color:var(--unmarked)">inj</span>':''}${unmp?' <span class="unmarked">●</span>':p.titles?` <span class="good">▲${p.titles}</span>`:''}</span><span class="tstat grav">${cg!==null?cg.toFixed(2):'—'}</span><span class="tstat grav">${p.stat.rounds?kd(p.stat).toFixed(2):'—'}</span></div>`;}).join("")}
+    <div class="hint" style="margin-top:4px">Gravity · K/D. Tap a player for the full scouting card.</div></div>
+    <div class="tc-sec"><div class="lede">Club cairns</div>
+    ${cairns.length?cairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — no Major won yet.</p>`}</div>
+    <div class="tc-sec"><div class="lede">Rivalries · head-to-head</div>
+    ${trivs.length?trivs.map(r=>{const opp=r.a===t.short?r.b:r.a;const mine=r.wins[t.short]||0,his=r.wins[opp]||0;return `<div class="row2"><span>vs ${esc(opp)} <span class="faint">(${mine}–${his})</span></span><span class="ct">met ${roman(r.count)}</span></div>`;}).join(""):`<p class="faint">No title rivalries yet.</p>`}</div>
+    ${dh.length>1?`<div class="tc-sec"><div class="lede">Division history</div><div class="career-path">${dh.map((e,i)=>`${i?'<span class="cp-arr">→</span>':''}<span class="cp-tm">Div ${e.div}</span><span class="cp-s">S${e.season}</span>`).join(' ')}</div></div>`:''}
+    <div class="tc-sec"><div class="lede">Recent moves</div>
+    ${moves.length?moves.map(x=>`<div class="txn"><span class="txn-b txn-${x.kind}">${txnBadge(x.kind)}</span><span class="txn-s">S${x.season}</span> ${x.text}</div>`).join(""):`<p class="faint">No moves recorded yet.</p>`}</div>
+  </div>`;
+  return h;}
+function locate(tag){
+  for(const t of world.teams){const p=t.players.find(x=>x.tag===tag);if(p)return {where:`${t.short}${p.retired?' · retired':''}`,pid:p.id};}
+  const fa=world.freeAgents.find(x=>x.tag===tag);if(fa)return {where:'free agent',pid:fa.id};
+  for(const t of world.teams){if(t.coach&&t.coach.tag===tag)return {where:`${t.short} · coach`,pid:null};}
+  if((world.casters||[]).some(c=>c.tag===tag))return {where:'caster · the desk',pid:null};
+  return {where:'lost to history',pid:null};}
+function defunctCard(d){
+  const cairns=world.cairns.filter(c=>c.short===d.short);
+  const era=`${d.founded===0?'S0':'S'+d.founded}–${d.folded==null?'—':'S'+d.folded}`;
+  let h=`<div class="scout teamcard">
+    <div class="scout-top"><div><div class="scout-nm">${esc(d.name)} <span class="role">${esc(d.short)}</span></div>
+      <div class="scout-sub"><span class="unmarked">● defunct</span> · ${era} · ${d.heart?'<span class="good">♥ heart side</span>':'<span class="faint">money side</span>'}${d.short==='BB'?' · <span class="t2pill">founding org</span>':''}</div></div>
+      <button class="ctl" data-tclose="1">close</button></div>`;
+  if(d.note)h+=`<p class="df-note">${esc(d.note)}</p>`;
+  h+=`<div class="tc-sec"><div class="lede">Cairns</div>`;
+  h+=cairns.length?cairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — never built a cairn.</p>`;
+  h+=`</div>`;
+  if(d.alumni&&d.alumni.length){h+=`<div class="tc-sec"><div class="lede">The diaspora · where they are now</div>`;
+    h+=d.alumni.map(a=>{const loc=locate(a.tag);return `<div class="trow${loc.pid?'':' nolink'}"${loc.pid?` data-tpid="${loc.pid}"`:''}><span class="trole">${(a.role||'').slice(0,3)}</span><span class="tnm">${esc(a.name||a.tag)}</span><span class="tstat" style="width:auto;color:var(--muted);font-size:11.5px">${esc(loc.where)}</span></div>`;}).join("");
+    h+=`<div class="hint" style="margin-top:4px">Tap a name to find their card today.</div></div>`;}
+  h+=`<div class="tc-sec"><div class="lede">How it ended</div><p class="faint">${esc(d.endNote||'Folded; roster released to free agency.')}</p></div>`;
+  h+=`</div>`;return h;}
+function renderTeams(){const el=$("p-teams");
+  const rankAll=[...world.teams].sort((a,b)=>b.gravl-a.gravl);
+  const activeSel=selectedTid?world.teams.find(t=>t.short===selectedTid):null;
+  const defunctSel=(!activeSel&&selectedTid)?world.defunct.find(d=>d.short===selectedTid):null;
+  let h=`<p class="hint">Tap a club for its page — roster, cairns, head-to-head rivalries, and the moves that built it. The roster taps through to player cards.</p>`;
+  h+=`<div class="pfilter">${[['all','All'],['d1','Div 1'],['d2','Div 2'],['defunct','Defunct']].map(([f,lab])=>`<button class="ctab ${teamFilter===f?'on':''}" data-tfilter="${f}">${lab}</button>`).join("")}</div>`;
+  if(activeSel)h+=teamCard(activeSel,rankAll);else if(defunctSel)h+=defunctCard(defunctSel);
+  if(teamFilter==='defunct'){
+    const ordered=[...world.defunct].sort((a,b)=>{const al=a.founded===0?1:0,bl=b.founded===0?1:0;return al!==bl?bl-al:(b.folded||0)-(a.folded||0);});
+    h+=world.defunct.length?`<div class="dflist">${ordered.map(d=>{const cn=world.cairns.filter(c=>c.short===d.short).length;return `<div class="trow dfrow ${selectedTid===d.short?'sel':''}" data-tid="${esc(d.short)}"><span class="tnm">${esc(d.name)} <span class="role">${esc(d.short)}</span>${d.heart?' <span class="t2pill">♥</span>':''}${d.founded===0?' <span class="t2pill">founding</span>':''}</span><span class="tstat" style="width:auto;color:var(--muted);font-size:11.5px">${d.founded===0?'S0':'S'+d.founded}–${d.folded==null?'—':'S'+d.folded}</span><span class="tstat grav">${cn||'—'}▲</span></div>`;}).join("")}</div>`:`<p class="faint">No defunct clubs — every name that ever competed still flies.</p>`;
+  }else{
+    let list=[...world.teams];
+    if(teamFilter==='d1')list=list.filter(t=>t.div===1);else if(teamFilter==='d2')list=list.filter(t=>t.div===2);
+    list.sort((a,b)=>teamSortKey==='cairns'?(b.majors||0)-(a.majors||0):teamSortKey==='name'?a.name.localeCompare(b.name):b.gravl-a.gravl);
+    h+=`<table><thead><tr><th>Club</th><th>Div</th><th data-ts="gravl">GRAVL</th><th data-ts="cairns">▲</th></tr></thead><tbody>
+     ${list.map(t=>`<tr data-tid="${esc(t.short)}" class="${selectedTid===t.short?'sel':''}"><td>${t.name} <span class="role">${t.short}</span>${t.heart?' <span class="t2pill">♥</span>':''}</td><td class="grav">${t.div===2?'<span class="t2pill">2</span>':'1'}</td><td class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</td><td class="grav">${t.majors||'—'}</td></tr>`).join("")}
+     </tbody></table>`;
+  }
+  el.innerHTML=h;}
+
+function annalList(arr,empty){
+  if(!arr||!arr.length)return `<p class="faint">${empty}</p>`;
+  return [...arr].sort((a,b)=>b.score-a.score).slice(0,40).map(m=>`<div class="rec${m.id?' tap':''}"${m.id?` data-tpid="${m.id}"`:''}><span class="rec-sc">${m.score}</span><div class="rec-b"><div class="rec-x">${esc(m.text)}</div><div class="rec-m">S${m.season}${m.round?' · '+esc(m.round):''}</div></div></div>`).join('');
+}
+function goatsHtml(){
+  const everyone=world.teams.flatMap(t=>t.players).concat(world.freeAgents);
+  return ROLES.map(role=>{
+    const convo=everyone.filter(p=>p.role===role&&p.games>=15).map(p=>({p,s:goatScore(p)})).sort((a,b)=>b.s-a.s).slice(0,5);
+    const log=(world.goatLog[role]||[]);const seasons=log.slice(-14);
+    let h=`<div class="story-card"><div class="lede">${role.toUpperCase()} — GOAT conversation</div>`;
+    h+=convo.length?convo.map(({p,s},i)=>{const cg=p.games?careerGrav(p):0;
+      return `<div class="trow" data-tpid="${p.id}"><span class="trole">${i+1}</span><span class="tnm">${nm(p)}${p.retired?' <span class="faint">·ret</span>':''}</span><span class="tstat grav" title="career Gravity">${cg.toFixed(2)}</span><span class="tstat grav" title="cairns">${p.titles}▲</span><span class="tstat grav" title="GOAT score" style="color:var(--ember)">${s.toFixed(0)}</span></div>`;}).join(''):`<p class="faint">No qualified ${role}s yet — play more seasons.</p>`;
+    if(seasons.length)h+=`<div class="goat-seasons"><span class="cp-l">Season #1s</span> ${seasons.map(e=>`<span class="gs"><span class="cp-s">S${e.season}</span> ${esc(e.tag)}</span>`).join('')}</div>`;
+    h+=`</div>`;return h;
+  }).join('');
+}
+function chokesHtml(){
+  const team=world.chokes.filter(c=>c.kind==='team'),ind=world.chokes.filter(c=>c.kind==='ind');
+  return `<div class="lede" style="margin:4px 0 6px">Team chokes</div>${annalList(team,'No team chokes yet — nobody has blown a big one.')}<div class="lede" style="margin:16px 0 6px">Individual chokes</div>${annalList(ind,'No individual chokes yet.')}`;
+}
+function renderAnnals(){const el=$("p-annals");
+  let h=`<p class="hint">The record books — written by the simulation as it runs. Scores are internal weightings (stakes, streaks, seed gaps).</p>`;
+  h+=`<div class="pfilter">${[['goats','GOATs'],['moments','Moments'],['upsets','Upsets'],['chokes','Chokes']].map(([f,l])=>`<button class="ctab ${annalsView===f?'on':''}" data-av="${f}">${l}</button>`).join('')}</div>`;
+  if(annalsView==='goats')h+=goatsHtml();
+  else if(annalsView==='moments')h+=annalList(world.moments,'No defining moments yet — they’re written when a Major final carries real weight.');
+  else if(annalsView==='upsets')h+=annalList(world.upsets,'No big upsets recorded yet.');
+  else h+=chokesHtml();
+  el.innerHTML=h;}
+
+/* AI narration */
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function fmtAI(t){return t.split(/\n\n+/).map(p=>`<p>${esc(p).replace(/\n/g,"<br>")}</p>`).join("");}
+function buildMajorPrompt(d){
+  const f=[];
+  f.push(`Event: ${d.eventName} — Season ${d.season} (${d.year}). A Major: the only tier that builds a cairn.`);
+  f.push(`Result: ${d.champ.name} defeated ${d.runner.name} ${d.score}.`);
+  if(d.deadlift)f.push(`It was a DEADLIFT — ${d.champ.short} came back from 0–2 down to win.`);
+  f.push(`Champions placed a ${d.cairnStyle} cairn at ${d.zone}${d.champ.heart?" — a heart team, humble in the founders' tradition":" — a money/star team, a louder mark"}.`);
+  if(d.top){const box=d.top.kd?` (${d.top.k}-${d.top.d}, ${d.top.kd} K/D${d.top.vigils?`, ${d.top.vigils} vigil${d.top.vigils>1?'s':''}`:''})`:'';f.push(d.top.won?`Top performer: ${d.top.name} led the winners at ${d.top.g} Gravity${box}.`:`Top performer was ${d.top.name} at ${d.top.g} Gravity${box} — for the LOSING side. Great and unlucky: the math loved him, the scoreboard didn't.`);}
+  if(d.vigil)f.push(`${d.vigil.name} kept a vigil — a 1v${d.vigil.x} clutch at ${d.vigil.zone}.`);
+  if(d.rivalry)f.push(`This was ${d.rivalry.name} ${roman(d.rivalry.chapter)} — a recurring star rivalry between ${d.rivalry.a} and ${d.rivalry.b}.`);
+  if(d.teamRivalry)f.push(`Team rivalry: ${d.teamRivalry.a} and ${d.teamRivalry.b} have now met ${d.teamRivalry.count} times with a title at stake (${d.teamRivalry.champLeads} to the champions).`);
+  if(d.champCoach)f.push(`The champions are coached by ${d.champCoach}${d.champCoachFormer?', a former pro who moved to the touchline':''}.`);
+  if(d.standin)f.push(`Remarkably, ${d.standin} won this Major as a STAND-IN — a substitute brought in to cover for an injured starter, now leaving with a cairn. The rarest, strangest kind of champion.`);
+  if(d.champStar)f.push(d.champStarBreakthrough?`${d.champStar} (the winners' star) wins his FIRST Major after years unmarked — a long-awaited breakthrough; he finally has a cairn.`:`${d.champStar} (the winners' star) adds another cairn.`);
+  if(d.runnerStarUnmarked)f.push(`${d.runnerStarUnmarked} (the losers' star) remains UNMARKED — still no Major despite being elite. The cruelest status in the sport.`);
+  const bible=`You write recaps for "Cairn," a fictional 5v5 esport. Honor these facts: every match is played in one permanent arena, the Yard; a roaming objective, the ember, decides each round; roles are reach (star aimer), breaker (entry), read (in-game leader/caller), anchor, and set (support); "Gravity" is the per-round impact rating (1.00 = average, 1.40+ = historic); a "vigil" is a clutch 1vX; a "deadlift" is a 0–2 reverse sweep; ONLY winning a Major lets a team build a permanent cosmetic "cairn" (a stack of stones) at the callout where the title turned, so the arena floor is a growing graveyard of history; an elite player or team with zero cairns is "unmarked" — the sport's central tragedy. Voice: reverent cathedral-gravity fused with grassroots warmth; humor and grief coexist; concrete physical detail; never clichéd or hype-y; a sharp beat writer, not a hype man.`;
+  return `${bible}\n\nWrite a vivid 150–200 word desk recap of this Major final. Lead with the human story, not the score. Use only the facts below; make any rivalry chapter, breakthrough, or unmarked cruelty land. End on the cairn. Output only the recap prose — no headline, no preamble.\n\nFACTS:\n- ${f.join("\n- ")}`;
+}
+async function narrate(id){
+  const item=world.feed.find(f=>f.id===id);
+  if(!item||!item.data||item.narrating||item.narrated)return;
+  item.narrating=true;item.narrateError=null;render();
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:buildMajorPrompt(item.data)}]})});
+    if(!res.ok)throw new Error("status "+res.status);
+    const data=await res.json();
+    const text=(data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join("\n").trim();
+    if(!text)throw new Error("empty response");
+    item.narrated=text;
+  }catch(e){
+    item.narrateError="The desk couldn't connect — keeping the wire copy. (AI narration runs inside the Claude app.)";
+  }
+  item.narrating=false;render();
+}
+
+/* live broadcast */
+const CAIRN_BIBLE=`You write for "Cairn," a fictional 5v5 esport. World facts: every match is in one permanent arena, the Yard; a roaming objective, the ember, decides each round; roles are reach (star aimer), breaker (entry), read (in-game leader), anchor, set (support); "Gravity" is the per-round impact rating (1.00 average, 1.40+ historic); a "vigil" is a clutch 1vX; a "deadlift" is a 0-2 reverse sweep; only a Major win lets a team build a permanent cosmetic "cairn" at the callout where the title turned; an elite player or team with zero cairns is "unmarked," the sport's central tragedy. Voice: reverent cathedral-gravity fused with grassroots warmth; humor and grief coexist; concrete detail; never cliched or hype-y.`;
+function seedField(){return [...world.teams].sort((a,b)=>b.gravl-a.gravl).slice(0,8);}
+function pushLog(L,text,kind){L.log.unshift({text,kind});if(L.log.length>140)L.log.pop();}
+function liveSetup(name){
+  transactionWindow();
+  const field=seedField();
+  const L={name,field,stage:'qf',matchIdx:0,
+    qfPairs:[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]],
+    qfWinners:[],qfLosers:[],sfPairs:[],sfWinners:[],sfLosers:[],fPair:null,
+    match:null,matchVigils:[],log:[],done:false};
+  world.live=L;
+  pushLog(L,`The ${name} begins. Eight teams, one Yard. Top seed: ${field[0].short}.`,'map');
+  startMatch(L);render();switchTab('cast');
+}
+function startMatch(L){
+  let a,b;
+  if(L.stage==='qf'){a=L.qfPairs[L.matchIdx][0];b=L.qfPairs[L.matchIdx][1];}
+  else if(L.stage==='sf'){a=L.sfPairs[L.matchIdx][0];b=L.sfPairs[L.matchIdx][1];}
+  else{a=L.fPair[0];b=L.fPair[1];}
+  L.match={a,b,wins:{a:0,b:0},target:3,maps:[],perf:{},seriesBox:{},map:null};L.matchVigils=[];
+  const sn=L.stage==='qf'?'Quarterfinal':L.stage==='sf'?'Semifinal':'FINAL';
+  pushLog(L,`${sn}: ${a.short} vs ${b.short} — best of 5.`,'map');
+  startMap(L);
+}
+function startMap(L){const m=L.match;const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,lastZone:'the Aisle',mapVigils:[],box};}
+function roundLine(r,m,mp){
+  const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
+  if(r.vigil)return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ${r.vigil.name} stands alone, 1v${r.vigil.x} at ${r.vigil.zone}, and it's theirs.`;
+  const s=r.star,e=s?r.box[s.id]:null;const tail=e&&e.k>=2?`${s.tag} ${e.k}-for`:(s?`${s.tag} on point`:'');
+  const v=r.winA?pick(["break the hold","crack it open","take the contest","force the ember"]):pick(["hold the line","deny the break","smother the push","win the stand"]);
+  return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ember in ${r.zone}; ${w.short} ${v}${tail?`, ${tail}`:''}.`;
+}
+function stepRound(){
+  const L=world.live,m=L.match,mp=m.map;
+  const r=simRound(m.a,m.b);mp.lastZone=r.zone;if(r.winA)mp.sa++;else mp.sb++;mp.round++;
+  for(const id in r.grav)(m.perf[id]=m.perf[id]||[]).push(r.grav[id]);
+  lineup(m.a).concat(lineup(m.b)).forEach(p=>{const e=r.box[p.id];if(!e)return;
+    if(!mp.box[p.id])mp.box[p.id]=blankBox();addBox(mp.box[p.id],e);
+    if(!m.seriesBox[p.id])m.seriesBox[p.id]=blankBox();addBox(m.seriesBox[p.id],e);
+    accStat(p,e);});
+  if(r.vigil){mp.mapVigils.push(r.vigil);L.matchVigils.push(r.vigil);}
+  pushLog(L,roundLine(r,m,mp),'round');
+  if(mp.sa>=15||mp.sb>=15)return mapEnd();
+  return 'round';
+}
+function mapEnd(){
+  const L=world.live,m=L.match,mp=m.map,aWon=mp.sa>mp.sb;
+  if(aWon)m.wins.a++;else m.wins.b++;
+  m.maps.push({aWon,sa:mp.sa,sb:mp.sb,zone:mp.lastZone,vigils:mp.mapVigils});
+  pushLog(L,`MAP ${m.maps.length}: ${(aWon?m.a:m.b).short} ${Math.max(mp.sa,mp.sb)}–${Math.min(mp.sa,mp.sb)} on ${mp.lastZone}. Series ${m.a.short} ${m.wins.a}–${m.wins.b} ${m.b.short}.`,'mapend');
+  if(m.wins.a>=m.target||m.wins.b>=m.target)return matchEnd();
+  startMap(L);return 'mapend';
+}
+function matchEnd(){
+  const L=world.live,m=L.match;
+  const sg={};for(const id in m.perf){const arr=m.perf[id];sg[id]=arr.reduce((s,x)=>s+x,0)/arr.length;}
+  for(const id in sg){const p=findPlayer(+id);if(p)p.gravs.push(sg[id]);}
+  const champ=m.wins.a>m.wins.b?m.a:m.b,loser=champ===m.a?m.b:m.a;
+  let ra=0,rb=0,dA=false,dB=false;for(const mm of m.maps){if(mm.aWon)ra++;else rb++;if(ra===0&&rb===2)dA=true;if(rb===0&&ra===2)dB=true;}
+  const deadlift=(champ===m.a&&dA)||(champ===m.b&&dB);
+  const scoreStr=`${Math.max(m.wins.a,m.wins.b)}–${Math.min(m.wins.a,m.wins.b)}`;
+  const sn=L.stage==='qf'?'quarterfinal':L.stage==='sf'?'semifinal':'final';
+  pushLog(L,`${champ.short} win the ${sn} ${scoreStr}${deadlift?' — a deadlift off the floor!':''}.`,'win');
+  if(L.stage==='qf'){L.qfWinners.push(champ);L.qfLosers.push(loser);L.matchIdx++;
+    if(L.matchIdx>=4){L.stage='sf';L.matchIdx=0;L.sfPairs=[[L.qfWinners[0],L.qfWinners[1]],[L.qfWinners[2],L.qfWinners[3]]];}
+    startMatch(L);return 'matchend';}
+  if(L.stage==='sf'){L.sfWinners.push(champ);L.sfLosers.push(loser);L.matchIdx++;
+    if(L.matchIdx>=2){L.stage='f';L.matchIdx=0;L.fPair=[L.sfWinners[0],L.sfWinners[1]];}
+    startMatch(L);return 'matchend';}
+  L.finalChamp=champ;L.finalRun=loser;
+  L.finalSummary={scoreStr,deadlift,lastZone:m.maps[m.maps.length-1].zone,vigilsAll:L.matchVigils,sg,box:m.seriesBox};
+  eventEnd();return 'eventend';
+}
+function eventEnd(){
+  const L=world.live;
+  const data=commitMajor(L.name,L.finalChamp,L.finalRun,L.sfLosers,L.qfLosers,L.finalSummary);
+  L.championData=data;L.feedId=world.feed[0].id;L.done=true;
+  world.pendingMajors=(world.pendingMajors||[]).filter(n=>n!==L.name);
+  pushLog(L,`${L.finalChamp.name} are champions of the ${L.name}. A ${data.cairnStyle} cairn rises at ${data.zone}.`,'champion');
+}
+function liveRound(){const L=world.live;if(!L||L.done)return;stepRound();renderCast();}
+function liveMap(){const L=world.live;if(!L||L.done)return;let s;do{s=stepRound();}while(s==='round');renderCast();}
+function liveMatch(){const L=world.live;if(!L||L.done)return;let s;do{s=stepRound();}while(s==='round'||s==='mapend');renderCast();}
+function liveAuto(){const L=world.live;if(!L||L.done)return;let s;do{s=stepRound();}while(s!=='eventend');render();}
+function liveToFinal(){const L=world.live;if(!L||L.done)return;let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
+function endBroadcast(){world.live=null;render();switchTab('feed');}
+function buildFinalPreviewPrompt(L){
+  const c=L.fPair[0],r=L.fPair[1];const sA=starOf(c),sB=starOf(r);const pn=p=>`${p.first} "${p.tag}" ${p.last}`;
+  const f=[];
+  f.push(`The FINAL of the ${L.name} (Season ${world.season}): ${c.name} vs ${r.name}.`);
+  f.push(`${c.name}: ${c.majors||0} career Majors${c.heart?', a heart/underdog team':''}. Star ${sA?`${pn(sA)} (${sA.role}), ${sA.titles} cairns`:'—'}.`);
+  f.push(`${r.name}: ${r.majors||0} career Majors. Star ${sB?`${pn(sB)} (${sB.role}), ${sB.titles} cairns`:'—'}.`);
+  if(sA&&sA.titles===0)f.push(`${sA.tag} is unmarked — no Major yet.`);
+  if(sB&&sB.titles===0)f.push(`${sB.tag} is unmarked — no Major yet.`);
+  const riv=Object.values(world.rivalries).find(x=>sA&&sB&&((x.a.id===sA.id&&x.b.id===sB.id)||(x.a.id===sB.id&&x.b.id===sA.id)));
+  if(riv)f.push(`They've met with titles before: ${riv.name}, this would be chapter ${riv.count+1}.`);
+  return `${CAIRN_BIBLE}\n\nIn 2–3 tense sentences, set the stage for this Major Final the way a broadcast desk would right before the first round. Specific, in-world, no cliches, no predictions. Output only the prose.\n\nFACTS:\n- ${f.join("\n- ")}`;
+}
+async function narrateStage(){
+  const L=world.live;if(!L||L.stage!=='f'||L.stagePreview||L.stagePreviewLoading)return;
+  L.stagePreviewLoading=true;L.stagePreviewErr=null;render();
+  try{
+    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:400,messages:[{role:"user",content:buildFinalPreviewPrompt(L)}]})});
+    if(!res.ok)throw 0;const data=await res.json();const text=(data.content||[]).filter(c=>c.type==='text').map(c=>c.text).join("\n").trim();if(!text)throw 0;
+    L.stagePreview=text;
+  }catch(e){L.stagePreviewErr="Couldn't reach the desk (AI runs inside the Claude app).";}
+  L.stagePreviewLoading=false;render();
+}
+function boxTable(m,mp){
+  const side=(t)=>{const rs=lineup(t).map(p=>({p,e:mp.box[p.id]||blankBox()}));
+    rs.sort((x,y)=>(y.e.k-y.e.d)-(x.e.k-x.e.d)||y.e.k-x.e.k);
+    return `<div class="bx-team">${t.short} <span class="bx-coach">coach ${esc(coachName(t.coach))}${t.coach.former?' ◇':''}</span></div>
+      <table class="bx"><thead><tr><th>Player</th><th>K</th><th>D</th><th>A</th><th>En</th><th>Vg</th></tr></thead><tbody>
+      ${rs.map(({p,e})=>`<tr><td class="bx-nm"><span class="tg">${esc(p.tag)}</span> <span class="role">${p.role.slice(0,3)}</span>${p.standinFor?' <span class="t2pill">sub</span>':''}</td><td class="bx-k">${e.k}</td><td>${e.d}</td><td>${e.a}</td><td>${e.entry}</td><td class="${e.vigils?'bx-v':''}">${e.vigils||'·'}</td></tr>`).join("")}
+      </tbody></table>`;};
+  return `<div class="boxwrap"><div class="bx-cap">Box · map ${m.maps.length+1}, round ${mp.round}</div>${side(m.a)}${side(m.b)}</div>`;
+}
+function bracketStrip(L){
+  const tie=(p,w,live)=>`<span class="brk-tie ${live?'live':''}">${p[0].short}/${p[1].short}${w?` → <b>${w.short}</b>`:''}</span>`;
+  let h=`<div class="bracket"><div class="brk-row"><span class="brk-lab">QF</span> ${L.qfPairs.map((p,i)=>tie(p,L.qfWinners[i],L.stage==='qf'&&i===L.matchIdx)).join(" ")}</div>`;
+  if(L.stage!=='qf')h+=`<div class="brk-row"><span class="brk-lab">SF</span> ${L.sfPairs.map((p,i)=>tie(p,L.sfWinners[i],L.stage==='sf'&&i===L.matchIdx)).join(" ")}</div>`;
+  if(L.stage==='f')h+=`<div class="brk-row"><span class="brk-lab">F</span> ${tie(L.fPair,null,true)}</div>`;
+  return h+`</div>`;
+}
+function renderCast(){
+  const el=$("p-cast");const L=world.live;
+  if(L&&!L.done){
+    const m=L.match,mp=m.map;
+    const stageName=L.stage==='qf'?'Quarterfinals':L.stage==='sf'?'Semifinals':'Final';
+    const matchNo=L.stage==='f'?'':` · Match ${L.matchIdx+1} of ${L.stage==='qf'?4:2}`;
+    let h=`<div class="cast-head"><div class="cast-title">${L.name}</div><div class="cast-stage">${stageName}${matchNo}</div></div>`;
+    h+=bracketStrip(L);
+    h+=`<div class="scoreboard"><div class="sb-team">${m.a.short}</div><div class="sb-mid"><div class="sb-series">series ${m.wins.a}–${m.wins.b}</div><div class="sb-map">${mp.sa}–${mp.sb}</div><div class="sb-zone">${mp.round?`map ${m.maps.length+1} · last: ${mp.lastZone}`:`map ${m.maps.length+1} · first to 15`}</div></div><div class="sb-team">${m.b.short}</div></div>`;
+    if(L.stage==='f'&&mp.round===0&&m.maps.length===0){
+      if(L.stagePreview)h+=`<div class="desk"><div class="desk-label">From the desk · the stage</div>${fmtAI(L.stagePreview)}</div>`;
+      else if(L.stagePreviewLoading)h+=`<div class="desk-loading">the desk is setting the stage…</div>`;
+      else h+=`<button class="ctl narrate" data-act="stage">✦ Desk: set the stage</button>${L.stagePreviewErr?`<div class="desk-err">${esc(L.stagePreviewErr)}</div>`:''}`;
+    }
+    h+=`<div class="cast-ctl"><button class="ctl primary" data-act="round">▶ Round</button><button class="ctl" data-act="map">▶▶ Map</button><button class="ctl" data-act="match">⏭ Match</button>${L.stage!=='f'?'<button class="ctl" data-act="tofinal">⏩ To the Final</button>':''}<button class="ctl" data-act="auto">⏹ Auto-finish</button></div>`;
+    h+=`<div class="cast-tabs"><button class="ctab ${L.view!=='box'?'on':''}" data-act="vlog">Play-by-play</button><button class="ctab ${L.view==='box'?'on':''}" data-act="vbox">Box score</button></div>`;
+    if(L.view==='box')h+=boxTable(m,mp);
+    else h+=`<div class="pbp">${L.log.map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
+    el.innerHTML=h;return;
+  }
+  if(L&&L.done){
+    const d=L.championData,fi=world.feed.find(f=>f.id===L.feedId);
+    let h=`<div class="cast-head"><div class="cast-title">${L.name}</div><div class="cast-stage">Champions</div></div><div class="champ-banner"><div class="champ-name">${L.finalChamp.name}</div><div class="champ-sub">def. ${L.finalRun.name} ${d.score} — a ${d.cairnStyle} cairn at ${d.zone}</div></div>`;
+    if(fi){
+      if(fi.narrated)h+=`<div class="desk"><div class="desk-label">From the desk</div>${fmtAI(fi.narrated)}</div>`;
+      else if(fi.narrating)h+=`<div class="desk-loading">the desk is calling it…</div>`;
+      else h+=`<button class="ctl primary narrate" data-act="recap">✦ Have the desk call it</button>${fi.narrateError?`<div class="desk-err">${esc(fi.narrateError)}</div>`:''}`;
+    }
+    h+=`<div class="pbp" style="margin-top:14px">${L.log.slice(0,50).map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
+    h+=`<button class="ctl" data-act="end" style="margin-top:14px">End broadcast</button>`;
+    el.innerHTML=h;return;
+  }
+  if(world.pendingMajors&&world.pendingMajors.length){
+    el.innerHTML=`<p class="hint">A Major is staged. Broadcast it round-by-round, or let it resolve on its own.</p>`+world.pendingMajors.map(n=>`<div class="match"><span class="side"><span class="tag-pill">Major</span> ${n}</span><span class="side"><button class="ctl primary" data-act="broadcast" data-name="${esc(n)}">◉ Broadcast live</button> <button class="ctl" data-act="autosim" data-name="${esc(n)}">Auto-sim</button></span></div>`).join("");
+    return;
+  }
+  el.innerHTML=`<div class="feed-empty">No Major staged. Sim a season — when its Major comes up, you can broadcast it here, round by round.</div>`;
+}
+
+/* controls */
+function doSeason(){
+  if(world.pendingMajors&&world.pendingMajors.length)autoResolveMajors();
+  if(world.started){advanceCareers();world.season++;world.year++;}
+  world.started=true;runRegular();render();switchTab(world.pendingMajors.length?'cast':'feed');
+}
+function doFive(){
+  for(let i=0;i<5;i++){if(world.pendingMajors&&world.pendingMajors.length)autoResolveMajors();if(world.started){advanceCareers();world.season++;world.year++;}world.started=true;runRegular();}
+  autoResolveMajors();render();switchTab('feed');
+}
+function doReset(){world=newWorld();render();switchTab("feed");}
+function switchTab(p){document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.p===p));
+  document.querySelectorAll(".panel").forEach(s=>s.classList.toggle("active",s.id==="p-"+p));}
+document.getElementById("tabs").addEventListener("click",e=>{const t=e.target.closest(".tab");if(t)switchTab(t.dataset.p);});
+$("btnSeason").addEventListener("click",doSeason);
+$("btnFive").addEventListener("click",doFive);
+$("btnReset").addEventListener("click",doReset);
+document.getElementById("p-players").addEventListener("click",e=>{
+  const fb=e.target.closest("[data-filter]");if(fb){playerFilter=fb.dataset.filter;selectedPid=null;movePid=null;editPid=null;showCreate=false;renderPlayers();return;}
+  const act=e.target.closest("[data-act]");
+  if(act&&act.dataset.act==='newfa'){showCreate=!showCreate;renderPlayers();return;}
+  if(act&&act.dataset.act==='docreate'){const g=id=>{const el=$(id);return el?el.value:'';};
+    const p=mkFreeAgent(g('cf-first').trim(),g('cf-tag').trim(),g('cf-last').trim(),g('cf-role'),+g('cf-rating')||62);
+    txn('sign',`New free agent created: ${nm(p)} (${p.role}).`);showCreate=false;selectedPid=p.id;render();return;}
+  if(act&&act.dataset.p){const p=anyPlayerById(+act.dataset.p);if(!p){renderPlayers();return;}const a=act.dataset.act;
+    if(a==='retire')retire(p,findHolderTeam(p));
+    else if(a==='unretire'){unretire(p);feedPush('note','Back in the server',`${nm(p)} comes out of retirement.`);txn('return',`${nm(p)} un-retires.`);}
+    else if(a==='release')forceMove(p,null);
+    else if(a==='pin')p.pinned=!p.pinned;
+    else if(a==='edit')editPid=editPid===p.id?null:p.id;
+    else if(a==='atrup')p.r[act.dataset.attr]=clamp(p.r[act.dataset.attr]+3,28,99);
+    else if(a==='atrdn')p.r[act.dataset.attr]=clamp(p.r[act.dataset.attr]-3,28,99);
+    else if(a==='ageup')p.age=clamp(p.age+1,16,45);
+    else if(a==='agedn')p.age=clamp(p.age-1,16,45);
+    else if(a==='rolecycle')p.role=ROLES[(ROLES.indexOf(p.role)+1)%ROLES.length];
+    else if(a==='movestart')movePid=movePid===p.id?null:p.id;
+    else if(a==='moveto'){const to=world.teams.find(t=>t.short===act.dataset.to);if(to)forceMove(p,to);movePid=null;selectedPid=p.id;}
+    render();return;}
+  const th=e.target.closest("th[data-s]");if(th){sortKey=th.dataset.s;renderPlayers();return;}
+  const row=e.target.closest("[data-pid]");if(row){const id=+row.dataset.pid;selectedPid=selectedPid===id?null:id;movePid=null;editPid=null;renderPlayers();}
+});
+document.getElementById("p-teams").addEventListener("click",e=>{
+  const fb=e.target.closest("[data-tfilter]");if(fb){teamFilter=fb.dataset.tfilter;selectedTid=null;renderTeams();return;}
+  if(e.target.closest("[data-tclose]")){selectedTid=null;renderTeams();return;}
+  const ts=e.target.closest("th[data-ts]");if(ts){teamSortKey=ts.dataset.ts;renderTeams();return;}
+  const pr=e.target.closest("[data-tpid]");if(pr){const pid=+pr.dataset.tpid;const p=anyPlayerById(pid);selectedPid=pid;editPid=null;movePid=null;
+    playerFilter=(p&&p.retired)?'retired':(p&&world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');return;}
+  const row=e.target.closest("[data-tid]");if(row){selectedTid=selectedTid===row.dataset.tid?null:row.dataset.tid;renderTeams();}
+});
+document.getElementById("p-annals").addEventListener("click",e=>{
+  const av=e.target.closest("[data-av]");if(av){annalsView=av.dataset.av;renderAnnals();return;}
+  const pr=e.target.closest("[data-tpid]");if(pr){const pid=+pr.dataset.tpid;const p=anyPlayerById(pid);if(!p)return;selectedPid=pid;editPid=null;movePid=null;
+    playerFilter=p.retired?'retired':(world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');}
+});
+document.getElementById("p-feed").addEventListener("click",e=>{const btn=e.target.closest("[data-narrate]");if(btn)narrate(+btn.dataset.narrate);});
+document.getElementById("p-cast").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;
+  if(a==='round')liveRound();else if(a==='map')liveMap();else if(a==='match')liveMatch();else if(a==='tofinal')liveToFinal();else if(a==='auto')liveAuto();
+  else if(a==='broadcast')liveSetup(el.dataset.name);else if(a==='autosim'){autoOneMajor(el.dataset.name);render();}else if(a==='stage')narrateStage();
+  else if(a==='recap'){const L=world.live;if(L&&L.feedId!=null)narrate(L.feedId);}else if(a==='end')endBroadcast();
+  else if(a==='vbox'){if(world.live){world.live.view='box';renderCast();}}else if(a==='vlog'){if(world.live){world.live.view='log';renderCast();}}});
+
+world=newWorld();render();
+</script>
+</body>
+</html>

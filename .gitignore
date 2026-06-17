@@ -1,0 +1,11 @@
+# Original prototype source — kept locally, superseded by index.html
+prototype.txt
+prototype.html
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.vscode/
+.idea/
