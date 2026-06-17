@@ -282,10 +282,21 @@ const gauss=()=>{let u=0,v=0;while(!u)u=rnd();while(!v)v=rnd();return Math.sqrt(
 const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 function pickW(arr,wf){let tot=0;const ws=arr.map(x=>{const w=Math.max(0.0001,wf(x));tot+=w;return w;});let r=rnd()*tot;for(let i=0;i<arr.length;i++){r-=ws[i];if(r<=0)return arr[i];}return arr[arr.length-1];}
 function sampleN(arr,n,wf){const pool=arr.slice(),out=[];n=Math.min(n,pool.length);for(let i=0;i<n;i++){const p=pickW(pool,wf);out.push(p);pool.splice(pool.indexOf(p),1);}return out;}
-function blankBox(){return {k:0,d:0,a:0,entry:0,vigils:0};}
-function accStat(p,e){const s=p.stat;s.k+=e.k;s.d+=e.d;s.a+=e.a;s.entry+=e.entry;if(e.clutch)s.vigils++;s.rounds++;}
+// A single round's raw line for one player.
+function newRoundBox(){return {k:0,d:0,a:0,entry:0,open:0,fd:0,clutch:0,mk:0,trade:0,traded:0,dmg:0,surv:0,kast:0};}
+// An accumulated line (map / series / career). opens=opening kills, fds=first deaths, mk2/3/4/aces=multikills.
+function blankBox(){return {k:0,d:0,a:0,entry:0,vigils:0,opens:0,fds:0,mk2:0,mk3:0,mk4:0,aces:0,trades:0,traded:0,dmg:0,surv:0,kast:0,rounds:0};}
+function addBox(dst,e){dst.k+=e.k;dst.d+=e.d;dst.a+=e.a;dst.entry+=e.entry;dst.opens+=e.open||0;dst.fds+=e.fd||0;
+  if(e.clutch)dst.vigils++;
+  if(e.mk>=5)dst.aces++;else if(e.mk===4)dst.mk4++;else if(e.mk===3)dst.mk3++;else if(e.mk===2)dst.mk2++;
+  dst.trades+=e.trade||0;dst.traded+=e.traded||0;dst.dmg+=e.dmg||0;dst.surv+=e.surv||0;dst.kast+=e.kast||0;dst.rounds++;}
+function mergeBox(dst,src){for(const k in src)dst[k]=(dst[k]||0)+(src[k]||0);}
+function accStat(p,e){addBox(p.stat,e);}
 function kd(s){return s.d?s.k/s.d:s.k;}
 function kda(s){return (s.k+s.a)/Math.max(1,s.d);}
+function adrOf(s){return s.rounds?Math.round(s.dmg/s.rounds):0;}
+function kastOf(s){return s.rounds?Math.round(100*s.kast/s.rounds):0;}
+function multiK(s){return (s.mk2||0)+(s.mk3||0)+(s.mk4||0)+(s.aces||0);}
 
 const ZONES=[
   {name:"the Gallery",w:{aim:1.5,read:.6,entry:.8,util:.5}},
@@ -305,22 +316,59 @@ const TIERS={
 const WC_START=7; // the World Championship is established once the circuit matures
 const CITIES=["Orlando","Cologne","Katowice","Rio","Austin","Seoul","Lisbon","Dallas","Malmö","Shanghai","Belgrade","Toronto"];
 const MSPON=["GRAVL","Pepsi","Intel","Red Bull","Vantablack"];
-const FIRST=["Marco","Theo","Dane","Kai","Niko","Sten","Ravi","Owen","Jae","Luca","Pax","Cy","Rune","Mads","Tobin","Arlo","Dex","Hugo","Sol","Bram","Iggy","Nash","Reed","Vance","Emre","Yuki","Dario","Phin","Wes","Oslo"];
-const LAST=["Ferro","Vance","Okafor","Sato","Mraz","Delgado","Holt","Park","Costa","Ríos","Mireles","Beck","Falk","Quill","Ade","Nair","Stride","Karras","Boone","Lim","Drozd","Sable","Mensah","Hahn","Vidic","Okonkwo"];
-const TAGS=["spire","null","koff","vael","drey","rin","sled","mox","crow","plume","tilt","hex","glint","ozo","veer","quill","nyx","ridge","loom","gust","brim","pact","stilt","koi","vow","ash","reign","mist","clef","vane","fray","gild","halo","ibex","jolt","knox","lyre","murk","oath","prowl","rasp","skiff","thorn","verge","wisp","yoke","zeal","blip","churn","dross","ember","flint","grift","husk","iron","jut","kiln","lull","onyx","pyre"];
+const FIRST=["Marco","Theo","Dane","Kai","Niko","Sten","Ravi","Owen","Jae","Luca","Pax","Cy","Rune","Mads","Tobin","Arlo","Dex","Hugo","Sol","Bram","Iggy","Nash","Reed","Vance","Emre","Yuki","Dario","Phin","Wes","Oslo",
+  "Aki","Bo","Caio","Davi","Eli","Finn","Gio","Hari","Ivo","Joon","Kenji","Leif","Milo","Nour","Omar","Pavel","Quinn","Rafa","Soren","Tariq","Viktor","Wade","Xan","Yon","Zane","Aleksi","Bence","Dmitri","Ewan","Felix",
+  "Gunnar","Hassan","Idris","Jonas","Kwame","Lior","Mateusz","Nikhil","Oskar","Pietro","Rasmus","Sami","Tomas","Ugo","Vasilis","Yannick","Zoltan","Andrei","Bilal","Cole","Diego","Esteban","Frode","Goran","Haru","Ilya","Janos","Kentaro","Lars","Mehdi",
+  "Noa","Otto","Pol","Rohan","Stefan","Teo","Vlad","Yuto","Adil","Bao","Cruz","Dren","Enzo","Finch","Gable","Kaito","Joa","Kato","Lev","Linh","Niall","Orin","Priya","Reza","Suki","Tunde","Vesa","Wren","Yara","Zeke"];
+const LAST=["Ferro","Vance","Okafor","Sato","Mraz","Delgado","Holt","Park","Costa","Ríos","Mireles","Beck","Falk","Quill","Ade","Nair","Stride","Karras","Boone","Lim","Drozd","Sable","Mensah","Hahn","Vidic","Okonkwo",
+  "Adeyemi","Bauer","Cho","Dubois","Eriksen","Fontaine","Genov","Haas","Ibrahim","Jansen","Kovač","Larsen","Moreau","Novak","Oyelaran","Petrov","Qureshi","Reyes","Salonen","Tanaka","Ueda","Varga","Wallace","Xu","Yamada","Zhang",
+  "Abara","Bianchi","Cruz","Dahl","Engel","Farahani","Grimaldo","Ilunga","Jovanović","Kang","Lindqvist","Mwangi","Nakamura","Osei","Pereira","Rahman","Suzuki","Tovar","Ustinov","Valdez","Wnuk","Yilmaz","Ziegler","Abe","Balla","Conti",
+  "Diallo","Esposito","Forsberg","Guo","Holm","Ito","Jha","Kemp","Leroy","Mancini","Ngata","Owusu","Persson","Radev","Singh","Travers","Vega","Watanabe","Acosta","Bjørn","Castellanos","Demir","Engström","Fauzi","Gallego","Henriksen"];
+// Curated handles, plus a procedural generator (genTag) so the space is effectively limitless and natural —
+// collisions yield a fresh handle, never an ugly "spire2 / spire3" numeric suffix.
+const TAGS=["spire","null","koff","vael","drey","rin","sled","mox","crow","plume","tilt","hex","glint","ozo","veer","quill","nyx","ridge","loom","gust","brim","pact","stilt","koi","vow","ash","reign","mist","clef","vane","fray","gild","halo","ibex","jolt","knox","lyre","murk","oath","prowl","rasp","skiff","thorn","verge","wisp","yoke","zeal","blip","churn","dross","ember","flint","grift","husk","iron","jut","kiln","lull","onyx","pyre",
+  "volt","rune","snag","drift","vex","koa","talon","crux","dune","echo","fable","glyph","harp","jade","kelp","lance","marrow","nettle","opal","pike","quartz","riff","slate","tide","umbra","vire","wren","zen","axil","cinder","delta","ebon","frost","gale","hollow","ivy","jinx","koan","lurk","mire","noble","ochre","relic","surge","trove","vesper","warden","xeno","yew","zephyr","arc","balk","coil","dusk","elm","flux","helm","jorn","krill","lode","moss","north","parch","quay","ravel","scythe","tundra","vault","wane","crag","sear","flare","gloam","haze","kite","loam","nadir","oryx","plith","quench","rove","silt","thrum","vega","welk","yore","zoll","bract","clove","fern","grove","spool","tarn"];
 const ROLES=["read","reach","breaker","anchor","set"];
 const ORGS=["Sentinel","Nightfall","Granite","Tidewater","Halcyon","Borealis","Koi","Driftwood"];
 const ORGS2=["Ashfall","Lowtide","Cinder","Pinewood","Gantry","Marrow","Saltbox","Undertow"];
 // A deep bench of evocative org names so new and returning clubs keep real identities for the long haul.
 const NEWORGS=["Ironwood","Saffron Club","Verdant","Cobalt","Mirage","Antler","Bastion","Cradle","Ferrous","Glacier","Hollow","Kestrel","Lantern","Mooring","Nomad","Obsidian","Quarry","Rookery","Solstice","Talon","Umbra","Vesper","Warden","Yarrow","Zephyr","Brindle","Current","Dovetail","Everdark","Foundry","Gallows","Harrow","Ledger","Magpie","Nettle","Outpost","Pallid","Rampart","Sable Co","Tinder"];
+// Word banks for the gamertag generator. The canon already mixes styles — lowercase coined handles (vell, mox),
+// capitalized nicknames (Kaiser, Riptide, Clock), and compounds (DadBod) — so genTag() spans all of them.
+const TG_ON=["b","bl","br","c","cl","cr","d","dr","f","fl","fr","g","gl","gr","h","j","k","kl","kr","l","m","n","p","pl","pr","qu","r","s","sh","sk","sl","sn","sp","st","sv","sw","t","th","tr","v","vr","w","x","z","zr","ph","ch","gh","y","kv"];
+const TG_VOW=["a","e","i","o","u","y","ae","ai","au","ea","ei","eo","ia","io","oa","ou","ya","oo","ey","ie","ae"];
+const TG_COD=["","b","ck","d","f","g","k","l","ll","m","n","nd","ng","nk","nt","p","r","rk","rn","rt","s","sh","sk","ss","st","t","th","v","x","z","ax","ex","ix","ox","yn","el","or","ur","im","om","ze","ne","ke","lo","ko","va"];
+const TG_MID=["b","d","g","k","l","m","n","r","s","t","v","z","ph","th","sh","ck","ll","rr","nn","sk","st"];
+const NICK=["Clock","Kaiser","Riptide","Anchor","Hammer","Ghost","Saint","Wolf","Crane","Falcon","Drake","Viper","Comet","Atlas","Titan","Oracle","Reaper","Phantom","Specter","Maverick","Bishop","Rook","Knight","Vector","Cipher","Raven","Sage","Storm","Frost","Blaze","Quake","Surge","Cobra","Lynx","Onyx","Sable","Halo","Vortex","Nomad","Pilot","Mantis","Bolt","Ace","Jet","Goose","Tank","Razor","Echo","Diesel","Karma","Zealot","Mirage","Talon","Wraith","Cinder","Vandal","Rebel","Saber","Tempo","Hex","Juno","Koi","Lotus","Mako","Nova","Orbit","Pulse","Quartz","Relic","Sol","Tundra","Ursa","Vesper","Wisp","Zephyr"];
+const NADJ=["Dad","Night","Iron","Cold","Dead","High","Low","Red","Black","Lone","Mad","Quick","Sun","Storm","Ash","Grim","Slow","Wild","Old","Lucky","Half","Gold","Salt","Dark","Blue","Ghost","Steel","Bone","Frost","Snow"];
+const NNOUN=["Bod","Owl","Jaw","Snap","Eye","Noon","Hand","Fox","Byte","Wolf","Bird","Foot","Shot","Lung","Pit","Vein","Stone","Wood","Key","Rush","Tide","Fang","Crow","Reign","Spike","Maw","Husk","Gale","Drift","Pike"];
+const TG_SV=["a","e","i","o","u","y"]; // crisp single vowels for clean two-syllable handles
+function leet(s){let n=0;return s.replace(/[eoaist]/g,c=>(n<2&&rnd()<0.4?(n++,{e:"3",o:"0",a:"4",i:"1",s:"5",t:"7"}[c]):c));}
+function tidy(t){return t.replace(/(.)\1\1+/g,"$1$1").slice(0,9);} // collapse 3+ repeats, cap length
+function syll(){return pick(TG_ON)+pick(TG_VOW)+pick(TG_COD);}     // can be lush (one syllable)
+function csyll(){return pick(TG_ON)+pick(TG_SV)+pick(TG_COD);}     // crisp
+// One gamertag in a randomly chosen style — coined word, curated handle, capitalized nickname, compound, leet, or prefix.
+function genTag(){
+  const r=rnd();
+  if(r<0.32){const t=rnd()<0.5?syll():pick(TG_ON)+pick(TG_SV)+pick(TG_MID)+pick(rnd()<0.7?TG_SV:TG_VOW)+pick(TG_COD);return tidy(t);}
+  if(r<0.50)return pick(TAGS);
+  if(r<0.72)return pick(NICK);
+  if(r<0.84)return pick(NADJ)+pick(NNOUN);
+  if(r<0.93)return tidy(leet(csyll()+(rnd()<0.4?pick(TG_SV)+pick(TG_COD):"")));
+  const w=rnd()<0.5?csyll():pick(NICK).toLowerCase();return tidy(pick(["i","x","z","v","k","n"])+w.charAt(0).toUpperCase()+w.slice(1));
+}
 
 let world=null;
 let pid=1;
 let usedTags=new Set();
 
 // A tag is a permanent unique identity — no two people (active, retired, free agent, coach, or caster)
-// ever share one. freshTag reserves a base, appending a number if it's already taken.
-function freshTag(base){base=(base==null?pick(TAGS):base).toString();let t=base,n=2;while(!t||usedTags.has(t)){t=base+n;n++;}usedTags.add(t);return t;}
+// ever share one. On collision we synthesize a *new* handle (genTag) rather than appending "spire2/spire3".
+function freshTag(base){
+  if(base!=null){base=String(base);if(base&&!usedTags.has(base)){usedTags.add(base);return base;}}
+  for(let i=0;i<600;i++){const t=genTag();if(t&&t.length>=2&&!usedTags.has(t)){usedTags.add(t);return t;}}
+  let t;do{t=(genTag()+pick(TG_VOW)+pick(TG_COD)).slice(0,10);}while(!t||usedTags.has(t));usedTags.add(t);return t;
+}
 
 // Talent tiers: most players are ordinary, a rare few are generational, some are scrubs. `pot` is the
 // developmental ceiling a young player climbs toward — so a generational rookie actually becomes a star,
@@ -350,7 +398,7 @@ function mkPlayer(first,tag,last,role,age,rt){
   if(tag)usedTags.add(tag);
   return {id:pid++,first,tag,last,role,age,r,pot:Math.round(pot),titles:0,mastersTitles:0,worlds:0,gravs:[],games:0,retired:false,stat:blankBox2(),history:[]};
 }
-function blankBox2(){return {k:0,d:0,a:0,entry:0,vigils:0,rounds:0};}
+function blankBox2(){return blankBox();}
 function proc(role,age){return mkPlayer(pick(FIRST),freshTag(),pick(LAST),role,age||16+Math.floor(rnd()*8));}
 function procWeak(role,age){const p=proc(role,age||16+Math.floor(rnd()*4));for(const k in p.r)p.r[k]=clamp(p.r[k]-(6+rnd()*9),26,99);p.pot=clamp(p.pot-(5+rnd()*9),42,92);return p;}
 function fillRoles(players){ROLES.forEach(role=>{if(!players.some(p=>p.role===role))players.push(proc(role));});return players;}
@@ -443,51 +491,105 @@ function txn(kind,text){world.transactions.unshift({season:world.season,kind,tex
 function zoneSkill(p,z){const w=z.w,r=p.r;const num=r.aim*w.aim+r.read*w.read+r.entry*w.entry+r.util*w.util+r.clutch*0.7;const den=w.aim+w.read+w.entry+w.util+0.7;return num/den;}
 function skillIndex(p){const r=p.r;return (r.aim*1.15+r.clutch*0.75+r.entry*0.6+r.read*0.55+r.util*0.45+r.consistency*0.55)/4.05;}
 function roleWeight(role){return role==="read"?1.06:role==="set"?1.03:role==="anchor"?1.01:role==="breaker"?0.99:1.0;}
-function simRound(a,b){
+/* ---- cinematic variance: form, confidence, momentum ---- */
+function formMult(p){return p._form||1;}
+function confMult(p){return 1+clamp(p._conf||0,-1,1)*0.12;}
+function poise(p){return clamp((p.r.clutch*0.6+p.r.consistency*0.4)/100,0,1);}
+// per-map form: volatile players (low consistency) swing harder; a fat tail gives career games and no-shows.
+function rollForm(p){const sigma=0.09+(100-p.r.consistency)/100*0.15;let f=1+gauss()*sigma;const r=rnd();
+  if(r<0.012)f*=1.5;else if(r<0.024)f*=0.6;return clamp(f,0.45,1.85);}
+function initMapForm(a,b){lineup(a).concat(lineup(b)).forEach(p=>p._form=rollForm(p));}
+// confidence resets each series; on the big stage the fragile start rattled and the cool start composed.
+function initSeriesState(a,b,stage){lineup(a).concat(lineup(b)).forEach(p=>{p._conf=0;p._cl=0;
+  if(stage)p._conf=clamp((poise(p)-0.72)*0.9,-0.55,0.4);});}
+function clearSeriesState(a,b){[a,b].forEach(t=>t.players.forEach(p=>{p._form=undefined;p._conf=undefined;p._cl=undefined;}));}
+// snowball on a run; a desperation rally for the side that's fallen behind — so leads stick but comebacks happen.
+function momFromStreak(stA,stB,sa,sb){const m={a:1,b:1};
+  m.a*=1+clamp(stA,0,5)*0.017;m.b*=1+clamp(stB,0,5)*0.017;
+  if(sb-sa>=4)m.a*=1.05+(sb-sa-4)*0.02;
+  if(sa-sb>=4)m.b*=1.05+(sa-sb-4)*0.02;
+  return m;}
+function mapDone(sa,sb){return (Math.max(sa,sb)>=15&&Math.abs(sa-sb)>=2)||Math.max(sa,sb)>=24;} // first to 15, win by 2 in OT
+
+// A round, played as duels: an opening pick, then man-advantage trades, then an objective close or a clutch hold.
+function simRound(a,b,opts){
+  opts=opts||{};const stage=opts.stage||0;const mom=opts.mom||{a:1,b:1};
   const z=pick(ZONES);
   const A=lineup(a),B=lineup(b);
-  let pa=0,pb=0;
-  A.forEach(p=>pa+=zoneSkill(p,z)*(0.85+0.30*rnd()));
-  B.forEach(p=>pb+=zoneSkill(p,z)*(0.85+0.30*rnd()));
-  pa*=(0.75+0.5*a.chem)*coachMult(a);pb*=(0.75+0.5*b.chem)*coachMult(b);
-  const winA=rnd()<pa/(pa+pb);const winT=winA?a:b;
-  const win=winA?A:B, lose=winA?B:A;
-  const box={};A.concat(B).forEach(p=>box[p.id]={k:0,d:0,a:0,entry:0,clutch:0});
-  const dieW=p=>1/(0.45+(p.r.read*0.4+p.r.consistency*0.4+p.r.clutch*0.2)/100);
-  const fragW=p=>(p.r.aim*1.2+p.r.entry*0.6+p.r.clutch*0.4)*(0.5+z.w.aim);
-  const loseDeadN=Math.min(lose.length,2+Math.floor(Math.pow(rnd(),0.8)*4));
-  const winDeadN=Math.min(win.length-1,Math.floor(Math.pow(rnd(),2.2)*5));
-  const losersDied=sampleN(lose,loseDeadN,dieW),winnersDied=sampleN(win,winDeadN,dieW);
-  losersDied.forEach(p=>box[p.id].d++);winnersDied.forEach(p=>box[p.id].d++);
+  const box={};A.concat(B).forEach(p=>box[p.id]=newRoundBox());
+  const side={};A.forEach(p=>side[p.id]='a');B.forEach(p=>side[p.id]='b');
+  const rate=p=>zoneSkill(p,z)*formMult(p)*confMult(p);
+  const fragW=p=>Math.max(0.2,rate(p)*(0.7+0.6*rnd()));
+  const tchem=t=>(0.78+0.46*t.chem)*coachMult(t);
+  // opening duel — the entry/star players contest the ember first
+  const oa=pickW(A,p=>p.r.entry*1.5+p.r.aim+1),ob=pickW(B,p=>p.r.entry*1.5+p.r.aim+1);
+  const ra=rate(oa)*mom.a*tchem(a),rb=rate(ob)*mom.b*tchem(b);
+  const aOpen=rnd()<ra/(ra+rb);
+  const opW=aOpen?oa:ob,opL=aOpen?ob:oa;
+  box[opW.id].k++;box[opW.id].open++;box[opW.id].entry++;box[opL.id].d++;box[opL.id].fd++;
+  let aliveA=A.slice(),aliveB=B.slice();
+  const drop=(arr,p)=>{const i=arr.indexOf(p);if(i>=0)arr.splice(i,1);};
+  drop(side[opL.id]==='a'?aliveA:aliveB,opL);
+  const mark=(p,n)=>{p._cl=Math.max(p._cl||0,n);};
+  let winA,guard=0;
+  while(guard++<40){
+    if(!aliveA.length){winA=false;break;}
+    if(!aliveB.length){winA=true;break;}
+    const adv=aliveA.length-aliveB.length;
+    if(adv!==0){if(rnd()<0.10+Math.abs(adv)*0.10){winA=adv>0;break;}}
+    else if(rnd()<0.06){const sa=aliveA.reduce((s,p)=>s+rate(p),0)*mom.a*tchem(a),sb=aliveB.reduce((s,p)=>s+rate(p),0)*mom.b*tchem(b);winA=rnd()<sa/(sa+sb);break;}
+    const x=pickW(aliveA,fragW),y=pickW(aliveB,fragW);
+    const ax=fragW(x)*(1+0.16*adv)*mom.a,by=fragW(y)*(1-0.16*adv)*mom.b;
+    const aKills=rnd()<ax/(ax+by);
+    const killer=aKills?x:y,victim=aKills?y:x;
+    box[killer.id].k++;box[victim.id].d++;
+    const kmates=(aKills?aliveA:aliveB).filter(p=>p!==killer);
+    if(kmates.length&&rnd()<0.32){const mt=pickW(kmates,p=>p.r.util+p.r.read);box[mt.id].a++;}
+    drop(aKills?aliveB:aliveA,victim);
+    const tmates=(aKills?aliveB:aliveA).filter(p=>p!==victim);
+    if(tmates.length&&rnd()<0.30){const tr=pickW(tmates,p=>p.r.read*0.7+p.r.aim*0.6);box[tr.id].k++;box[tr.id].trade++;box[killer.id].d++;box[killer.id].traded=1;drop(aKills?aliveA:aliveB,killer);}
+    if(aliveA.length===1&&aliveB.length>=2)mark(aliveA[0],aliveB.length);
+    if(aliveB.length===1&&aliveA.length>=2)mark(aliveB[0],aliveA.length);
+  }
+  if(winA===undefined)winA=aliveA.length>=aliveB.length;
+  const winT=winA?a:b,win=winA?A:B,lose=winA?B:A;
+  const aliveWin=winA?aliveA:aliveB;
   let vigil=null,closer=null;
-  if(winDeadN>=win.length-1){const surv=win.filter(p=>!winnersDied.includes(p));closer=surv.length?pickW(surv,p=>p.r.clutch):null;}
-  let assigned=0;
-  if(closer){const cn=Math.min(loseDeadN,Math.max(2,Math.round(loseDeadN*0.7)));for(let i=0;i<cn;i++)box[closer.id].k++;assigned=cn;}
-  for(let i=assigned;i<loseDeadN;i++){const p=pickW(win,fragW);box[p.id].k++;}
-  for(let i=0;i<winDeadN;i++){const p=pickW(lose,fragW);box[p.id].k++;}
-  [[win,loseDeadN],[lose,winDeadN]].forEach(([roster,n])=>{for(let i=0;i<n;i++){if(rnd()<0.3){const m=pickW(roster,p=>p.r.util);box[m.id].a++;}}});
-  const killers=A.concat(B).filter(p=>box[p.id].k>0);
-  if(killers.length){const ek=pickW(killers,p=>p.r.entry);box[ek.id].entry++;}
-  if(closer){const x=clamp(loseDeadN,2,4);box[closer.id].clutch=x;vigil={pid:closer.id,x,name:closer.tag,zone:z.name};}
+  if(aliveWin.length===1&&(aliveWin[0]._cl||0)>=2){closer=aliveWin[0];const x=clamp(closer._cl,2,4);box[closer.id].clutch=x;vigil={pid:closer.id,x,name:closer.tag,zone:z.name};}
+  // finish the line: survival, multikills, KAST, damage
+  A.concat(B).forEach(p=>{const e=box[p.id];
+    if(e.d===0)e.surv=1;
+    if(e.k>=2)e.mk=Math.min(e.k,5);
+    e.kast=(e.k>0||e.a>0||e.surv||e.traded)?1:0;
+    e.dmg=Math.round(e.k*(88+rnd()*52)+e.a*(26+rnd()*30)+(e.surv?10:0)+(e.open?22:0)+p.r.aim*0.18*rnd());});
+  // gravity — skill-anchored, box-flavored (same ~1.0 scale as before)
   const grav={};
   [[win,true],[lose,false]].forEach(([roster,won])=>roster.forEach(p=>{const e=box[p.id];
     const anchor=-0.6+skillIndex(p)/42.5;
-    const boxg=1.0+(e.k-e.d)*0.18+e.entry*0.04+e.a*0.03+(e.clutch?0.25+0.05*e.clutch:0)+(won?0.04:-0.04);
-    let g=(anchor*0.8+boxg*0.2)*roleWeight(p.role);
-    grav[p.id]=clamp(g,0.2,2.6);}));
-  let star=win[0];win.forEach(p=>{if(grav[p.id]>grav[star.id])star=p;});
-  if(closer)star=closer;
+    const boxg=1.0+(e.k-e.d)*0.17+e.open*0.05+e.a*0.03+e.trade*0.04
+      +(e.clutch?0.22+0.06*e.clutch:0)+(e.mk>=4?0.18:e.mk===3?0.10:e.mk===2?0.04:0)
+      +(won&&e.surv?0.02:0)+(won?0.04:-0.04)-(e.fd?0.04:0);
+    grav[p.id]=clamp((anchor*0.8+boxg*0.2)*roleWeight(p.role),0.2,2.7);}));
+  let star=win[0];win.forEach(p=>{if(grav[p.id]>grav[star.id])star=p;});if(closer)star=closer;
+  // confidence drifts for the next round — and the fragile swing harder than the steady
+  A.concat(B).forEach(p=>{const e=box[p.id];const won=(side[p.id]==='a')===winA;
+    const impact=(e.k-e.d)+(e.clutch?2:0)+e.open*0.6+e.trade*0.3-(e.fd?0.5:0)+(won?0.3:-0.3);
+    p._conf=clamp((p._conf||0)+impact*0.03*(1.25-poise(p)),-1,1);p._cl=0;});
   return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star};
 }
-function addBox(dst,e){dst.k+=e.k;dst.d+=e.d;dst.a+=e.a;dst.entry+=e.entry;dst.vigils+=(e.clutch?1:0);}
-function simMap(a,b,ctx){
-  let sa=0,sb=0;const perf={},mbox={};const vigils=[];let lastZone="the Aisle";
+function simMap(a,b,ctx,opts){
+  opts=opts||{};const stage=opts.stage||0;
+  initMapForm(a,b);
+  let sa=0,sb=0,stA=0,stB=0;const perf={},mbox={};const vigils=[];let lastZone="the Aisle";
   const roster=lineup(a).concat(lineup(b));
   roster.forEach(p=>mbox[p.id]=blankBox());
-  while(sa<15&&sb<15){const r=simRound(a,b);lastZone=r.zone;if(r.winA)sa++;else sb++;
+  while(!mapDone(sa,sb)){
+    const r=simRound(a,b,{stage,mom:momFromStreak(stA,stB,sa,sb)});lastZone=r.zone;
+    if(r.winA){sa++;stA++;stB=0;}else{sb++;stB++;stA=0;}
     for(const id in r.grav)(perf[id]=perf[id]||[]).push(r.grav[id]);
     roster.forEach(p=>{const e=r.box[p.id];if(e){addBox(mbox[p.id],e);accStat(p,e);}});
-    if(r.vigil)vigils.push(r.vigil);}
+    if(r.vigil)vigils.push(r.vigil);
+  }
   const grav={};for(const id in perf){const arr=perf[id];grav[id]=arr.length?arr.reduce((s,x)=>s+x,0)/arr.length:1.0;}
   if(ctx)recordGamePerf(grav,mbox,a,b,sa>sb?a:b,ctx,lastZone);
   return {winner:sa>sb?a:b,sa,sb,grav,vigils,zone:lastZone,box:mbox};
@@ -500,9 +602,11 @@ function teamNameByShort(s){const t=world.teams.find(x=>x.short===s);if(t)return
 function oppNameFor(s){return teamNameByShort(s);}
 function simSeries(a,b,wins,ctx){
   wins=wins||3;let wa=0,wb=0;const maps=[];const sgA={},sbox={};
+  const stage=ctx&&/final/i.test(ctx.round||'')?1:0;
+  initSeriesState(a,b,stage);
   const acc=g=>{for(const id in g){(sgA[id]=sgA[id]||[]).push(g[id]);}};
-  while(wa<wins&&wb<wins){const m=simMap(a,b,ctx?Object.assign({},ctx,{mapNo:maps.length+1}):null);const aWon=m.winner===a;if(aWon)wa++;else wb++;acc(m.grav);
-    for(const id in m.box){const e=m.box[id];sbox[id]=sbox[id]||blankBox();sbox[id].k+=e.k;sbox[id].d+=e.d;sbox[id].a+=e.a;sbox[id].entry+=e.entry;sbox[id].vigils+=e.vigils;}
+  while(wa<wins&&wb<wins){const m=simMap(a,b,ctx?Object.assign({},ctx,{mapNo:maps.length+1}):null,{stage});const aWon=m.winner===a;if(aWon)wa++;else wb++;acc(m.grav);
+    for(const id in m.box){const e=m.box[id];sbox[id]=sbox[id]||blankBox();mergeBox(sbox[id],e);}
     maps.push({aWon,sa:aWon?m.sa:m.sb,sb:aWon?m.sb:m.sa,vigils:m.vigils,zone:m.zone});}
   let ra=0,rb=0,downA=false,downB=false;
   for(const m of maps){if(m.aWon)ra++;else rb++;if(ra===0&&rb===2)downA=true;if(rb===0&&ra===2)downB=true;}
@@ -510,6 +614,7 @@ function simSeries(a,b,wins,ctx){
   const deadlift=wins>=3&&((winner===a&&downA)||(winner===b&&downB));
   const sg={};for(const id in sgA){const arr=sgA[id];sg[id]=arr.reduce((s,x)=>s+x,0)/arr.length;}
   for(const id in sg){const p=findPlayer(+id);if(p)p.gravs.push(sg[id]);}
+  clearSeriesState(a,b);
   return {winner,loser:winner===a?b:a,wa,wb,maps,sg,deadlift,box:sbox};
 }
 
@@ -560,7 +665,8 @@ function pushCapped(arr,item,cap){arr.push(item);if(arr.length>cap){arr.sort((a,
 function timelinePush(o){world.timeline.push(Object.assign({season:world.season,year:world.year},o));}
 // A frozen box score (both lineups) for a notable game/final, so history can be replayed in the Annals.
 // `box` is keyed by player id; we snapshot the rosters as they were the moment it was recorded.
-function teamBoxRows(t,box){return lineup(t).map(p=>{const e=box[p.id]||blankBox();return {tag:p.tag,role:p.role,k:e.k,d:e.d,a:e.a,entry:e.entry,vigils:e.vigils||0};})
+function teamBoxRows(t,box){return lineup(t).map(p=>{const e=box[p.id]||blankBox();
+    return {tag:p.tag,role:p.role,k:e.k,d:e.d,a:e.a,entry:e.entry,opens:e.opens||0,vigils:e.vigils||0,adr:adrOf(e),kast:kastOf(e),mk:multiK(e),aces:e.aces||0};})
   .sort((x,y)=>(y.k-y.d)-(x.k-x.d)||y.k-x.k);}
 function finalBoxSnapshot(a,b,box){if(!box)return null;return {teams:[{name:a.name,short:a.short,rows:teamBoxRows(a,box)},{name:b.name,short:b.short,rows:teamBoxRows(b,box)}]};}
 // single-map standout — the best individual game on one map (Masters & Majors only)
@@ -686,9 +792,17 @@ function commitMajor(name,champ,run,sfL,qfL,F){
   if(data.champStarBreakthrough&&cgStar>=1.15){ms+=18;mr.push(`${starC.tag} finally shed the unmarked label (${cgStar.toFixed(2)} career Gravity)`);}
   if(ms>=18&&mr.length)pushCapped(world.moments,{season:world.season,year:world.year,event:name,score:Math.round(ms),short:champ.short,box:finalBoxSnapshot(champ,run,F.box),
     text:`${champ.name} ${mr.join(', and ')} — ${name}, def. ${run.name} ${F.scoreStr}.`},Infinity);
-  lineup(run).forEach(p=>{const fg=F.sg[p.id];if(fg==null)return;const cg=p.games?careerGrav(p):1;const drop=cg-fg;
-    if((cg>=1.05&&drop>=0.28)||(cg>=1.12&&fg<0.92))pushCapped(world.chokes,{kind:'ind',season:world.season,year:world.year,event:name,id:p.id,score:Math.round(drop*100*(cg-0.4)),tag:p.tag,short:run.short,
-      text:`${pname(p)} (${run.short}) posted ${fg.toFixed(2)} in the ${name} final — ${drop.toFixed(2)} under a ${cg.toFixed(2)} career. The no-show that cost the Major.`},Infinity);});
+  // Individual chokes are driven by the actual final stat line — a player you'd expect to show up who disappeared.
+  lineup(run).forEach(p=>{const e=(F.box&&F.box[p.id])||null;if(!e||!e.rounds)return;
+    const fg=F.sg[p.id];const cg=p.games?careerGrav(p):1;const drop=fg!=null?cg-fg:0;
+    if(!(cg>=1.0||skillIndex(p)>=70||p.titles>0))return; // only the expected can choke
+    const kast=kastOf(e),kdr=e.d?e.k/e.d:e.k;let cs=0;const why=[];
+    if(kast<58){cs+=(58-kast)*1.1;why.push(`${kast}% KAST`);}
+    if(kdr<0.85){cs+=(0.85-kdr)*55;why.push(`${e.k}–${e.d}`);}
+    if(e.fds>=4){cs+=(e.fds-3)*5;why.push(`${e.fds} first deaths`);}
+    if(drop>=0.12){cs+=drop*70;why.push(`${drop.toFixed(2)} under a ${cg.toFixed(2)} career`);}
+    if(cs>=24&&why.length>=2)pushCapped(world.chokes,{kind:'ind',season:world.season,year:world.year,event:name,id:p.id,score:Math.round(cs),tag:p.tag,short:run.short,box:finalBoxSnapshot(champ,run,F.box),
+      text:`${pname(p)} (${run.name}) went missing in the ${name} final — ${why.join(', ')}. The no-show that cost the title.`},Infinity);});
   recordMajorPerfs(name,champ,run,F);
   recordMajorTimeline(name,champ,run,F,{priorStreak,starC,champStarBreakthrough:data.champStarBreakthrough});
   return data;
@@ -828,18 +942,24 @@ function uniqueName(base){const used=takenNames();if(!used.has(base))return base
 function spawnT2(){const used=takenNames();const pool=shuffle(NEWORGS).concat(ORGS2,ORGS,CITIES.map(c=>c+" GC"));const name=pool.find(n=>!used.has(n))||uniqueName("Expansion");
   const t={name,short:uniqueShort(name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase()),chem:.55+rnd()*.22,heart:rnd()<.4,star:null,div:2,coach:procCoach(),players:fillRoles2(),standins:[]};
   t.gravl=teamPower(t)*4*0.6;t.majors=0;t.masters=0;t.worlds=0;t.divHistory=[{season:world.season,div:2}];world.teams.push(t);t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:world.season}];});return t;}
-// A defunct org returns under its own name — restarting a roster in tier 2. Its old stones still stand on the Yard.
-function rejoinOrg(){
-  const cand=(world.defunct||[]).filter(d=>d.reason!=='founding'&&!world.teams.some(t=>t.name===d.name));
-  if(!cand.length)return null;
-  const d=pick(cand);
+// Bring a specific defunct org back under its own name — a fresh tier-2 roster. Its old stones still stand on the Yard.
+function reviveOrg(d,opts){opts=opts||{};
+  if(!d)return null;
+  if(world.teams.some(t=>t.name===d.name))return world.teams.find(t=>t.name===d.name); // already active
   const t={name:d.name,short:world.teams.some(x=>x.short===d.short)?uniqueShort(d.short):d.short,chem:.55+rnd()*.20,heart:!!d.heart,star:null,div:2,coach:procCoach(),players:fillRoles2(),standins:[],rejoined:world.season};
   t.gravl=teamPower(t)*4*0.55;t.majors=0;t.masters=0;t.worlds=0;t.divHistory=[{season:world.season,div:2}];
   world.teams.push(t);t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:world.season}];});
   world.defunct=world.defunct.filter(x=>x!==d);
-  feedPush('note','A name returns',`${esc(d.name)} are back. The org restarts a roster in tier 2${d.folded!=null?`, ${world.season-d.folded} season${world.season-d.folded>1?'s':''} after folding`:''} — their old stones still stand on the Yard.`);
-  txn('sign',`${d.name} rejoin the circuit (Div 2).`);
+  const ago=d.folded!=null?`, ${world.season-d.folded} season${world.season-d.folded>1?'s':''} after folding`:'';
+  feedPush('note','A name returns',opts.byHand
+    ?`The commissioner brings ${esc(d.name)} back. The org restarts a roster in tier 2${ago} — their old stones still stand on the Yard.`
+    :`${esc(d.name)} are back. The org restarts a roster in tier 2${ago} — their old stones still stand on the Yard.`);
+  txn('sign',`${d.name} rejoin the circuit (Div 2)${opts.byHand?' — reinstated by the commissioner':''}.`);
   return t;}
+// A defunct org returns on its own (between events). Founding myths (BB) stay retired unless revived by hand.
+function rejoinOrg(){
+  const cand=(world.defunct||[]).filter(d=>d.reason!=='founding'&&!world.teams.some(t=>t.name===d.name));
+  return cand.length?reviveOrg(pick(cand)):null;}
 function fillHoles(){
   world.teams.forEach(t=>{let guard=0;while(contracted(t).length<5&&guard++<8){const role=ROLES.find(r=>!contracted(t).some(p=>p.role===r))||pick(ROLES);
     if(t.div===1)signFor(t,role);
@@ -1030,7 +1150,11 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
         <div class="ss"><span>◇ Masters</span><b class="${mst?'':'faint'}">${mst||'—'}</b></div>
         <div class="ss"><span>K / D / A</span><b>${s.k} / ${s.d} / ${s.a}</b></div>
         <div class="ss"><span>K/D · KDA</span><b>${s.rounds?kd(s).toFixed(2):'—'} · ${s.rounds?kda(s).toFixed(2):'—'}</b></div>
-        <div class="ss"><span>Entries · Vigils</span><b>${s.entry} · <span class="${s.vigils?'bx-v':''}">${s.vigils}</span></b></div>
+        <div class="ss"><span>ADR · KAST</span><b>${adrOf(s)||'—'} · ${s.rounds?kastOf(s)+'%':'—'}</b></div>
+        <div class="ss"><span>Openings · First deaths</span><b>${s.opens||0} · ${s.fds||0}</b></div>
+        <div class="ss"><span>Multikills · Aces</span><b>${multiK(s)} · <span class="${s.aces?'bx-v':''}">${s.aces||0}</span></b></div>
+        <div class="ss"><span>Trades · Entries</span><b>${s.trades||0} · ${s.entry}</b></div>
+        <div class="ss"><span>Vigils (1vX)</span><b class="${s.vigils?'bx-v':''}">${s.vigils}</b></div>
         <div class="ss"><span>Rounds</span><b>${s.rounds}</b></div>
       </div>
     </div>
@@ -1182,7 +1306,8 @@ function defunctCard(d){
   let h=`<div class="scout teamcard">
     <div class="scout-top"><div><div class="scout-nm">${esc(d.name)} <span class="role">${esc(d.short)}</span></div>
       <div class="scout-sub"><span class="unmarked">● defunct</span> · ${era} · ${d.heart?'<span class="good">♥ heart side</span>':'<span class="faint">money side</span>'}${d.short==='BB'?' · <span class="t2pill">founding org</span>':''}</div></div>
-      <button class="ctl" data-tclose="1">close</button></div>`;
+      <button class="ctl" data-tclose="1">close</button></div>
+    <div class="scout-actions"><button class="mact" data-act="revive" data-tid="${esc(d.short)}">↺ Bring back ${esc(d.name)}</button></div>`;
   if(d.note)h+=`<p class="df-note">${esc(d.note)}</p>`;
   h+=`<div class="tc-sec"><div class="lede">Majors</div>`;
   h+=cairns.length?cairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — never won a Major.</p>`;
@@ -1214,8 +1339,8 @@ function renderTeams(){const el=$("p-teams");
 
 // A frozen box score, rendered inline in the Annals (and the live broadcast) when a record is expanded.
 function boxSideHtml(tm){return `<div class="bx-team">${esc(tm.name||tm.short)} <span class="bx-coach">${esc(tm.short)}</span></div>
-  <table class="bx"><thead><tr><th>Player</th><th>K</th><th>D</th><th>A</th><th>En</th><th>Vg</th></tr></thead><tbody>
-  ${tm.rows.map(r=>`<tr><td class="bx-nm"><span class="tg">${esc(r.tag)}</span> <span class="role">${esc((r.role||'').slice(0,3))}</span></td><td class="bx-k">${r.k}</td><td>${r.d}</td><td>${r.a}</td><td>${r.entry}</td><td class="${r.vigils?'bx-v':''}">${r.vigils||'·'}</td></tr>`).join('')}
+  <table class="bx"><thead><tr><th>Player</th><th title="kills">K</th><th title="deaths">D</th><th title="assists">A</th><th title="avg damage/round">ADR</th><th title="K/A/S/T rounds %">KAST</th><th title="opening kills">OP</th><th title="multikills">MK</th><th title="clutches (vigils)">Vg</th></tr></thead><tbody>
+  ${tm.rows.map(r=>`<tr><td class="bx-nm"><span class="tg">${esc(r.tag)}</span> <span class="role">${esc((r.role||'').slice(0,3))}</span>${r.aces?` <span class="bx-v" title="aces">${'★'.repeat(Math.min(r.aces,3))}</span>`:''}</td><td class="bx-k">${r.k}</td><td>${r.d}</td><td>${r.a}</td><td>${r.adr||'·'}</td><td>${r.kast?r.kast+'%':'·'}</td><td>${r.opens||'·'}</td><td>${r.mk||'·'}</td><td class="${r.vigils?'bx-v':''}">${r.vigils||'·'}</td></tr>`).join('')}
   </tbody></table>`;}
 function storedBoxHtml(box){
   if(!box||!box.teams)return '';
@@ -1384,11 +1509,12 @@ function startMatch(L){
   else if(L.stage==='sf'){a=L.sfPairs[L.matchIdx][0];b=L.sfPairs[L.matchIdx][1];}
   else{a=L.fPair[0];b=L.fPair[1];}
   L.match={a,b,wins:{a:0,b:0},target:3,maps:[],perf:{},seriesBox:{},map:null};L.matchVigils=[];
+  initSeriesState(a,b,L.stage==='f'?1:0); // big-stage nerves on the final
   const sn=L.stage==='qf'?'Quarterfinal':L.stage==='sf'?'Semifinal':'FINAL';
   pushLog(L,`${sn}: ${a.short} vs ${b.short} — best of 5.`,'map');
   startMap(L);
 }
-function startMap(L){const m=L.match;const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,lastZone:'the Aisle',mapVigils:[],perf:{},box};}
+function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box};}
 function roundLine(r,m,mp){
   const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
   if(r.vigil)return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ${r.vigil.name} stands alone, 1v${r.vigil.x} at ${r.vigil.zone}, and it's theirs.`;
@@ -1398,7 +1524,8 @@ function roundLine(r,m,mp){
 }
 function stepRound(){
   const L=world.live,m=L.match,mp=m.map;
-  const r=simRound(m.a,m.b);mp.lastZone=r.zone;if(r.winA)mp.sa++;else mp.sb++;mp.round++;
+  const r=simRound(m.a,m.b,{stage:L.stage==='f'?1:0,mom:momFromStreak(mp.stA||0,mp.stB||0,mp.sa,mp.sb)});
+  mp.lastZone=r.zone;if(r.winA){mp.sa++;mp.stA=(mp.stA||0)+1;mp.stB=0;}else{mp.sb++;mp.stB=(mp.stB||0)+1;mp.stA=0;}mp.round++;
   for(const id in r.grav)(m.perf[id]=m.perf[id]||[]).push(r.grav[id]);
   for(const id in r.grav)(mp.perf[id]=mp.perf[id]||[]).push(r.grav[id]);
   lineup(m.a).concat(lineup(m.b)).forEach(p=>{const e=r.box[p.id];if(!e)return;
@@ -1407,7 +1534,7 @@ function stepRound(){
     accStat(p,e);});
   if(r.vigil){mp.mapVigils.push(r.vigil);L.matchVigils.push(r.vigil);}
   pushLog(L,roundLine(r,m,mp),'round');
-  if(mp.sa>=15||mp.sb>=15)return mapEnd();
+  if(mapDone(mp.sa,mp.sb))return mapEnd();
   return 'round';
 }
 function mapEnd(){
@@ -1422,6 +1549,7 @@ function mapEnd(){
 }
 function matchEnd(){
   const L=world.live,m=L.match;
+  clearSeriesState(m.a,m.b);
   const sg={};for(const id in m.perf){const arr=m.perf[id];sg[id]=arr.reduce((s,x)=>s+x,0)/arr.length;}
   for(const id in sg){const p=findPlayer(+id);if(p)p.gravs.push(sg[id]);}
   const champ=m.wins.a>m.wins.b?m.a:m.b,loser=champ===m.a?m.b:m.a;
@@ -1578,6 +1706,8 @@ document.getElementById("p-players").addEventListener("click",e=>{
   const row=e.target.closest("[data-pid]");if(row){const id=+row.dataset.pid;selectedPid=selectedPid===id?null:id;movePid=null;editPid=null;renderPlayers();}
 });
 document.getElementById("p-teams").addEventListener("click",e=>{
+  const rv=e.target.closest('[data-act="revive"]');if(rv){const d=(world.defunct||[]).find(x=>x.short===rv.dataset.tid);
+    if(d){const t=reviveOrg(d,{byHand:true});teamFilter='all';selectedTid=t?t.short:null;render();switchTab('teams');}return;}
   const fb=e.target.closest("[data-tfilter]");if(fb){teamFilter=fb.dataset.tfilter;selectedTid=null;renderTeams();return;}
   if(e.target.closest("[data-tclose]")){selectedTid=null;renderTeams();return;}
   const ts=e.target.closest("th[data-ts]");if(ts){teamSortKey=ts.dataset.ts;renderTeams();return;}
