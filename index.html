@@ -193,6 +193,8 @@
   .goat-seasons{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:11.5px;line-height:1.9;color:var(--muted);}
   .goat-seasons .gs{margin-right:9px;white-space:nowrap;}
   .goat-seasons .gs .cp-s{margin-right:1px;}
+  .traits{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0 2px;}
+  .trait{font-size:10px;letter-spacing:.05em;border:1px solid var(--line);border-radius:9px;padding:1px 8px;background:#1a1610;cursor:help;}
   .t2pill{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);border:1px solid var(--line);border-radius:6px;padding:0 4px;margin-left:3px;vertical-align:middle;}
   .txn{font-size:12.5px;color:var(--muted);padding:5px 0;border-bottom:1px solid #211b13;line-height:1.4;}
   .txn-s{color:var(--faint);font-family:ui-monospace,monospace;font-size:11px;margin-right:4px;}
@@ -392,17 +394,46 @@ function ratingsFor(role){
   return {r,pot:Math.round(tal.pot)};
 }
 function peakAttr(r){return Math.max(r.aim,r.read,r.clutch,r.entry,r.util,r.consistency);}
+// Personalities: hidden traits that shape a whole career — development curve, form swings, nerve on the big
+// stage, loyalty in the market, durability. Most players carry one; some two; a few are steady journeymen.
+const TRAITS={
+  prodigy:{name:'Phenom',blurb:'develops early and fast',col:'var(--gravl)'},
+  lateBloomer:{name:'Late Bloomer',blurb:'peaks long after his peers',col:'var(--cairn)'},
+  clutch:{name:'Ice',blurb:'unshakable when it’s on the line',col:'var(--cold)'},
+  hothead:{name:'Volatile',blurb:'rides heaters and cold spells',col:'var(--ember)'},
+  streaky:{name:'Streaky',blurb:'form comes in waves',col:'var(--ember)'},
+  bigGame:{name:'Big-Stage',blurb:'rises on the biggest stage',col:'var(--good)'},
+  headcase:{name:'Front-runner',blurb:'shrinks when it matters most',col:'var(--bad)'},
+  mercenary:{name:'Mercenary',blurb:'chases rings, not crests',col:'var(--ember)'},
+  loyal:{name:'Franchise',blurb:'a one-club kind of player',col:'var(--good)'},
+  mentor:{name:'Mentor',blurb:'lifts the young around him',col:'var(--cairn)'},
+  glass:{name:'Glass',blurb:'never can stay healthy',col:'var(--bad)'},
+  ironman:{name:'Ironman',blurb:'durable, ages slowly',col:'var(--good)'},
+};
+function hasTrait(p,t){return !!(p&&p.traits&&p.traits.indexOf(t)>=0);}
+function assignTraits(p){const t=[];const add=x=>{if(t.length<2&&t.indexOf(x)<0)t.push(x);};
+  if(rnd()<0.16)add(rnd()<0.62?'bigGame':'headcase');
+  if(rnd()<0.16)add(rnd()<0.55?'loyal':'mercenary');
+  if(rnd()<0.14)add(rnd()<0.5?'prodigy':'lateBloomer');
+  if(rnd()<0.12)add('clutch');
+  if(rnd()<0.12)add('hothead');
+  if(rnd()<0.10)add('mentor');
+  if(rnd()<0.09)add('streaky');
+  if(rnd()<0.07)add('glass');
+  if(rnd()<0.07)add('ironman');
+  p.traits=t;}
 function mkPlayer(first,tag,last,role,age,rt){
   let r,pot;
   if(rt){r=rt;pot=clamp(peakAttr(r)+2+rnd()*6,60,99);}else{const g=ratingsFor(role);r=g.r;pot=g.pot;}
   if(tag)usedTags.add(tag);
-  return {id:pid++,first,tag,last,role,age,r,pot:Math.round(pot),titles:0,mastersTitles:0,worlds:0,gravs:[],games:0,retired:false,stat:blankBox2(),history:[]};
+  const p={id:pid++,first,tag,last,role,age,r,pot:Math.round(pot),titles:0,mastersTitles:0,worlds:0,gravs:[],games:0,retired:false,stat:blankBox2(),history:[],traits:[]};
+  assignTraits(p);return p;
 }
 function blankBox2(){return blankBox();}
 function proc(role,age){return mkPlayer(pick(FIRST),freshTag(),pick(LAST),role,age||16+Math.floor(rnd()*8));}
 function procWeak(role,age){const p=proc(role,age||16+Math.floor(rnd()*4));for(const k in p.r)p.r[k]=clamp(p.r[k]-(6+rnd()*9),26,99);p.pot=clamp(p.pot-(5+rnd()*9),42,92);return p;}
 function fillRoles(players){ROLES.forEach(role=>{if(!players.some(p=>p.role===role))players.push(proc(role));});return players;}
-function mkCoach(first,tag,last,rt,former){return {first,tag:tag||null,last,prep:clamp((rt&&rt.prep)||58+rnd()*32,50,97),composure:clamp((rt&&rt.composure)||58+rnd()*32,50,97),former:!!former};}
+function mkCoach(first,tag,last,rt,former,exId,proteges){return {first,tag:tag||null,last,prep:clamp((rt&&rt.prep)||58+rnd()*32,50,97),composure:clamp((rt&&rt.composure)||58+rnd()*32,50,97),former:!!former,exId:exId||null,proteges:proteges||null};}
 function procCoach(){return mkCoach(pick(FIRST),null,pick(LAST),null,false);}
 function coachMult(t){const c=t.coach;return c?1+((c.prep-70)/520):1;}
 function coachName(c){return c.tag?`${c.first} "${c.tag}" ${c.last}`:`${c.first} ${c.last}`;}
@@ -451,14 +482,18 @@ function newWorld(){
   const d2=tier2Teams();
   const teams=d1.concat(d2);
   const freeAgents=[];for(let i=0;i<12;i++)freeAgents.push(procWeak(pick(ROLES),17+Math.floor(rnd()*4)));
-  const w={season:1,year:2016,started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],mastersChamps:[],seasonChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[]};
+  const w={season:1,year:2016,started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],mastersChamps:[],seasonChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[],duos:[]};
   w.teams.forEach(t=>{t.gravl=teamPower(t)*4*(t.div===2?0.7:1);t.majors=0;t.masters=0;t.worlds=0;t.divHistory=[{season:1,div:t.div}];t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:1}];});});
   // Season Zero (2015) origins — the founding DreamHack LA final
   const findP=(short,tag)=>{const t=w.teams.find(x=>x.short===short);return t?t.players.find(p=>p.tag===tag):null;};
   [['LG','vell'],['HEMI','Gordo'],['HEMI','lan']].forEach(([s,tag])=>{const p=findP(s,tag);if(p){p.bb=true;p.history.unshift({short:'BB',name:'Beastie Bois',season:0});}});
   ['Voss','kitt','Clock','Kaiser','Patch'].forEach(tag=>{const p=findP('VNG',tag);if(p)p.history=[{short:'VNG',name:'Vantage Gaming',season:0}];});
   const dad=mkPlayer('Curtis','DadBod','Whitfield','anchor',31,{aim:74,read:80,clutch:78,entry:64,util:84,consistency:86});
-  dad.bb=true;dad.history=[{short:'BB',name:'Beastie Bois',season:0}];w.freeAgents.push(dad);
+  dad.bb=true;dad.history=[{short:'BB',name:'Beastie Bois',season:0}];dad.traits=['mentor','loyal'];w.freeAgents.push(dad);
+  // Founding-era personalities — hand-set for flavor
+  const setT=(short,tag,tr)=>{const t=w.teams.find(x=>x.short===short);const p=t&&t.players.find(x=>x.tag===tag);if(p)p.traits=tr;};
+  setT('LG','vell',['prodigy','clutch']);setT('VNG','Kaiser',['bigGame']);setT('VNG','Clock',['ironman','loyal']);
+  setT('100T','Riptide',['mercenary']);setT('HEMI','Gordo',['hothead']);setT('HEMI','lan',['mentor']);
   // The broadcast desk — former players who call games now (not on any staff)
   w.casters=[
     {name:'Reza "Books" Haddad',tag:'Books',role:'read',former:'BB',bb:true,note:'Beastie Bois read and IGL — now the desk\u2019s lead analyst.'},
@@ -496,12 +531,21 @@ function formMult(p){return p._form||1;}
 function confMult(p){return 1+clamp(p._conf||0,-1,1)*0.12;}
 function poise(p){return clamp((p.r.clutch*0.6+p.r.consistency*0.4)/100,0,1);}
 // per-map form: volatile players (low consistency) swing harder; a fat tail gives career games and no-shows.
-function rollForm(p){const sigma=0.09+(100-p.r.consistency)/100*0.15;let f=1+gauss()*sigma;const r=rnd();
-  if(r<0.012)f*=1.5;else if(r<0.024)f*=0.6;return clamp(f,0.45,1.85);}
+function rollForm(p){let sigma=0.09+(100-p.r.consistency)/100*0.15;
+  if(hasTrait(p,'hothead'))sigma*=1.5;if(hasTrait(p,'clutch')||hasTrait(p,'ironman'))sigma*=0.82;
+  let f=1+gauss()*sigma;const r=rnd();
+  if(r<0.012)f*=1.5;else if(r<0.024)f*=0.6;
+  if(hasTrait(p,'streaky')&&p._lastForm)f=0.45*p._lastForm+0.55*f; // heaters and slumps carry over
+  if(p.slump>0)f*=0.93; // off his game after a partnership broke up
+  f=clamp(f,0.45,1.9);p._lastForm=f;return f;}
 function initMapForm(a,b){lineup(a).concat(lineup(b)).forEach(p=>p._form=rollForm(p));}
 // confidence resets each series; on the big stage the fragile start rattled and the cool start composed.
 function initSeriesState(a,b,stage){lineup(a).concat(lineup(b)).forEach(p=>{p._conf=0;p._cl=0;
-  if(stage)p._conf=clamp((poise(p)-0.72)*0.9,-0.55,0.4);});}
+  if(stage){let c=(poise(p)-0.72)*0.9;
+    if(hasTrait(p,'bigGame'))c=Math.abs(c)*0.3+0.32;   // the big-stage player walks out taller
+    if(hasTrait(p,'headcase'))c=-Math.abs(c)-0.28;      // the front-runner tightens up
+    if(hasTrait(p,'clutch'))c=Math.max(c,0.1);
+    p._conf=clamp(c,-0.7,0.5);}});}
 function clearSeriesState(a,b){[a,b].forEach(t=>t.players.forEach(p=>{p._form=undefined;p._conf=undefined;p._cl=undefined;}));}
 // snowball on a run; a desperation rally for the side that's fallen behind — so leads stick but comebacks happen.
 function momFromStreak(stA,stB,sa,sb){const m={a:1,b:1};
@@ -574,7 +618,8 @@ function simRound(a,b,opts){
   // confidence drifts for the next round — and the fragile swing harder than the steady
   A.concat(B).forEach(p=>{const e=box[p.id];const won=(side[p.id]==='a')===winA;
     const impact=(e.k-e.d)+(e.clutch?2:0)+e.open*0.6+e.trade*0.3-(e.fd?0.5:0)+(won?0.3:-0.3);
-    p._conf=clamp((p._conf||0)+impact*0.03*(1.25-poise(p)),-1,1);p._cl=0;});
+    let sw=0.03*(1.25-poise(p));if(hasTrait(p,'hothead'))sw*=1.6;if(hasTrait(p,'clutch'))sw*=0.6;
+    p._conf=clamp((p._conf||0)+impact*sw,-1,1);p._cl=0;});
   return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star};
 }
 function simMap(a,b,ctx,opts){
@@ -682,6 +727,13 @@ function seriesBlurb(s){
   return {score,text:parts.join(" ")};
 }
 function nm(p){return `<span class="nm">${p.first} "<span class="tg">${p.tag}</span>" ${p.last}</span>`;}
+function traitPills(p){if(!p.traits||!p.traits.length)return '';
+  return `<div class="traits">${p.traits.map(t=>{const d=TRAITS[t];return d?`<span class="trait" style="border-color:${d.col};color:${d.col}" title="${esc(d.blurb)}">${esc(d.name)}</span>`:'';}).join('')}</div>`;}
+function relLine(p){const bits=[];
+  const d=duoOf(p.id);if(d){const pa=anyPlayerById(duoPartnerId(p.id));if(pa)bits.push(`<span class="cp-l">Core duo</span> with <span class="tg">${esc(pa.tag)}</span>${d.split?' <span class="faint">(split up)</span>':''}${d.majors>1?` <span class="faint">· ${d.majors} Majors together</span>`:''}`);}
+  if(p.mentorId!=null){const m=anyPlayerById(p.mentorId);if(m)bits.push(`<span class="cp-l">Mentored by</span> <span class="tg">${esc(m.tag)}</span>`);}
+  if(p.proteges&&p.proteges.length){const ns=p.proteges.map(id=>anyPlayerById(id)).filter(Boolean).slice(0,3).map(x=>`<span class="tg">${esc(x.tag)}</span>`);if(ns.length)bits.push(`<span class="cp-l">Mentor to</span> ${ns.join(', ')}`);}
+  return bits.length?`<div class="career-path" style="margin-top:6px">${bits.join(' <span class="cp-arr">·</span> ')}</div>`:'';}
 let feedId=1;
 function feedPush(kind,title,body,stage,data){world.feed.unshift({id:feedId++,kind,title,body,stage,season:world.season,data:data||null,narrated:null,narrating:false,narrateError:null});}
 
@@ -757,6 +809,40 @@ function endSeasonRecords(){
       world.goatLog[role].push({season:s,year:world.year,id:best.id,tag:best.tag,name:`${best.first} "${best.tag}" ${best.last}`,short:tm?tm.short:'—',teamName:tm?tm.name:'—',grav:+bestG.toFixed(2),titles:best.titles});}
   });
 }
+/* ---- living relationships: core duos, mentor lineages, grudges ---- */
+function pfull(p){return `${p.first} "${p.tag}" ${p.last}`;}
+function duoOf(pid){return (world.duos||[]).find(d=>d.a===pid||d.b===pid);}
+function duoPartnerId(pid){const d=duoOf(pid);return d?(d.a===pid?d.b:d.a):null;}
+function duoPartnerOn(p,team){const pid=duoPartnerId(p.id);return pid!=null&&team.players.some(x=>x.id===pid);}
+function duoBeat(kind,d,a,b,team){
+  if(kind==='forge'){feedPush('note','A core is forged',`${nm(a)} and ${nm(b)} — a Major and years side by side. ${team?esc(team.name):'Their club'}'s core duo, the partnership the whole roster is built around.`);
+    timelinePush({kind:'rivalry',icon:'⚭',short:team?team.short:'—',title:`${a.tag} & ${b.tag} — a core forged`,text:`${pfull(a)} and ${pfull(b)} become ${team?team.name:'their club'}'s defining duo, marked together at last.`});}
+  else if(kind==='milestone'){feedPush('note','A great partnership',`${nm(a)} and ${nm(b)} win their ${d.majors}th Major together — one of the great duos the sport has produced.`);
+    timelinePush({kind:'dynasty',icon:'⚭',short:team?team.short:'—',title:`${a.tag} & ${b.tag}: ${d.majors} together`,text:`${pfull(a)} and ${pfull(b)} take a ${d.majors}th Major as a duo — a partnership the Yard will remember.`});}
+  else if(kind==='split')feedPush('note','A partnership splits',`${nm(a)} and ${nm(b)} are split up — the core duo broken after ${world.season-d.since} season${world.season-d.since!==1?'s':''}. Neither is ever quite the same apart.`);
+  else if(kind==='reunite')feedPush('note','The band, back together',`${nm(a)} and ${nm(b)} reunite${team?` at ${esc(team.name)}`:''} — the old duo rides again.`);
+  else if(kind==='end')feedPush('note','The end of a partnership',`The ${a.tag}–${b.tag} duo comes to a close — ${d.majors} Major${d.majors!==1?'s':''} together, now part of the history.`);
+}
+function formDuo(t,winLine){
+  for(const d of world.duos){const a=anyPlayerById(d.a),b=anyPlayerById(d.b); // strengthen an intact duo on this team
+    if(a&&b&&winLine.indexOf(a)>=0&&winLine.indexOf(b)>=0){d.majors=(d.majors||0)+1;if(d.majors===2||d.majors===4)duoBeat('milestone',d,a,b,t);return;}}
+  const elig=winLine.filter(p=>(p.tenure||0)>=2&&!duoOf(p.id)); // else forge a new core from the best long-tenured pair
+  if(elig.length<2)return;elig.sort((a,b)=>skillIndex(b)-skillIndex(a));
+  if(rnd()<0.7){world.duos.push({a:elig[0].id,b:elig[1].id,since:world.season,majors:1,split:null});duoBeat('forge',null,elig[0],elig[1],t);}
+}
+function maintainDuos(){
+  world.duos=(world.duos||[]).filter(d=>{
+    const a=anyPlayerById(d.a),b=anyPlayerById(d.b);
+    if(!a||!b||a.retired||b.retired){if(a&&b)duoBeat('end',d,a,b);return false;}
+    const ta=findHolderTeam(a),tb=findHolderTeam(b);
+    if(ta&&tb&&ta===tb){if(d.split){d.split=null;duoBeat('reunite',d,a,b,ta);}}
+    else if(!d.split){d.split=world.season;a.slump=Math.max(a.slump||0,2);b.slump=Math.max(b.slump||0,2);duoBeat('split',d,a,b);}
+    return true;});
+}
+function grudgeBeat(name,champ,run){
+  const g=lineup(champ).find(p=>(p.formerTeams||[]).includes(run.short));
+  if(g)feedPush('note','Personal',`${nm(g)} beats ${esc(run.name)} — a former club — in the ${name} final. The sweetest kind of cairn.`);
+}
 function detectUpsetsChokes(tier,name,qf,sf,fin){
   if(tier!=='SP'&&tier!=='S'&&tier!=='WC')return;
   const rankMap=new Map();[...world.teams].sort((a,b)=>b.gravl-a.gravl).forEach((t,i)=>rankMap.set(t,i+1));
@@ -784,6 +870,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
   const triv=regTeamRiv(champ,run,champ);
   if(triv.count>1)feedPush('note','A rivalry deepens',`${triv.a}–${triv.b} meet again with a Major at stake (${name}) — ${triv.count} title clashes now, ${triv.wins[champ.short]||0}–${triv.wins[run.short]||0} ${champ.short}.`);
   champ.majors++;const winLine=lineup(champ);winLine.forEach(p=>{p.titles++;});const usedStandin=winLine.some(p=>p.standinFor);
+  formDuo(champ,winLine);grudgeBeat(name,champ,run);
   if(!champ.bbTeam&&rnd()<0.05)champ._disbandSoon=true;
   const loud=!champ.heart,zone=F.lastZone;
   const cairn={season:world.season,team:champ.name,short:champ.short,zone,style:loud?'loud':'quiet',event:name};
@@ -839,6 +926,7 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
   regTeamRiv(champ,run,champ);
   champ.worlds=(champ.worlds||0)+1;
   const winLine=lineup(champ);winLine.forEach(p=>{p.titles++;p.worlds=(p.worlds||0)+1;});
+  formDuo(champ,winLine);grudgeBeat(name,champ,run);
   const zone=F.lastZone,pname=p=>`${p.first} "${p.tag}" ${p.last}`;
   world.cairns.push({season:world.season,team:champ.name,short:champ.short,zone,style:'crown',event:name});
   const sc={season:world.season,year:world.year,short:champ.short,name:champ.name,runShort:run.short,runName:run.name,event:name,score:F.scoreStr,deadlift:!!F.deadlift};
@@ -934,6 +1022,12 @@ function rosterStrength(t){const c=contracted(t);return c.length?c.reduce((s,p)=
 function justSigned(p){return !!(p.history&&p.history.length&&p.history[p.history.length-1].season===world.season);}
 function poachable(p){return !p.injured&&!p.bb&&!p.pinned&&!justSigned(p);} // pinned = locked to roster by the commissioner
 function signFor(t,role){
+  // a mentor now in the coach's chair pulls his old protégé back in
+  if(t.coach&&t.coach.proteges&&t.coach.proteges.length){
+    const prot=world.freeAgents.find(f=>!f.retired&&f.role===role&&t.coach.proteges.indexOf(f.id)>=0);
+    if(prot){world.freeAgents=world.freeAgents.filter(p=>p!==prot);joinTeam(prot,t);
+      txn('sign',`${t.short} reunite ${nm(prot)} with his old mentor, coach ${t.coach.tag}.`);
+      feedPush('note','Reunited with his mentor',`${nm(prot)} signs for ${esc(t.name)} — back alongside ${t.coach.first} "${t.coach.tag}" ${t.coach.last}, the mentor who brought him up, now in the coach's chair.`);return;}}
   const cap=eliteCount(t)>=2;const ok=p=>(!cap||skillIndex(p)<ELITE)&&!p.pinned&&!justSigned(p);
   const faCand=bestFor(world.freeAgents.filter(ok),role);
   let t2=null,t2team=null;
@@ -955,14 +1049,19 @@ function promoteRelegate(){
 }
 /* anytime transactions */
 function retire(p,t,opts){opts=opts||{};p.retired=true;p.standinFor=null;
-  if(opts.toCoach&&t){t.coach=mkCoach(p.first,p.tag,p.last,{prep:clamp(p.r.read+gauss()*4,58,96),composure:clamp(p.r.consistency,55,95)},true);
+  if(opts.toCoach&&t){t.coach=mkCoach(p.first,p.tag,p.last,{prep:clamp(p.r.read+gauss()*4,58,96),composure:clamp(p.r.consistency,55,95)},true,p.id,(p.proteges||[]).slice());
     feedPush('note','To the touchline',`${nm(p)} hangs up the mouse and takes the ${t.short} coaching chair${p.titles?` — ${p.titles} Major${p.titles>1?'s':''} as a player`:', still unmarked'}. The read never really leaves.`);}
-  else if(!opts.silent)feedPush('note','A long walk',`${nm(p)} retires${p.titles===0?" — unmarked to the end.":` with ${p.titles} Major${p.titles>1?"s":""} to his name.`}`);
+  else if(!opts.silent){let tail=p.titles===0?" — unmarked to the end.":` with ${p.titles} Major${p.titles>1?"s":""} to his name.`;
+    const clubs=1+((p.formerTeams||[]).length);
+    if(hasTrait(p,'loyal')&&clubs<=1)tail=` a one-club man${p.titles?` — ${p.titles} Major${p.titles>1?'s':''}`:', unmarked'} to the end.`;
+    else if(hasTrait(p,'mercenary'))tail=`${p.titles?` with ${p.titles} Major${p.titles>1?'s':''}`:' still unmarked'} after ${clubs} club${clubs>1?'s':''} — the wanderer hangs it up.`;
+    feedPush('note','A long walk',`${nm(p)} retires${tail}`);}
   txn('retire',`${nm(p)} retires${t?` from ${t.short}`:''}.`);
   if(p.titles>=4)timelinePush({kind:'retire',icon:'⚑',short:t?t.short:'—',title:`${p.tag} walks away`,text:`${p.first} "${p.tag}" ${p.last} retires with ${p.titles} Majors — one of the marked greats steps off the Yard.`});}
 function unretire(p){p.retired=false;p.injured=0;if(p.age>33)p.age=33;const t=findHolderTeam(p);if(t)t.players=t.players.filter(x=>x!==p);if(!world.freeAgents.includes(p))world.freeAgents.push(p);}
 function toFA(p){p.faAge=0;p.standinFor=null;world.freeAgents.push(p);}
-function joinTeam(p,t){const had=t.players.includes(p);if(!had)t.players.push(p);const h=p.history=p.history||[];if(!h.length||h[h.length-1].short!==t.short)h.push({short:t.short,name:t.name,season:world.season});
+function joinTeam(p,t){const had=t.players.includes(p);if(!had)t.players.push(p);const h=p.history=p.history||[];
+  const moved=!h.length||h[h.length-1].short!==t.short;if(moved){h.push({short:t.short,name:t.name,season:world.season});p.tenure=0;}
   // A new face costs cohesion — bringing in a star costs more. It rebuilds slowly (regresses toward the mean each
   // season), so a club that buys its way to a super-team pays for it in chemistry and can't simply hoard its way to a dynasty.
   if(!had&&t.chem!=null)t.chem=clamp(t.chem-(skillIndex(p)>=72?0.07:0.035),0.42,0.92);}
@@ -1009,16 +1108,21 @@ function poach(){
     const star=starOf(buyer);const weak=c.filter(p=>p!==star&&!p.injured&&!p.pinned).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
     if(!weak)continue;const role=weak.role;
     let target=null,seller=null;
+    let bestPri=-1;
     world.teams.filter(t=>t!==buyer).forEach(t=>{contracted(t).filter(p=>p.role===role&&poachable(p)).forEach(p=>{
       if(t.heart&&p===starOf(t))return;
+      if(hasTrait(p,'loyal')&&rnd()<0.8)return;          // franchise players rarely move
       if(atCap&&skillIndex(p)>=ELITE)return;
-      if(skillIndex(p)>skillIndex(weak)+6&&(!target||skillIndex(p)>skillIndex(target))){target=p;seller=t;}});});
+      const merc=hasTrait(p,'mercenary');const reunite=duoPartnerOn(p,buyer); // getting the band back together
+      const gapNeed=merc||reunite?2:6;const pri=skillIndex(p)+(merc?6:0)+(reunite?16:0);
+      if(skillIndex(p)>skillIndex(weak)+gapNeed&&pri>bestPri){target=p;seller=t;bestPri=pri;}});});
     if(!target)continue;
     buyer.players=buyer.players.filter(p=>p!==weak);toFA(weak);
     transfer(target,seller,buyer);regTeamRiv(buyer,seller,buyer);
+    const merc=hasTrait(target,'mercenary');const clubs=1+((target.formerTeams||[]).length);
     const hist=target.titles>0?` — ${target.titles} Major${target.titles>1?'s':''} to his name`:(careerGrav(target)>=1.15?' — an unmarked star, still chasing his first':'');
     txn('poach',`${buyer.short} sign ${nm(target)} (${role}) from ${seller.short}.`);
-    feedPush('note','A raid',`${buyer.short} prise ${nm(target)} out of ${seller.short}${hist}. To clear the slot, ${buyer.short} move on from ${nm(weak)} — to free agency.`);
+    feedPush('note',merc?'The mercenary moves again':'A raid',`${buyer.short} prise ${nm(target)} out of ${seller.short}${hist}${merc?` — ${clubs} clubs now, every move in the hunt for a ring`:''}. To clear the slot, ${buyer.short} move on from ${nm(weak)} — to free agency.`);
     done++;
   }
 }
@@ -1047,7 +1151,7 @@ function transactionWindow(){
   world.teams.filter(t=>t._disbandSoon).forEach(t=>{t._disbandSoon=false;disbandTeam(t,'champ');});
   if(rnd()<0.7)poach();
   world.teams.filter(t=>t.div===1).forEach(t=>{if(rnd()<0.10){const c=contracted(t);if(c.length<5)return;const star=starOf(t);
-    const cand=c.filter(p=>p!==star&&!p.injured&&!p.bb&&!p.pinned).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
+    const cand=c.filter(p=>p!==star&&!p.injured&&!p.bb&&!p.pinned&&!hasTrait(p,'loyal')).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
     if(cand&&(skillIndex(cand)<58||cand.age>=29)){t.players=t.players.filter(p=>p!==cand);
       if(rnd()<0.35){const t2=pick(world.teams.filter(x=>x.div===2));const bump=contracted(t2).slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];if(bump){t2.players=t2.players.filter(x=>x!==bump);toFA(bump);}cand.formerTeams=cand.formerTeams||[];cand.formerTeams.push(t.short);joinTeam(cand,t2);txn('drop',`${t.short} drop ${nm(cand)} (${cand.role}); he resurfaces in tier 2 with ${t2.short}.`);}
       else{toFA(cand);txn('drop',`${t.short} part ways with ${nm(cand)} (${cand.role}).`);}}}});
@@ -1076,13 +1180,18 @@ function forceMove(p,to){
 }
 // Development: young players climb toward their ceiling (pot) — fastest when young and far below it, so a
 // generational rookie (pot 90+) actually becomes a star while a low-ceiling journeyman plateaus. Past ~29 they decline.
-function developPlayer(p){
+function developPlayer(p,mentored){
   const d=(k,v)=>p.r[k]=clamp(p.r[k]+v,26,99);
-  if(p.age>=29){const fall=0.6+(p.age-29)*0.35;
+  // Late bloomers keep climbing and decline later; ironmen age slowly; prodigies surge early.
+  const declineAge=hasTrait(p,'ironman')?32:hasTrait(p,'lateBloomer')?31:29;
+  if(p.age>=declineAge){let fall=0.6+(p.age-declineAge)*0.35;if(hasTrait(p,'ironman'))fall*=0.6;
     d("aim",-(fall+rnd()*1.4));d("entry",-(fall*0.7+rnd()));d("clutch",-(fall*0.4+rnd()*0.7));
     d("consistency",-(0.3+rnd()*0.7));d("read",0.4+rnd()*0.4);d("util",0.2);return;}
   const gap=Math.max(0,p.pot-skillIndex(p));
-  const band=p.age<=19?1.0:p.age<=22?0.7:p.age<=25?0.42:0.22;
+  let band=p.age<=19?1.0:p.age<=22?0.7:p.age<=25?0.42:0.22;
+  if(hasTrait(p,'prodigy'))band*=1.4;
+  if(hasTrait(p,'lateBloomer')&&p.age>=22)band=Math.max(band,p.age<=29?0.62:0.4);
+  if(mentored&&p.age<=23)band+=0.18; // a mentor in the room accelerates the young
   ['aim','read','entry','util','clutch','consistency'].forEach(k=>{
     if(p.r[k]<p.pot-1){const room=p.pot-p.r[k];d(k,(0.25+gap*0.14+room*0.05)*band*(0.6+rnd()*0.8));}
     else d(k,(rnd()-0.45)*0.5);
@@ -1095,13 +1204,24 @@ function advanceCareers(){
     t.players.forEach(p=>{if(p.injured){p.injured--;if(p.injured<=0){p.injured=0;txn('return',`${nm(p)} returns to ${t.short} from injury.`);}}});});
   // decay + age + develop + retire
   world.teams.forEach(t=>{t.gravl*=0.6;
-    if(t.chem!=null)t.chem=clamp(0.74+(t.chem-0.74)*0.80,0.42,0.92); // chemistry regresses toward the mean — no permanent dynasties
-    t.players.forEach(p=>{if(p.retired)return;p.age++;developPlayer(p);
-      if(!p.pinned&&p.age>=31&&rnd()<0.10+(p.age-31)*0.06){
-        retire(p,t,{toCoach:(p.role==='read'||p.r.read>=80)&&rnd()<0.55});
+    const mentorP=contracted(t).find(p=>hasTrait(p,'mentor'));const ment=!!mentorP; // a mentor steadies and grows the squad
+    if(t.chem!=null)t.chem=clamp((0.74+(ment?0.04:0))+(t.chem-0.74)*0.80,0.42,0.92);
+    t.players.forEach(p=>{if(p.retired)return;p.age++;p.tenure=(p.tenure||0)+1;if(p.slump>0)p.slump--;developPlayer(p,ment&&!hasTrait(p,'mentor'));
+      if(mentorP&&p!==mentorP&&p.mentorId==null&&p.age<=21&&(p.tenure||0)>=1){p.mentorId=mentorP.id;(mentorP.proteges=mentorP.proteges||[]).push(p.id);} // a lineage begins
+      const retAge=hasTrait(p,'ironman')?33:31;
+      if(!p.pinned&&p.age>=retAge&&rnd()<0.10+(p.age-retAge)*0.06){
+        retire(p,t,{toCoach:(p.role==='read'||p.r.read>=80||hasTrait(p,'mentor'))&&rnd()<0.55});
       }
     });
   });
+  // career-arc beats — a phenom announces himself, a late bloomer finally clicks (each fires once)
+  world.teams.forEach(t=>contracted(t).forEach(p=>{if(p._broke||p.games<2)return;const si=skillIndex(p);
+    if(hasTrait(p,'prodigy')&&p.age<=21&&si>=82){p._broke=1;
+      feedPush('note','A phenom arrives',`${nm(p)} is just ${p.age}, already ${Math.round(si)}-rated for ${esc(t.name)} — the ${p.role} the whole circuit is suddenly talking about.`);
+      timelinePush({kind:'first',icon:'✦',short:t.short,title:`${p.tag} arrives, a phenom`,text:`${p.first} "${p.tag}" ${p.last} breaks out at ${p.age} for ${t.name} — a generational ${p.role} the sport will watch for a decade.`});}
+    else if(hasTrait(p,'lateBloomer')&&p.age>=26&&si>=80){p._broke=1;
+      feedPush('note','The late bloomer',`${nm(p)} finally clicks at ${p.age} — ${Math.round(si)}-rated for ${esc(t.name)} after years as a journeyman. He never stopped grinding.`);
+      timelinePush({kind:'marked',icon:'◆',short:t.short,title:`${p.tag} blooms late`,text:`Written off for years, ${p.first} "${p.tag}" ${p.last} becomes an elite ${p.role} at ${p.age} for ${t.name}.`});}}));
   // drops & signings now happen in transaction windows between events; fill retirement holes here
   fillHoles();
   // free agency upkeep
@@ -1110,12 +1230,13 @@ function advanceCareers(){
   for(let i=0;i<2+Math.floor(rnd()*3);i++)world.freeAgents.push(procWeak(pick(ROLES),17+Math.floor(rnd()*4)));
   if(world.freeAgents.length>40)world.freeAgents=world.freeAgents.sort((a,b)=>skillIndex(b)-skillIndex(a)).slice(0,40);
   // new injuries (rare) + stand-ins
-  world.teams.forEach(t=>{contracted(t).forEach(p=>{if(!p.injured&&rnd()<0.02){p.injured=1;
+  world.teams.forEach(t=>{contracted(t).forEach(p=>{const injP=hasTrait(p,'glass')?0.055:hasTrait(p,'ironman')?0.007:0.02;if(!p.injured&&rnd()<injP){p.injured=1;
     txn('injury',`${nm(p)} (${t.short}) is ruled out — injured for the season.`);
-    if(rnd()<0.6)feedPush('note','Ruled out',`${nm(p)} of ${t.short} goes down injured, out for the season. A stand-in steps in.`);}});
+    if(rnd()<0.6)feedPush('note','Ruled out',`${nm(p)} of ${t.short} goes down injured${hasTrait(p,'glass')?' again':''}, out for the season. A stand-in steps in.`);}});
     contracted(t).filter(p=>p.injured).forEach(inj=>{let s=takeFA(inj.role)||procWeak(inj.role,18+Math.floor(rnd()*4));s.standinFor=t.short;t.standins.push(s);
       txn('standin',`${t.short} bring in ${nm(s)} as a stand-in for ${inj.tag} (${inj.role}).`);});});
   promoteRelegate();
+  maintainDuos(); // split / reunite / dissolve the core duos after the offseason settles
 }
 
 /* rendering */
@@ -1173,7 +1294,9 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
     : bar('Aim',r.aim)+bar('Read',r.read)+bar('Entry',r.entry)+bar('Clutch',r.clutch)+bar('Util',r.util)+bar('Consist',r.consistency);
   return `<div class="scout">
     <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?esc(t.name):'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':honours.length?' · '+honours.join(' · '):''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
+    ${traitPills(p)}
     ${careerPath(p)}
+    ${relLine(p)}
     <div class="scout-cols">
       <div class="scout-attrs">${attrs}</div>
       <div class="scout-stats">
@@ -1284,6 +1407,17 @@ function renderStory(){const el=$("p-story");
   h+=`</div>`;
   h+=`<div class="story-card"><div class="lede">On the Desk · Casters</div>`;
   h+=(world.casters&&world.casters.length)?world.casters.map(c=>`<div class="row2"><span>${esc(c.name)} <span class="faint">· ${c.former?'ex-'+esc(c.former)+' ':''}${c.role||''}</span></span><span class="ct">caster</span></div>`).join(""):`<p>No casters yet.</p>`;
+  h+=`</div>`;
+  // Personalities — the characters that give the circuit its texture
+  const activeP=allPlayers().map(x=>x.p).filter(p=>!p.retired&&p.games>=1);
+  const byTrait=tr=>activeP.filter(p=>hasTrait(p,tr)).sort((a,b)=>skillIndex(b)-skillIndex(a));
+  const cats=[['bigGame','Big-stage'],['clutch','Ice'],['mercenary','Mercenaries'],['loyal','Franchise'],['mentor','Mentors'],['prodigy','Phenoms'],['hothead','Volatile'],['lateBloomer','Late bloomers']];
+  const rows=cats.map(([tr,lab])=>{const list=byTrait(tr).slice(0,3);return list.length?`<div class="career-path" style="margin:5px 0"><span class="cp-l">${lab}</span> ${list.map(p=>nm(p)).join(' <span class="cp-arr">·</span> ')}</div>`:'';}).filter(Boolean).join('');
+  h+=`<div class="story-card"><div class="lede">Personalities</div>${rows||'<p>The league is full of steady pros — no standout characters yet.</p>'}</div>`;
+  // Core duos — the partnerships the rosters are built around
+  const duos=(world.duos||[]).map(d=>({d,a:anyPlayerById(d.a),b:anyPlayerById(d.b)})).filter(x=>x.a&&x.b).sort((x,y)=>(y.d.majors||0)-(x.d.majors||0));
+  h+=`<div class="story-card"><div class="lede">Partnerships · core duos</div>`;
+  h+=duos.length?duos.slice(0,8).map(({d,a,b})=>`<div class="row2"><span>${nm(a)} <span class="cp-arr">&</span> ${nm(b)}${d.split?' <span class="faint">(split)</span>':''}</span><span class="ct">${d.majors||0}▲ together</span></div>`).join(''):`<p>No core duos forged yet — they form when a pair wins a Major after years together.</p>`;
   h+=`</div>`;
   h+=`<div class="story-card"><div class="lede">The Marked — Major champions</div>`;
   h+=marked.length?marked.map(([t,n])=>`<div class="row2"><span>${esc(teamNameByShort(t))} <span class="role">${esc(t)}</span></span><span class="ct">${n} Major${n>1?"s":""}</span></div>`).join(""):`<p>No Major has been won yet.</p>`;
