@@ -496,10 +496,14 @@ function newWorld(){
   setT('100T','Riptide',['mercenary']);setT('HEMI','Gordo',['hothead']);setT('HEMI','lan',['mentor']);
   // The broadcast desk — former players who call games now (not on any staff)
   w.casters=[
-    {name:'Reza "Books" Haddad',tag:'Books',role:'read',former:'BB',bb:true,note:'Beastie Bois read and IGL — now the desk\u2019s lead analyst.'},
+    {name:'Reza "Books" Haddad',tag:'Books',role:'read',former:'BB',bb:true,injured:true,desk:'injured',note:'Beastie Bois read and IGL — now the desk\u2019s lead analyst.'},
     {name:'Reverend',tag:'Reverend',role:'read',former:'PALL',note:'Pallbearers\u2019 old caller — the calm, sermonous voice of the broadcast.'}
   ];
   w.casters.forEach(c=>{if(c.tag)usedTags.add(c.tag);});
+  // Books isn't a commentator by choice — he's a sidelined Beastie Bois legend, injured out of S1, who returns in S2 to remake the band.
+  const books=mkPlayer('Reza','Books','Haddad','read',30,{aim:70,read:93,clutch:80,entry:58,util:84,consistency:88});
+  books.bb=true;books.injured=1;books.onDesk=true;books.traits=['mentor','loyal'];books.history=[{short:'BB',name:'Beastie Bois',season:0}];
+  w.freeAgents.push(books);
   // The founding stone — the first cairn ever placed on the Yard
   w.cairns.push({season:0,event:'DreamHack LA',team:'Beastie Bois',short:'BB',zone:'the Mouth',style:'quiet'});
   // Non-active clubs: legends that no longer field a roster
@@ -998,6 +1002,7 @@ function calendarFor(s){
   return cal;
 }
 function runRegular(){
+  if(world.season>=2&&!world.bbReturned)bbReturn(); // the founders come home in S2
   const cal=calendarFor(world.season);world.thisSeasonEvents=[];world.pendingMajors=[];
   world.teams.forEach(t=>t.players.forEach(p=>{p._gravMark=p.gravs.length;}));
   const mj=cal.filter(t=>t==='SP').length;const hasWC=world.season>=WC_START;
@@ -1082,12 +1087,29 @@ function reviveOrg(d,opts){opts=opts||{};
   t.gravl=teamPower(t)*4*0.55;t.majors=0;t.masters=0;t.worlds=0;t.divHistory=[{season:world.season,div:2}];
   world.teams.push(t);t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:world.season}];});
   world.defunct=world.defunct.filter(x=>x!==d);
-  const ago=d.folded!=null?`, ${world.season-d.folded} season${world.season-d.folded>1?'s':''} after folding`:'';
-  feedPush('note','A name returns',opts.byHand
-    ?`The commissioner brings ${esc(d.name)} back. The org restarts a roster in tier 2${ago} — their old stones still stand on the Yard.`
-    :`${esc(d.name)} are back. The org restarts a roster in tier 2${ago} — their old stones still stand on the Yard.`);
-  txn('sign',`${d.name} rejoin the circuit (Div 2)${opts.byHand?' — reinstated by the commissioner':''}.`);
+  if(!opts.silent){const ago=d.folded!=null?`, ${world.season-d.folded} season${world.season-d.folded>1?'s':''} after folding`:'';
+    feedPush('note','A name returns',opts.byHand
+      ?`The commissioner brings ${esc(d.name)} back. The org restarts a roster in tier 2${ago} — their old stones still stand on the Yard.`
+      :`${esc(d.name)} are back. The org restarts a roster in tier 2${ago} — their old stones still stand on the Yard.`);
+    txn('sign',`${d.name} rejoin the circuit (Div 2)${opts.byHand?' — reinstated by the commissioner':''}.`);}
   return t;}
+function findByTag(tag){for(const t of world.teams){const p=t.players.find(x=>x.tag===tag)||(t.standins||[]).find(x=>x.tag===tag);if(p)return p;}return world.freeAgents.find(x=>x.tag===tag)||null;}
+// Scripted lore: in Season 2, Books heals, walks off the desk, and pulls the five Beastie Bois originals back together.
+function bbReturn(){
+  if(world.bbReturned)return;world.bbReturned=true;
+  const bbDef=(world.defunct||[]).find(d=>d.short==='BB');
+  const bb=bbDef?reviveOrg(bbDef,{silent:true}):null;
+  if(!bb)return;
+  bb.heart=true;bb.bbTeam=true;bb.chem=0.86; // the founders know each other cold
+  const tags=['Books','vell','Gordo','lan','DadBod'];
+  const back=tags.map(findByTag).filter(Boolean);
+  back.forEach(p=>{p.injured=0;p.retired=false;p.onDesk=false;forceMove(p,bb);p.pinned=true;});
+  world.casters=(world.casters||[]).filter(c=>c.tag!=='Books'); // off the desk, back on the wall
+  const names=back.map(p=>nm(p)).join(', ');
+  feedPush('note','Beastie Bois reform',`<b>The founders come home.</b> Reza "Books" Haddad — healed at last — steps off the desk and pulls the old band back together: ${names}. The Beastie Bois fly again, two seasons after they dissolved into the league they built. They start in tier 2; nobody expects them to stay there.`,'The Return');
+  timelinePush({kind:'first',icon:'✦',short:bb.short,title:`The Beastie Bois reform`,text:`Books returns from injury and reunites the five founding Beastie Bois originals at ${bb.name} — the band that started the sport, back together in S${world.season}.`});
+  txn('sign',`Beastie Bois reform — Books returns and reunites the founders.`);
+}
 // A defunct org returns on its own (between events). Founding myths (BB) stay retired unless revived by hand.
 function rejoinOrg(){
   const cand=(world.defunct||[]).filter(d=>d.reason!=='founding'&&!world.teams.some(t=>t.name===d.name));
@@ -1153,7 +1175,9 @@ function transactionWindow(){
   world.teams.filter(t=>t.div===1).forEach(t=>{if(rnd()<0.10){const c=contracted(t);if(c.length<5)return;const star=starOf(t);
     const cand=c.filter(p=>p!==star&&!p.injured&&!p.bb&&!p.pinned&&!hasTrait(p,'loyal')).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
     if(cand&&(skillIndex(cand)<58||cand.age>=29)){t.players=t.players.filter(p=>p!==cand);
-      if(rnd()<0.35){const t2=pick(world.teams.filter(x=>x.div===2));const bump=contracted(t2).slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];if(bump){t2.players=t2.players.filter(x=>x!==bump);toFA(bump);}cand.formerTeams=cand.formerTeams||[];cand.formerTeams.push(t.short);joinTeam(cand,t2);txn('drop',`${t.short} drop ${nm(cand)} (${cand.role}); he resurfaces in tier 2 with ${t2.short}.`);}
+      const t2=rnd()<0.35?pick(world.teams.filter(x=>x.div===2)):null;
+      const bump=t2&&contracted(t2).length>=5?contracted(t2).filter(p=>!p.pinned).sort((a,b)=>skillIndex(a)-skillIndex(b))[0]:undefined;
+      if(t2&&(contracted(t2).length<5||bump)){if(bump){t2.players=t2.players.filter(x=>x!==bump);toFA(bump);}cand.formerTeams=cand.formerTeams||[];cand.formerTeams.push(t.short);joinTeam(cand,t2);txn('drop',`${t.short} drop ${nm(cand)} (${cand.role}); he resurfaces in tier 2 with ${t2.short}.`);}
       else{toFA(cand);txn('drop',`${t.short} part ways with ${nm(cand)} (${cand.role}).`);}}}});
   // tier-2 sides shop free agency — pulls faded ex-Div1 names down a tier
   world.teams.filter(t=>t.div===2).forEach(t=>{if(rnd()<0.16){const c=contracted(t);if(c.length<5)return;
@@ -1171,11 +1195,12 @@ function forceMove(p,to){
   if(from){from.players=from.players.filter(x=>x!==p);from.standins=(from.standins||[]).filter(x=>x!==p);}
   if(!to){toFA(p);txn('drop',`${nm(p)} released to free agency.`);return;}
   let roster=contracted(to);
-  if(roster.length>=5){const same=roster.filter(x=>x.role===p.role);const bump=(same.length?same:roster).slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];if(bump){to.players=to.players.filter(x=>x!==bump);toFA(bump);}}
+  if(roster.length>=5){const sameU=roster.filter(x=>x.role===p.role&&!x.pinned),anyU=roster.filter(x=>!x.pinned);const pool=sameU.length?sameU:anyU.length?anyU:roster;const bump=pool.slice().sort((a,b)=>skillIndex(a)-skillIndex(b))[0];if(bump){to.players=to.players.filter(x=>x!==bump);toFA(bump);}}
   joinTeam(p,to);
+  p.pinned=true; // a commissioner placement sticks — the player won't be auto-called-up, poached, or cut (unpin to release them to the sim)
   p.formerTeams=p.formerTeams||[];if(from&&from!==to&&from.short)p.formerTeams.push(from.short);
   txn('poach',`Blockbuster: ${nm(p)} moves to ${to.short}${from?` from ${from.short}`:''}.`);
-  feedPush('note','Blockbuster',`${nm(p)} ${from?`leaves ${from.short} and `:''}joins ${to.short}.`);
+  feedPush('note','Blockbuster',`${nm(p)} ${from?`leaves ${from.short} and `:''}joins ${to.short} — pinned to the roster.`);
   fillHoles();
 }
 // Development: young players climb toward their ceiling (pot) — fastest when young and far below it, so a
@@ -1406,7 +1431,7 @@ function renderStory(){const el=$("p-story");
   h+=coaches.slice(0,9).map(({t,c})=>`<div class="row2"><span>${esc(coachName(c))} <span class="faint">· ${t.short}</span>${c.former?' <span class="good">◇ ex-player</span>':''}</span><span class="ct">prep ${Math.round(c.prep)}</span></div>`).join("");
   h+=`</div>`;
   h+=`<div class="story-card"><div class="lede">On the Desk · Casters</div>`;
-  h+=(world.casters&&world.casters.length)?world.casters.map(c=>`<div class="row2"><span>${esc(c.name)} <span class="faint">· ${c.former?'ex-'+esc(c.former)+' ':''}${c.role||''}</span></span><span class="ct">caster</span></div>`).join(""):`<p>No casters yet.</p>`;
+  h+=(world.casters&&world.casters.length)?world.casters.map(c=>`<div class="row2"><span>${esc(c.name)} <span class="faint">· ${c.former?'ex-'+esc(c.former)+' ':''}${c.role||''}</span></span><span class="ct">${c.injured?'<span class="unmarked">injured · on the desk</span>':'caster'}</span></div>`).join(""):`<p>No casters yet.</p>`;
   h+=`</div>`;
   // Personalities — the characters that give the circuit its texture
   const activeP=allPlayers().map(x=>x.p).filter(p=>!p.retired&&p.games>=1);
