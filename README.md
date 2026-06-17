@@ -17,7 +17,18 @@ The hook: only winning a **Major** lets a team lay a permanent **cairn** on the 
 - **Reset to Season Zero** — start a fresh timeline.
 - When a season's **Major** comes up, open the **Broadcast** tab to call it round-by-round, or let it auto-sim.
 
-Explore the rest through the tabs: the story feed, live broadcast, calendar, standings, players (tap any name for a scouting card with editable attributes and commissioner controls), teams, the transfer market, the Yard of cairns, ongoing storylines, and the Annals (GOATs, Moments, Upsets, Chokes).
+Explore the rest through the tabs: the story feed, live broadcast, calendar, standings, players (tap any name for a scouting card with editable attributes and commissioner controls), teams, the transfer market, the Yard of cairns, ongoing storylines, and the Annals.
+
+### The Annals — permanent history & analytics
+
+All historical data is kept for the life of the run (nothing is evicted), so deep analytics accumulate over dozens of seasons:
+
+- **Timeline** — significant milestones in chronological order: a team's first-ever cairn, a finals drought finally broken, back-to-back titles and dynasties, a tier-2 side crashing a Major, a deadlift in a final, an unmarked star finally marked, and head-to-head reversals (*"after losing the last 3 Major finals to them, they finally turn it around"*).
+- **Best games** — the greatest individual single-map performances ever (Masters & Majors), ranked by map Gravity.
+- **Best Majors** — the biggest individual showings in a Major final, win or lose, ranked by series Gravity.
+- **GOATs, Upsets, Chokes, Moments** — all-time leaderboards that grow as the league plays on.
+
+Tap any player name in a performance list to jump to their scouting card.
 
 ## A note on AI narration
 

@@ -200,6 +200,23 @@
   .txn-injury{color:var(--unmarked);border-color:#5a3030;}
   .txn-standin{color:var(--ember);border-color:var(--ember-dim);}
   .txn-return,.txn-rookie{color:var(--good,#8fb98f);}
+  .tline{display:flex;flex-direction:column;}
+  .tl-row{display:flex;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line);align-items:flex-start;}
+  .tl-when{flex:0 0 auto;width:50px;text-align:center;}
+  .tl-ic{display:block;font-size:17px;color:var(--ember);line-height:1.25;}
+  .tl-s{display:block;font-family:ui-monospace,monospace;font-size:10.5px;color:var(--faint);}
+  .tl-b{flex:1;min-width:0;}
+  .tl-t{font-family:Georgia,serif;font-size:14.5px;color:var(--bone);margin-bottom:2px;}
+  .tl-x{font-size:13px;color:var(--muted);line-height:1.5;}
+  .tl-rivalry .tl-ic,.tl-dynasty .tl-ic{color:var(--gravl);}
+  .tl-upset .tl-ic{color:var(--cold);}
+  .tl-first .tl-ic,.tl-marked .tl-ic{color:var(--cairn);}
+  .tl-deadlift .tl-ic,.tl-streak .tl-ic{color:var(--ember);}
+  table.perf{width:100%;border-collapse:collapse;font-size:13px;}
+  table.perf th{text-align:left;color:var(--faint);font-weight:600;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);}
+  table.perf td{padding:6px 8px;border-bottom:1px solid #221c14;vertical-align:middle;}
+  table.perf tr[data-tpid]{cursor:pointer;}
+  table.perf tr:hover td{background:#1b1812;}
 </style>
 </head>
 <body>
@@ -350,7 +367,7 @@ function newWorld(){
   const d2=tier2Teams();
   const teams=d1.concat(d2);
   const freeAgents=[];for(let i=0;i<12;i++)freeAgents.push(procWeak(pick(ROLES),17+Math.floor(rnd()*4)));
-  const w={season:1,year:2016,started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[]};
+  const w={season:1,year:2016,started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[]};
   w.teams.forEach(t=>{t.gravl=teamPower(t)*4*(t.div===2?0.7:1);t.majors=0;t.divHistory=[{season:1,div:t.div}];t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:1}];});});
   // Season Zero (2015) origins — the founding DreamHack LA final
   const findP=(short,tag)=>{const t=w.teams.find(x=>x.short===short);return t?t.players.find(p=>p.tag===tag):null;};
@@ -426,7 +443,7 @@ function simRound(a,b){
   return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star};
 }
 function addBox(dst,e){dst.k+=e.k;dst.d+=e.d;dst.a+=e.a;dst.entry+=e.entry;dst.vigils+=(e.clutch?1:0);}
-function simMap(a,b){
+function simMap(a,b,ctx){
   let sa=0,sb=0;const perf={},mbox={};const vigils=[];let lastZone="the Aisle";
   const roster=lineup(a).concat(lineup(b));
   roster.forEach(p=>mbox[p.id]=blankBox());
@@ -435,15 +452,16 @@ function simMap(a,b){
     roster.forEach(p=>{const e=r.box[p.id];if(e){addBox(mbox[p.id],e);accStat(p,e);}});
     if(r.vigil)vigils.push(r.vigil);}
   const grav={};for(const id in perf){const arr=perf[id];grav[id]=arr.length?arr.reduce((s,x)=>s+x,0)/arr.length:1.0;}
+  if(ctx)recordGamePerf(grav,mbox,a,b,sa>sb?a:b,ctx,lastZone);
   return {winner:sa>sb?a:b,sa,sb,grav,vigils,zone:lastZone,box:mbox};
 }
 function mapMVP(a,b,grav){let best=null,bg=-1;[a,b].forEach(t=>t.players.forEach(p=>{if(!p.retired&&grav[p.id]>bg){bg=grav[p.id];best={p,g:grav[p.id]};}}));return best;}
 function findPlayer(id){for(const t of world.teams){const p=t.players.find(x=>x.id===id);if(p)return p;}return null;}
 function teamOf(p){return world.teams.find(t=>t.players.some(q=>q.id===p.id));}
-function simSeries(a,b,wins){
+function simSeries(a,b,wins,ctx){
   wins=wins||3;let wa=0,wb=0;const maps=[];const sgA={},sbox={};
   const acc=g=>{for(const id in g){(sgA[id]=sgA[id]||[]).push(g[id]);}};
-  while(wa<wins&&wb<wins){const m=simMap(a,b);const aWon=m.winner===a;if(aWon)wa++;else wb++;acc(m.grav);
+  while(wa<wins&&wb<wins){const m=simMap(a,b,ctx?Object.assign({},ctx,{mapNo:maps.length+1}):null);const aWon=m.winner===a;if(aWon)wa++;else wb++;acc(m.grav);
     for(const id in m.box){const e=m.box[id];sbox[id]=sbox[id]||blankBox();sbox[id].k+=e.k;sbox[id].d+=e.d;sbox[id].a+=e.a;sbox[id].entry+=e.entry;sbox[id].vigils+=e.vigils;}
     maps.push({aWon,sa:aWon?m.sa:m.sb,sb:aWon?m.sb:m.sa,vigils:m.vigils,zone:m.zone});}
   let ra=0,rb=0,downA=false,downB=false;
@@ -497,6 +515,54 @@ let feedId=1;
 function feedPush(kind,title,body,stage,data){world.feed.unshift({id:feedId++,kind,title,body,stage,season:world.season,data:data||null,narrated:null,narrating:false,narrateError:null});}
 
 function pushCapped(arr,item,cap){arr.push(item);if(arr.length>cap){arr.sort((a,b)=>b.score-a.score);arr.length=cap;}}
+function timelinePush(o){world.timeline.push(Object.assign({season:world.season,year:world.year},o));}
+// single-map standout — the best individual game on one map (Masters & Majors only)
+function recordGamePerf(grav,box,a,b,winner,ctx,zone){
+  let bestId=null,bg=-1;for(const id in grav){if(grav[id]>bg){bg=grav[id];bestId=+id;}}
+  if(bestId==null)return;const e=box[bestId]||blankBox();
+  if(bg<1.32&&e.k<24)return; // only genuinely historic single games
+  const p=findPlayer(bestId);if(!p)return;const t=teamOf(p);
+  world.gamePerfs.push({score:Math.round(bg*100),grav:+bg.toFixed(2),
+    season:world.season,year:world.year,event:ctx.event,tier:ctx.tier,round:ctx.round,zone,mapNo:ctx.mapNo||null,
+    pid:bestId,name:`${p.first} "${p.tag}" ${p.last}`,tag:p.tag,short:t?t.short:'—',role:p.role,won:t===winner,
+    k:e.k,d:e.d,a:e.a,entry:e.entry,vigils:e.vigils});}
+// single-Major standout — the biggest showings in a Major final (win or lose)
+function recordMajorPerfs(name,champ,run,F){
+  const rows=[];for(const id in F.sg){const p=findPlayer(+id);if(!p)continue;const t=teamOf(p);
+    rows.push({g:F.sg[id],p,e:(F.box&&F.box[id])||blankBox(),won:t===champ,short:t?t.short:'—'});}
+  rows.sort((x,y)=>y.g-x.g);
+  rows.slice(0,3).forEach((r,idx)=>{if(idx>0&&r.g<1.15)return; // always log the final's top showing; runners-up only if strong
+    world.majorPerfs.push({score:Math.round(r.g*100),grav:+r.g.toFixed(2),
+      season:world.season,year:world.year,event:name,
+      pid:r.p.id,name:`${r.p.first} "${r.p.tag}" ${r.p.last}`,tag:r.p.tag,short:r.short,role:r.p.role,won:r.won,
+      champShort:champ.short,runShort:run.short,result:F.scoreStr,deadlift:!!F.deadlift,
+      k:r.e.k,d:r.e.d,a:r.e.a,entry:r.e.entry,vigils:r.e.vigils});});}
+// significant chronological milestones — streaks broken, dynasties, head-to-head reversals
+function recordMajorTimeline(name,champ,run,F,ctx){
+  const founded=(champ.divHistory&&champ.divHistory[0])?champ.divHistory[0].season:1;
+  if(champ.majors===1){const dr=Math.max(1,world.season-founded);
+    timelinePush({kind:'first',icon:'▲',short:champ.short,title:`${champ.name} raise their first cairn`,
+      text:`${champ.name} win the ${name}${dr>1?` — ${dr} seasons in the making`:' in their debut season'}. First Major, first stone on the Yard.`});}
+  if(champ.div===2)timelinePush({kind:'upset',icon:'⚡',short:champ.short,title:`A tier-2 side wins a Major`,
+    text:`${champ.name} climb out of the second division and take the ${name} outright — a feeder team raising a cairn.`});
+  else if(run.div===2)timelinePush({kind:'upset',icon:'⚡',short:run.short,title:`A tier-2 side reaches a Major final`,
+    text:`${run.name} crash the ${name} final from tier 2 before falling ${F.scoreStr}.`});
+  if(F.deadlift)timelinePush({kind:'deadlift',icon:'⟲',short:champ.short,title:`${champ.short} deadlift the ${name} final`,
+    text:`${champ.name} climb off an 0–2 floor to beat ${run.name} ${F.scoreStr} — a reverse sweep with a cairn on the line.`});
+  if(ctx.priorStreak>=2)timelinePush({kind:'streak',icon:'✦',short:champ.short,title:`${champ.short} break a ${ctx.priorStreak}-final drought`,
+    text:`${champ.name} had lost ${ctx.priorStreak} straight Major finals. At the ${name} they finally close one out, def. ${run.name} ${F.scoreStr}.`});
+  if(ctx.champStarBreakthrough&&ctx.starC)timelinePush({kind:'marked',icon:'●',short:champ.short,title:`${ctx.starC.tag} is marked at last`,
+    text:`${ctx.starC.first} "${ctx.starC.tag}" ${ctx.starC.last} wins a first Major after years unmarked — the cruelest label, shed at the ${name}.`});
+  const prior=world.majorFinals.filter(f=>(f.champ===champ.short&&f.run===run.short)||(f.champ===run.short&&f.run===champ.short));
+  let lossesVsRun=0;for(let i=prior.length-1;i>=0;i--){if(prior[i].champ===run.short&&prior[i].run===champ.short)lossesVsRun++;else break;}
+  if(lossesVsRun>=2)timelinePush({kind:'rivalry',icon:'⚔',short:champ.short,title:`${champ.short} finally get ${run.short}`,
+    text:`After losing the last ${lossesVsRun} Major finals to ${run.name}, ${champ.name} turn it around at the ${name}, ${F.scoreStr}. The hex is broken.`});
+  let streak=0;for(let i=world.majorChamps.length-1;i>=0;i--){if(world.majorChamps[i].team===champ.short)streak++;else break;}
+  if(streak===2)timelinePush({kind:'dynasty',icon:'♛',short:champ.short,title:`${champ.short} go back-to-back`,
+    text:`${champ.name} win consecutive Majors — two cairns running, the latest at the ${name}.`});
+  else if(streak>=3)timelinePush({kind:'dynasty',icon:'♛',short:champ.short,title:`${champ.short} make it ${streak} straight`,
+    text:`${champ.name} win their ${streak}th Major in a row at the ${name}. A dynasty on the Yard.`});
+  world.majorFinals.push({season:world.season,year:world.year,champ:champ.short,run:run.short,event:name});}
 function goatScore(p){
   const cg=p.games?careerGrav(p):0;const log=(world.goatLog&&world.goatLog[p.role])||[];
   const bests=log.filter(e=>e.id===p.id).length;const longevity=Math.min(p.gravs.length,160)/40;
@@ -520,13 +586,13 @@ function detectUpsetsChokes(tier,name,qf,sf,fin){
     const isFinal=/final/i.test(round);const roundMult=isFinal?3:round==='SF'?1.8:1.2;const gap=rw-rl;
     if(gap>=3){const score=Math.round((gap*roundMult+(w.div===2?20:0))*tierMult);
       pushCapped(world.upsets,{season:world.season,event:name,round,score,
-        text:`${w.short} (#${rw}) over ${l.short} (#${rl}) ${Math.max(s.wa,s.wb)}–${Math.min(s.wa,s.wb)} — ${round==='QF'?'opening round':round} at ${name}.${w.div===2?' A tier-2 side crashing the bracket.':''}`},150);}
+        text:`${w.short} (#${rw}) over ${l.short} (#${rl}) ${Math.max(s.wa,s.wb)}–${Math.min(s.wa,s.wb)} — ${round==='QF'?'opening round':round} at ${name}.${w.div===2?' A tier-2 side crashing the bracket.':''}`},Infinity);}
     const favEdge=rl<rw?(rw-rl):0;let cs=0;const cr=[];
     if(s.deadlift){cs+=28;cr.push('led 2–0 and lost the series');}
     if(isFinal&&favEdge>=4){cs+=Math.round(favEdge*2);cr.push(`fell as the favorite (#${rl} losing to #${rw})`);}
     else if(favEdge>=7){cs+=Math.round(favEdge*1.2);cr.push(`fell to a far lower seed (#${rl} to #${rw})`);}
     if(cs>=20&&cr.length)pushCapped(world.chokes,{kind:'team',season:world.season,event:name,round,score:Math.round(cs*tierMult/1.4),short:l.short,
-      text:`${l.short} ${cr.join(', and ')} — ${round} at ${name}.`},150);
+      text:`${l.short} ${cr.join(', and ')} — ${round} at ${name}.`},Infinity);
   });
 }
 function commitMajor(name,champ,run,sfL,qfL,F){
@@ -569,21 +635,25 @@ function commitMajor(name,champ,run,sfL,qfL,F){
   const cgStar=starC&&starC.games?careerGrav(starC):0;
   if(data.champStarBreakthrough&&cgStar>=1.15){ms+=18;mr.push(`${starC.tag} finally shed the unmarked label (${cgStar.toFixed(2)} career Gravity)`);}
   if(ms>=18&&mr.length)pushCapped(world.moments,{season:world.season,event:name,score:Math.round(ms),short:champ.short,
-    text:`${champ.name} ${mr.join(', and ')} — ${name}, def. ${run.name} ${F.scoreStr}.`},150);
+    text:`${champ.name} ${mr.join(', and ')} — ${name}, def. ${run.name} ${F.scoreStr}.`},Infinity);
   lineup(run).forEach(p=>{const fg=F.sg[p.id];if(fg==null)return;const cg=p.games?careerGrav(p):1;const drop=cg-fg;
     if((cg>=1.05&&drop>=0.28)||(cg>=1.12&&fg<0.92))pushCapped(world.chokes,{kind:'ind',season:world.season,event:name,id:p.id,score:Math.round(drop*100*(cg-0.4)),tag:p.tag,short:run.short,
-      text:`${pname(p)} (${run.short}) posted ${fg.toFixed(2)} in the ${name} final — ${drop.toFixed(2)} under a ${cg.toFixed(2)} career. The no-show that cost the cairn.`},150);});
+      text:`${pname(p)} (${run.short}) posted ${fg.toFixed(2)} in the ${name} final — ${drop.toFixed(2)} under a ${cg.toFixed(2)} career. The no-show that cost the cairn.`},Infinity);});
+  recordMajorPerfs(name,champ,run,F);
+  recordMajorTimeline(name,champ,run,F,{priorStreak,starC,champStarBreakthrough:data.champStarBreakthrough});
   return data;
 }
 function runEvent(tier,name){
   const T=TIERS[tier];
   const field=fieldFor(tier).slice(0,8).sort((x,y)=>y.gravl-x.gravl);
   const wins=T.bo==='bo5'?3:2;
-  const qf=[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]].map(([a,b])=>simSeries(a,b,wins));
+  const logMaps=(tier==='SP'||tier==='S');const cx=r=>logMaps?{event:name,tier,round:r}:null;
+  const finalRound=tier==='SP'?'Major final':'Masters final';
+  const qf=[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]].map(([a,b])=>simSeries(a,b,wins,cx('QF')));
   const qfL=qf.map(s=>s.loser);
-  const sf=[simSeries(qf[0].winner,qf[1].winner,wins),simSeries(qf[2].winner,qf[3].winner,wins)];
+  const sf=[simSeries(qf[0].winner,qf[1].winner,wins,cx('SF')),simSeries(qf[2].winner,qf[3].winner,wins,cx('SF'))];
   const sfL=sf.map(s=>s.loser);
-  const fin=simSeries(sf[0].winner,sf[1].winner,tier==='SP'?3:wins);
+  const fin=simSeries(sf[0].winner,sf[1].winner,tier==='SP'?3:wins,cx(finalRound));
   const champ=fin.winner,run=fin.loser;
   const b=seriesBlurb(fin);
   detectUpsetsChokes(tier,name,qf,sf,fin);
@@ -648,7 +718,8 @@ function retire(p,t,opts){opts=opts||{};p.retired=true;p.standinFor=null;
   if(opts.toCoach&&t){t.coach=mkCoach(p.first,p.tag,p.last,{prep:clamp(p.r.read+gauss()*4,58,96),composure:clamp(p.r.consistency,55,95)},true);
     feedPush('note','To the touchline',`${nm(p)} hangs up the mouse and takes the ${t.short} coaching chair${p.titles?` — ${p.titles} cairn${p.titles>1?'s':''} as a player`:', still unmarked'}. The read never really leaves.`);}
   else if(!opts.silent)feedPush('note','A long walk',`${nm(p)} retires${p.titles===0?" — unmarked to the end.":` with ${p.titles} cairn${p.titles>1?"s":""} to his name.`}`);
-  txn('retire',`${nm(p)} retires${t?` from ${t.short}`:''}.`);}
+  txn('retire',`${nm(p)} retires${t?` from ${t.short}`:''}.`);
+  if(p.titles>=4)timelinePush({kind:'retire',icon:'⚑',short:t?t.short:'—',title:`${p.tag} walks away`,text:`${p.first} "${p.tag}" ${p.last} retires with ${p.titles} cairns — one of the marked greats steps off the Yard.`});}
 function unretire(p){p.retired=false;p.injured=0;if(p.age>33)p.age=33;const t=findHolderTeam(p);if(t)t.players=t.players.filter(x=>x!==p);if(!world.freeAgents.includes(p))world.freeAgents.push(p);}
 function toFA(p){p.faAge=0;p.standinFor=null;world.freeAgents.push(p);}
 function joinTeam(p,t){if(!t.players.includes(p))t.players.push(p);const h=p.history=p.history||[];if(!h.length||h[h.length-1].short!==t.short)h.push({short:t.short,name:t.name,season:world.season});}
@@ -697,6 +768,7 @@ function disbandTeam(t,reason){
   feedPush('note',reason==='champ'?'Out on top, and gone':'The lights go off',
     reason==='champ'?`${t.name} disband at the summit — weeks after the cairn, the roster scatters to free agency. ${up?`${up.name} are pulled up to take the slot. `:''}The stones stay on the Yard; the name doesn't.`
     :`${t.name} fold and release their roster to free agency. ${up?`${up.name} are promoted to take their place. `:''}Whatever cairns they own remain — the org that raised them won't.`);
+  if(reason==='champ')timelinePush({kind:'disband',icon:'☄',short:t.short,title:`${t.name} disband at the summit`,text:`Weeks after their last cairn, ${t.name} walk away on top — champions, then gone.`});
   txn('disband',`${t.short} disband; roster released to free agency.`);
 }
 function disbandCheck(){
@@ -795,7 +867,7 @@ function renderStandings(){const el=$("p-gravl");const ranked=[...world.teams].s
    ${ranked.map((t,i)=>`<tr class="${i===7?'cut':''} ${i>7?'below':''}"><td class="grav">${i+1}</td><td>${t.name} <span class="role">${t.short}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</td><td class="grav">${t.majors||'—'}</td></tr>`).join("")}
    </tbody></table><p class="hint" style="margin-top:8px">The amber line is the Major cut — below it, you watch from home. A <b>T2</b> tag is a tier-2 side; bank enough GRAVL and they crash the party.</p>`;}
 let sortKey="grav";let selectedPid=null;let playerFilter="active";let movePid=null;let editPid=null;let showCreate=false;
-let selectedTid=null;let teamFilter="all";let teamSortKey="gravl";let annalsView="goats";
+let selectedTid=null;let teamFilter="all";let teamSortKey="gravl";let annalsView="timeline";
 function mkFreeAgent(first,tag,last,role,rating){role=role||pick(ROLES);const base=clamp(rating||62,28,99);const r={};
   ['aim','read','entry','util','clutch','consistency'].forEach(k=>r[k]=clamp(base+Math.round(gauss()*6),28,99));
   const p=mkPlayer(first||pick(FIRST),tag||pick(TAGS),last||pick(LAST),role,18,r);world.freeAgents.push(p);return p;}
@@ -1013,12 +1085,38 @@ function chokesHtml(){
   const team=world.chokes.filter(c=>c.kind==='team'),ind=world.chokes.filter(c=>c.kind==='ind');
   return `<div class="lede" style="margin:4px 0 6px">Team chokes</div>${annalList(team,'No team chokes yet — nobody has blown a big one.')}<div class="lede" style="margin:16px 0 6px">Individual chokes</div>${annalList(ind,'No individual chokes yet.')}`;
 }
+function timelineHtml(){
+  const tl=world.timeline||[];
+  if(!tl.length)return `<p class="faint">No milestones yet — the timeline fills as teams raise first cairns, break finals droughts, go back-to-back, and finally beat the rival that kept beating them.</p>`;
+  return `<p class="hint">Significant events, newest first — the moments the sport remembers, written as they happen and kept for all time.</p><div class="tline">`+
+    [...tl].reverse().map(e=>`<div class="tl-row tl-${esc(e.kind)}"><div class="tl-when"><span class="tl-ic">${e.icon||'•'}</span><span class="tl-s">S${e.season}</span></div><div class="tl-b"><div class="tl-t">${esc(e.title)}</div><div class="tl-x">${esc(e.text)}</div></div></div>`).join('')+
+    `</div>`;}
+function perfTable(top,ctxCol){
+  return `<table class="perf"><thead><tr><th>Player</th><th>Tm</th><th>Grav</th><th>K–D</th><th>Vg</th><th>${ctxCol}</th></tr></thead><tbody>`+
+    top.map(p=>`<tr${p.pid?` data-tpid="${p.pid}"`:''}><td>${esc(p.name)}${p.won?(p.final?' <span class="good">▲</span>':''):' <span class="faint">(L)</span>'}</td><td class="role">${esc(p.short)}</td><td class="grav" style="color:var(--ember)">${p.grav.toFixed(2)}</td><td class="grav">${p.k}–${p.d}</td><td class="grav ${p.vigils?'bx-v':''}">${p.vigils||'·'}</td><td class="faint" style="font-size:11.5px">${p.ctx}</td></tr>`).join('')+
+    `</tbody></table>`;}
+function gamePerfHtml(){
+  const arr=world.gamePerfs||[];
+  if(!arr.length)return `<p class="faint">No standout single games yet — historic single-map lines (1.32+ map Gravity, or a 24-bomb) are logged from Masters &amp; Majors.</p>`;
+  const top=[...arr].sort((a,b)=>b.grav-a.grav||(b.k-b.d)-(a.k-a.d)).slice(0,40)
+    .map(p=>Object.assign({},p,{ctx:`${esc(p.zone||'')} · ${esc(p.event)} <span class="cp-s">S${p.season}${p.round?' · '+esc(p.round):''}</span>`}));
+  return `<p class="hint">Single-map peaks — the best individual games ever played (Masters &amp; Majors), ranked by map Gravity. Tap a name for the card.</p>`+perfTable(top,'Map · Event');}
+function majorPerfHtml(){
+  const arr=world.majorPerfs||[];
+  if(!arr.length)return `<p class="faint">No great Major performances yet — the biggest individual showings in a Major final (1.22+ series Gravity) are logged here.</p>`;
+  const top=[...arr].sort((a,b)=>b.grav-a.grav).slice(0,40)
+    .map(p=>Object.assign({},p,{final:true,ctx:`${esc(p.champShort)}–${esc(p.runShort)} ${esc(p.result||'')}${p.deadlift?' ⟲':''} · ${esc(p.event)} <span class="cp-s">S${p.season}</span>`}));
+  return `<p class="hint">The biggest individual showings in a Major final — win or lose — ranked by series Gravity. Tap a name for the card.</p>`+perfTable(top,'Final · Event');}
 function renderAnnals(){const el=$("p-annals");
-  let h=`<p class="hint">The record books — written by the simulation as it runs. Scores are internal weightings (stakes, streaks, seed gaps).</p>`;
-  h+=`<div class="pfilter">${[['goats','GOATs'],['moments','Moments'],['upsets','Upsets'],['chokes','Chokes']].map(([f,l])=>`<button class="ctab ${annalsView===f?'on':''}" data-av="${f}">${l}</button>`).join('')}</div>`;
-  if(annalsView==='goats')h+=goatsHtml();
-  else if(annalsView==='moments')h+=annalList(world.moments,'No defining moments yet — they’re written when a Major final carries real weight.');
+  let h=`<p class="hint">The record books — written by the simulation as it runs, and kept for all time. Scores in the ranked lists are internal weightings (stakes, streaks, seed gaps).</p>`;
+  const tabs=[['timeline','Timeline'],['games','Best games'],['majors','Best Majors'],['goats','GOATs'],['upsets','Upsets'],['chokes','Chokes'],['moments','Moments']];
+  h+=`<div class="pfilter">${tabs.map(([f,l])=>`<button class="ctab ${annalsView===f?'on':''}" data-av="${f}">${l}</button>`).join('')}</div>`;
+  if(annalsView==='timeline')h+=timelineHtml();
+  else if(annalsView==='games')h+=gamePerfHtml();
+  else if(annalsView==='majors')h+=majorPerfHtml();
+  else if(annalsView==='goats')h+=goatsHtml();
   else if(annalsView==='upsets')h+=annalList(world.upsets,'No big upsets recorded yet.');
+  else if(annalsView==='moments')h+=annalList(world.moments,'No defining moments yet — they’re written when a Major final carries real weight.');
   else h+=chokesHtml();
   el.innerHTML=h;}
 
@@ -1085,7 +1183,7 @@ function startMatch(L){
   pushLog(L,`${sn}: ${a.short} vs ${b.short} — best of 5.`,'map');
   startMap(L);
 }
-function startMap(L){const m=L.match;const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,lastZone:'the Aisle',mapVigils:[],box};}
+function startMap(L){const m=L.match;const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,lastZone:'the Aisle',mapVigils:[],perf:{},box};}
 function roundLine(r,m,mp){
   const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
   if(r.vigil)return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ${r.vigil.name} stands alone, 1v${r.vigil.x} at ${r.vigil.zone}, and it's theirs.`;
@@ -1097,6 +1195,7 @@ function stepRound(){
   const L=world.live,m=L.match,mp=m.map;
   const r=simRound(m.a,m.b);mp.lastZone=r.zone;if(r.winA)mp.sa++;else mp.sb++;mp.round++;
   for(const id in r.grav)(m.perf[id]=m.perf[id]||[]).push(r.grav[id]);
+  for(const id in r.grav)(mp.perf[id]=mp.perf[id]||[]).push(r.grav[id]);
   lineup(m.a).concat(lineup(m.b)).forEach(p=>{const e=r.box[p.id];if(!e)return;
     if(!mp.box[p.id])mp.box[p.id]=blankBox();addBox(mp.box[p.id],e);
     if(!m.seriesBox[p.id])m.seriesBox[p.id]=blankBox();addBox(m.seriesBox[p.id],e);
@@ -1110,6 +1209,8 @@ function mapEnd(){
   const L=world.live,m=L.match,mp=m.map,aWon=mp.sa>mp.sb;
   if(aWon)m.wins.a++;else m.wins.b++;
   m.maps.push({aWon,sa:mp.sa,sb:mp.sb,zone:mp.lastZone,vigils:mp.mapVigils});
+  {const mg={};for(const id in mp.perf){const a=mp.perf[id];mg[id]=a.reduce((s,x)=>s+x,0)/a.length;}
+   recordGamePerf(mg,mp.box,m.a,m.b,aWon?m.a:m.b,{event:L.name,tier:'SP',round:L.stage==='f'?'Major final':L.stage==='sf'?'SF':'QF',mapNo:m.maps.length},mp.lastZone);}
   pushLog(L,`MAP ${m.maps.length}: ${(aWon?m.a:m.b).short} ${Math.max(mp.sa,mp.sb)}–${Math.min(mp.sa,mp.sb)} on ${mp.lastZone}. Series ${m.a.short} ${m.wins.a}–${m.wins.b} ${m.b.short}.`,'mapend');
   if(m.wins.a>=m.target||m.wins.b>=m.target)return matchEnd();
   startMap(L);return 'mapend';
