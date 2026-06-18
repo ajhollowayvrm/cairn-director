@@ -235,6 +235,8 @@
   .tl-upset .tl-ic{color:var(--cold);}
   .tl-first .tl-ic,.tl-marked .tl-ic{color:var(--cairn);}
   .tl-deadlift .tl-ic,.tl-streak .tl-ic{color:var(--ember);}
+  .tl-era .tl-ic{color:var(--gravl);}
+  .tl-era .tl-t{letter-spacing:.04em;}
   table.perf{width:100%;border-collapse:collapse;font-size:13px;}
   table.perf th{text-align:left;color:var(--faint);font-weight:600;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);}
   table.perf td{padding:6px 8px;border-bottom:1px solid #221c14;vertical-align:middle;}
@@ -564,7 +566,18 @@ function txn(kind,text){world.transactions.unshift({season:world.season,kind,tex
 /* match engine */
 function zoneSkill(p,z){const w=z.w,r=p.r;const num=r.aim*w.aim+r.read*w.read+r.entry*w.entry+r.util*w.util+r.clutch*0.7;const den=w.aim+w.read+w.entry+w.util+0.7;return num/den;}
 function skillIndex(p){const r=p.r;return (r.aim*1.15+r.clutch*0.75+r.entry*0.6+r.read*0.55+r.util*0.45+r.consistency*0.55)/4.05;}
-function roleWeight(role){return role==="read"?1.06:role==="set"?1.03:role==="anchor"?1.01:role==="breaker"?0.99:1.0;}
+function roleWeight(role){return (role==="read"?1.06:role==="set"?1.03:role==="anchor"?1.01:role==="breaker"?0.99:1.0)*eraRoleMult(role);}
+// ---- eras: the sport's meta drifts every few seasons — a role or a zone ascends, tilting who looks great ----
+const ROLE_ERA={
+  read:{name:"The Readers' Era",blurb:"vision and game sense decide everything — the read player is king"},
+  reach:{name:"The Reach Era",blurb:"space and aggression set the tempo — the reach player rules"},
+  breaker:{name:"The Breaker Era",blurb:"raw entries win rounds — the breaker is the most valued man on the Yard"},
+  anchor:{name:"The Anchor Era",blurb:"defense and the last stand decide it — anchors are everything"},
+  set:{name:"The Setters' Age",blurb:"utility and setup win the map — the set player pulls the strings"}};
+function eraRoleMult(role){const e=world&&world.era;if(!e||e.kind!=='role')return 1;return e.key===role?1.07:0.982;} // featured role's Gravity rises; the rest dip slightly
+function eraZoneMult(name){const e=world&&world.era;if(!e||e.kind!=='zone')return 1;return e.key===name?2.4:1;}   // the era's zone hosts the ember far more often
+function pickZone(){return pickW(ZONES,z=>eraZoneMult(z.name));}
+function zoneTrait(z){const w=z.w,m=Math.max(w.aim,w.read,w.entry,w.util);return w.aim===m?"pure aim wins here":w.read===m?"it rewards the sharpest read":w.entry===m?"it's all aggression and entries":"utility and setup decide it";}
 /* ---- cinematic variance: form, confidence, momentum ---- */
 function formMult(p){return p._form||1;}
 function confMult(p){return 1+clamp(p._conf||0,-1,1)*0.12;}
@@ -593,16 +606,36 @@ function momFromStreak(stA,stB,sa,sb){const m={a:1,b:1};
   if(sa-sb>=4)m.b*=1.05+(sa-sb-4)*0.02;
   return m;}
 function mapDone(sa,sb){return (Math.max(sa,sb)>=15&&Math.abs(sa-sb)>=2)||Math.max(sa,sb)>=24;} // first to 15, win by 2 in OT
+// ---- economy: a broken team fields a weak buy, banks, then reloads to full — eco rounds, forces, and steals ----
+const BUYMULT={full:1.0,reload:1.06,force:0.93,eco:0.82};
+// next round's buy for a side, given whether it won this round and whether it's under score pressure.
+// The loss bonus is the key to balance: a saved round banks into a strong "reload" buy — the comeback beat
+// that keeps the economy from simply steepening the snowball.
+function nextBuy(prev,won,pressure){
+  if(won)return 'full';
+  if(prev==='eco')return 'reload';    // banked the save into a fully-kitted buy vs an opponent who just spent
+  if(prev==='reload'||prev==='force')return 'eco'; // the strong buy / force didn't land — save again
+  return (pressure&&rnd()<0.4)?'force':'eco'; // broken off a full buy: usually save, but may force under the gun
+}
+// ---- territory: the ember no longer roams at random — it's steered toward a team's comfort zones ----
+function nextZone(prevZone,winT,loseT){
+  if(rnd()<0.18)return prevZone;                 // a contested chokepoint: the ember stays put
+  const steer=rnd()<0.55?winT:loseT;             // the winner presses map control, else the loser counter-picks
+  const L=lineup(steer),rates=ZONES.map(z=>{let s=0;for(const p of L)s+=zoneSkill(p,z);return s/L.length;});
+  const mean=rates.reduce((s,x)=>s+x,0)/rates.length||1;
+  let i=0;return pickW(ZONES,()=>Math.pow(rates[i]/mean,6)*eraZoneMult(ZONES[i++].name)); // lean toward the steerer's strong ground, tilted by the era's zone
+}
 
 // A round, played as duels: an opening pick, then man-advantage trades, then an objective close or a clutch hold.
 function simRound(a,b,opts){
   opts=opts||{};const stage=opts.stage||0;const mom=opts.mom||{a:1,b:1};
-  const z=pick(ZONES);
+  const z=opts.zone||pickZone();
+  const buy=opts.buy||{a:'full',b:'full'};const ecoA=BUYMULT[buy.a]||1,ecoB=BUYMULT[buy.b]||1; // a thin buy drags the whole round
   const A=lineup(a),B=lineup(b);
   const box={};A.concat(B).forEach(p=>box[p.id]=newRoundBox());
   const side={};A.forEach(p=>side[p.id]='a');B.forEach(p=>side[p.id]='b');
   const loadA=a._load||0,loadB=b._load||0; // tournament fatigue is felt per player, scaled by his stamina
-  const rate=p=>zoneSkill(p,z)*formMult(p)*confMult(p)*staminaFatigue(p,side[p.id]==='a'?loadA:loadB);
+  const rate=p=>zoneSkill(p,z)*formMult(p)*confMult(p)*staminaFatigue(p,side[p.id]==='a'?loadA:loadB)*(side[p.id]==='a'?ecoA:ecoB);
   const fragW=p=>Math.max(0.2,rate(p)*(0.7+0.6*rnd()));
   const tchem=t=>(0.78+0.46*t.chem)*coachMult(t);
   // opening duel — the entry/star players contest the ember first
@@ -660,17 +693,20 @@ function simRound(a,b,opts){
     const impact=(e.k-e.d)+(e.clutch?2:0)+e.open*0.6+e.trade*0.3-(e.fd?0.5:0)+(won?0.3:-0.3);
     let sw=0.03*(1.25-poise(p));if(hasTrait(p,'hothead'))sw*=1.6;if(hasTrait(p,'clutch'))sw*=0.6;
     p._conf=clamp((p._conf||0)+impact*sw,-1,1);p._cl=0;});
-  return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star};
+  return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star,buy};
 }
 function simMap(a,b,ctx,opts){
   opts=opts||{};const stage=opts.stage||0;
   initMapForm(a,b);
   let sa=0,sb=0,stA=0,stB=0;const perf={},mbox={};const vigils=[];let lastZone="the Aisle";
+  let zone=pickZone();const buy={a:'full',b:'full'};
   const roster=lineup(a).concat(lineup(b));
   roster.forEach(p=>mbox[p.id]=blankBox());
   while(!mapDone(sa,sb)){
-    const r=simRound(a,b,{stage,mom:momFromStreak(stA,stB,sa,sb)});lastZone=r.zone;
+    const r=simRound(a,b,{stage,mom:momFromStreak(stA,stB,sa,sb),zone,buy});lastZone=r.zone;
     if(r.winA){sa++;stA++;stB=0;}else{sb++;stB++;stA=0;}
+    buy.a=nextBuy(buy.a,r.winA,sb>=13||stB>=3);buy.b=nextBuy(buy.b,!r.winA,sa>=13||stA>=3);
+    zone=nextZone(zone,r.winA?a:b,r.winA?b:a);
     for(const id in r.grav)(perf[id]=perf[id]||[]).push(r.grav[id]);
     roster.forEach(p=>{const e=r.box[p.id];if(e){addBox(mbox[p.id],e);accStat(p,e);}});
     if(r.vigil)vigils.push(r.vigil);
@@ -873,9 +909,12 @@ function nm(p){return `<span class="nm">${p.first} "<span class="tg">${p.tag}</s
 function traitPills(p){if(!p.traits||!p.traits.length)return '';
   return `<div class="traits">${p.traits.map(t=>{const d=TRAITS[t];return d?`<span class="trait" style="border-color:${d.col};color:${d.col}" title="${esc(d.blurb)}">${esc(d.name)}</span>`:'';}).join('')}</div>`;}
 function relLine(p){const bits=[];
-  const d=duoOf(p.id);if(d){const pa=anyPlayerById(duoPartnerId(p.id));if(pa)bits.push(`<span class="cp-l">Core duo</span> with <span class="tg">${esc(pa.tag)}</span>${d.split?' <span class="faint">(split up)</span>':''}${d.majors>1?` <span class="faint">· ${d.majors} Majors together</span>`:''}`);}
+  const d=duoOf(p.id);if(d){const pa=anyPlayerById(duoPartnerId(p.id));if(pa)bits.push(`<span class="cp-l">Core duo</span> with <span class="tg">${esc(pa.tag)}</span>${d.sour?' <span class="faint">(soured)</span>':d.split?' <span class="faint">(split up)</span>':''}${d.majors>1?` <span class="faint">· ${d.majors} Majors together</span>`:''}`);}
+  if(p.wantsOut&&!p.retired)bits.push(`<span class="cp-l" style="color:var(--ember)">Wants out</span> <span class="faint">handed in a transfer request</span>`);
   if(p.mentorId!=null){const m=anyPlayerById(p.mentorId);if(m)bits.push(`<span class="cp-l">Mentored by</span> <span class="tg">${esc(m.tag)}</span>`);}
   if(p.proteges&&p.proteges.length){const ns=p.proteges.map(id=>anyPlayerById(id)).filter(Boolean).slice(0,3).map(x=>`<span class="tg">${esc(x.tag)}</span>`);if(ns.length)bits.push(`<span class="cp-l">Mentor to</span> ${ns.join(', ')}`);}
+  if(p.debutEra)bits.push(`<span class="cp-l">Came up in</span> <span class="faint">${esc(p.debutEra)}</span>`);
+  if(!p.retired&&world.era&&world.era.kind==='role')bits.push(world.era.key===p.role?`<span class="cp-l" style="color:var(--gravl)">The meta favors him</span>`:`<span class="cp-l faint">Out of his era</span>`);
   let arc='';
   if(p.traitLog&&p.traitLog.length){const a=p.traitLog[p.traitLog.length-1];arc=`<div class="career-path" style="margin-top:6px"><span class="cp-l">Arc</span> <span class="faint">S${a.season}</span> ${esc(a.text)}</div>`;}
   return (bits.length?`<div class="career-path" style="margin-top:6px">${bits.join(' <span class="cp-arr">·</span> ')}</div>`:'')+arc;}
@@ -975,11 +1014,15 @@ function duoBeat(kind,d,a,b,team){
     timelinePush({kind:'dynasty',icon:'⚭',short:team?team.short:'—',title:`${a.tag} & ${b.tag}: ${d.majors} together`,text:`${pfull(a)} and ${pfull(b)} take a ${d.majors}th Major as a duo — a partnership the Yard will remember.`});}
   else if(kind==='split')feedPush('note','A partnership splits',`${nm(a)} and ${nm(b)} are split up — the core duo broken after ${world.season-d.since} season${world.season-d.since!==1?'s':''}. Neither is ever quite the same apart.`);
   else if(kind==='reunite')feedPush('note','The band, back together',`${nm(a)} and ${nm(b)} reunite${team?` at ${esc(team.name)}`:''} — the old duo rides again.`);
+  else if(kind==='fallout')feedPush('note','Split, and not on good terms',`${nm(a)} and ${nm(b)} go their separate ways — and after the way it soured, this one's personal. A partnership ends as a grudge.`);
   else if(kind==='end')feedPush('note','The end of a partnership',`The ${a.tag}–${b.tag} duo comes to a close — ${d.majors} Major${d.majors!==1?'s':''} together, now part of the history.`);
 }
 function formDuo(t,winLine){
   for(const d of world.duos){const a=anyPlayerById(d.a),b=anyPlayerById(d.b); // strengthen an intact duo on this team
-    if(a&&b&&winLine.indexOf(a)>=0&&winLine.indexOf(b)>=0){d.majors=(d.majors||0)+1;if(d.majors===2||d.majors===4)duoBeat('milestone',d,a,b,t);return;}}
+    if(a&&b&&winLine.indexOf(a)>=0&&winLine.indexOf(b)>=0){d.majors=(d.majors||0)+1;d.strain=0;
+      if(d.sour){d.sour=null;a.unrest=clamp((a.unrest||0)-0.4,0,1);b.unrest=clamp((b.unrest||0)-0.4,0,1);
+        feedPush('note','Reconciled in the winning',`${nm(a)} and ${nm(b)} were barely speaking — then they won one together. Nothing patches a rift like a cairn. The duo is whole again.`);}
+      else if(d.majors===2||d.majors===4)duoBeat('milestone',d,a,b,t);return;}}
   const elig=winLine.filter(p=>(p.tenure||0)>=2&&!duoOf(p.id)); // else forge a new core from the best long-tenured pair
   if(elig.length<2)return;elig.sort((a,b)=>skillIndex(b)-skillIndex(a));
   if(rnd()<0.7){world.duos.push({a:elig[0].id,b:elig[1].id,since:world.season,majors:1,split:null});duoBeat('forge',null,elig[0],elig[1],t);}
@@ -989,9 +1032,65 @@ function maintainDuos(){
     const a=anyPlayerById(d.a),b=anyPlayerById(d.b);
     if(!a||!b||a.retired||b.retired){if(a&&b)duoBeat('end',d,a,b);return false;}
     const ta=findHolderTeam(a),tb=findHolderTeam(b);
-    if(ta&&tb&&ta===tb){if(d.split){d.split=null;duoBeat('reunite',d,a,b,ta);}}
-    else if(!d.split){d.split=world.season;a.slump=Math.max(a.slump||0,2);b.slump=Math.max(b.slump||0,2);duoBeat('split',d,a,b);}
+    if(ta&&tb&&ta===tb){if(d.split){d.split=null;duoBeat('reunite',d,a,b,ta);}
+      // the slow fade: a long partnership at a club that's stopped winning can drift apart
+      else if(!d.sour&&(world.season-(d.since||world.season))>=5&&!wonMajorRecently(ta,3)&&((a.unrest||0)>0.4||(b.unrest||0)>0.4||rnd()<0.08))sourDuo(d,a,b);}
+    else if(!d.split){d.split=world.season;a.slump=Math.max(a.slump||0,2);b.slump=Math.max(b.slump||0,2);
+      if(d.sour){regFalloutRivalry(a,b,d);duoBeat('fallout',d,a,b);}else duoBeat('split',d,a,b);}
     return true;});
+}
+// ---- locker-room friction: souring duos, transfer requests, fallout rivalries ----
+function wonMajorThisSeason(t){return (world.majorChamps||[]).some(c=>c.season===world.season&&c.team===t.short);}
+function wonMajorRecently(t,n){return (world.majorChamps||[]).some(c=>c.team===t.short&&c.season>world.season-n);}
+// a soured duo that ends up on opposite teams becomes a grudge — the bitterest rivalries start as friendships
+function regFalloutRivalry(a,b,d){
+  const key=[a.id,b.id].sort().join('-');
+  const r=world.rivalries[key]||(world.rivalries[key]={a,b,count:0,name:rivName(a,b)});
+  r.fallout=true;r.count=Math.max(r.count,1);r.last=world.season;
+  feedPush('note','From partners to rivals',`${nm(a)} and ${nm(b)} built ${d.majors?`${d.majors} Major${d.majors>1?'s':''} and `:''}a partnership — now they line up on opposite sides, and there's history between them.`);
+  timelinePush({kind:'rivalry',icon:'⚔',short:'—',title:`${a.tag} & ${b.tag}: partners to rivals`,text:`What was ${d.majors?`a ${d.majors}-Major `:'a celebrated '}partnership becomes a grudge — ${pfull(a)} and ${pfull(b)} now meet as enemies.`});
+}
+function sourDuo(d,a,b){
+  if(d.sour)return;d.sour=world.season;d.strain=0;
+  const t=findHolderTeam(a),same=t&&t===findHolderTeam(b);
+  if(same&&t.chem!=null)t.chem=clamp(t.chem-0.08,0.42,0.92); // the room goes cold
+  a.unrest=clamp((a.unrest||0)+0.3,0,1);b.unrest=clamp((b.unrest||0)+0.3,0,1);
+  a.slump=Math.max(a.slump||0,1);b.slump=Math.max(b.slump||0,1);
+  feedPush('note','A partnership sours',`${nm(a)} and ${nm(b)} — ${same?`${esc(t.name)}'s `:''}core duo — are barely speaking after ${d.majors?`${d.majors} Major${d.majors>1?'s':''} together but `:''}another season slips away empty. The room can feel the frost.`);
+  timelinePush({kind:'rivalry',icon:'✕',short:t?t.short:'—',title:`${a.tag} & ${b.tag} fracture`,text:`The ${a.tag}–${b.tag} partnership sours${d.majors?` — ${d.majors} Major${d.majors>1?'s':''} as a duo,`:''} now a rift in the room.`});
+}
+// both halves of a duo lost a final together — strain builds, and enough of it without a title sours them
+function strainDuoOnLoss(run){
+  const ll=lineup(run);
+  (world.duos||[]).forEach(d=>{if(d.sour||d.split)return;const a=anyPlayerById(d.a),b=anyPlayerById(d.b);
+    if(a&&b&&ll.indexOf(a)>=0&&ll.indexOf(b)>=0){d.strain=(d.strain||0)+1;if(d.strain>=2&&rnd()<0.5)sourDuo(d,a,b);}});
+}
+// Per-season morale: ambition on a club going nowhere, insecurity as the cut-risk man, a title cures all.
+// A composed coach defuses; a volatile one lets it fester. High unrest becomes a public transfer request.
+function updateMorale(){
+  world.teams.forEach(t=>{const c=contracted(t);if(!c.length)return;
+    const won=wonMajorThisSeason(t),coachComp=t.coach?t.coach.composure:75;
+    const weakest=c.slice().sort((x,y)=>skillIndex(x)-skillIndex(y))[0],strongTeam=rosterStrength(t)>=66;
+    c.forEach(p=>{
+      if(p.bb||p.pinned){p.unrest=0;p.wantsOut=null;return;}
+      let d=0;
+      if(skillIndex(p)>=70&&(p.titles||0)===0&&(t.majors||0)===0&&p.age>=24)d+=0.16;      // ambition
+      if(p===weakest&&strongTeam&&(skillIndex(p)<60||p.age>=29))d+=0.12;                   // insecurity
+      if(hasTrait(p,'mercenary'))d+=0.14;
+      if(hasTrait(p,'hothead'))d*=1.4;                                                      // volatility amplifies
+      d-=0.06;                                                                              // unrest fades by default
+      if(won)d-=0.7;                                                                        // a title cures the room
+      if(hasTrait(p,'loyal'))d-=0.12;
+      d-=(coachComp-72)/500;                                                                // composure defuses
+      p.unrest=clamp((p.unrest||0)+d,0,1);
+      if(p.unrest>=0.6&&!p.wantsOut&&!hasTrait(p,'loyal')&&p.age<=31&&rnd()<0.55){
+        p.wantsOut=world.season;
+        const why=skillIndex(p)>=70&&(t.majors||0)===0?`wants to compete for titles ${esc(t.name)} can't reach`:`has fallen out with the room at ${esc(t.name)}`;
+        feedPush('note','A transfer request',`${nm(p)} ${why} — and asks to be moved. ${t.short} have a call to make.`);
+        txn('drop',`${nm(p)} (${t.short}) hands in a transfer request.`);
+      }
+    });
+  });
 }
 function grudgeBeat(name,champ,run){
   const g=lineup(champ).find(p=>(p.formerTeams||[]).includes(run.short));
@@ -1115,6 +1214,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
   recordMajorPerfs(name,champ,run,F);
   recordMajorTimeline(name,champ,run,F,{priorStreak,starC,champStarBreakthrough:data.champStarBreakthrough});
   evolveTraitsFromFinal(champ,run,F,false);
+  strainDuoOnLoss(run);
   return data;
 }
 // The World Championship: the season finale, above any Major. Its winner is the season's World Champion,
@@ -1148,6 +1248,7 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
     text:`${champ.name} win the ${name}, def. ${run.name} ${F.scoreStr} — the season's world title and the highest honor on the Yard.`});
   recordMajorPerfs(name,champ,run,F);
   evolveTraitsFromFinal(champ,run,F,true);
+  strainDuoOnLoss(run);
   sc.box=finalBoxSnapshot(champ,run,F.box); // box of the season decider
   return data;
 }
@@ -1255,12 +1356,27 @@ function buildSeasonCal(s){
 }
 function seasonOutline(cal){const all=[].concat(...cal);const c=t=>all.filter(x=>x===t).length;
   return {majors:c('SP'),wc:c('WC'),feeders:all.length-c('SP')-c('WC')};}
+// The meta turns every 5–8 seasons once the sport has found its feet. A new era tilts the Gravity
+// toward a role or pulls the ember toward a zone — careers come to intersect the eras they were played in.
+function maybeRollEra(){const e=world.era;if(world.season<4)return;if(e&&world.season-e.since<(e.length||6))return;rollEra();}
+function rollEra(){
+  const prev=world.era;
+  if(prev)(world.eraLog=world.eraLog||[]).push({name:prev.name,kind:prev.kind,key:prev.key,from:prev.since,to:world.season});
+  const kind=rnd()<0.6?'role':'zone';let key,name,blurb;
+  if(kind==='role'){const opt=ROLES.filter(r=>!(prev&&prev.kind==='role'&&prev.key===r));key=pick(opt);name=ROLE_ERA[key].name;blurb=ROLE_ERA[key].blurb;}
+  else{const opt=ZONES.filter(z=>!(prev&&prev.kind==='zone'&&prev.key===z.name));const z=pick(opt);key=z.name;name=`The ${z.name.replace(/^the /i,'')} Era`;blurb=`more and more the ember is decided in ${z.name} — ${zoneTrait(z)}`;}
+  world.era={kind,key,name,blurb,since:world.season,length:5+Math.floor(rnd()*4)};
+  const cap=blurb.charAt(0).toUpperCase()+blurb.slice(1);
+  feedPush('note','The meta shifts',`A new era on the Yard: <b>${esc(name)}</b>. ${cap}.`);
+  timelinePush({kind:'era',icon:'◷',short:'—',title:name,text:`The circuit's meta turns — ${blurb}. ${prev?`The ${prev.name} gives way after ${world.season-prev.since} season${world.season-prev.since!==1?'s':''}.`:`The sport's first defining era.`}`});
+}
 function startSeason(){
   world.tick=0;world.seasonCal=buildSeasonCal(world.season);world.thisSeasonEvents=[];world.pendingMajors=[];
   world.buzz={};world._buzzSeason=world.season; // the rising-star race restarts each season
   world.teams.forEach(t=>t.players.forEach(p=>{p._gravMark=p.gravs.length;}));
   if(world.season>=2&&!world.bbReturned)bbReturn(); // the founders come home in S2
-  world.teams.forEach(t=>lineup(t).forEach(p=>{p.games++;})); // a season of experience
+  maybeRollEra(); // the sport's meta may turn this season
+  world.teams.forEach(t=>lineup(t).forEach(p=>{p.games++;if(p.debutEra==null&&world.era)p.debutEra=world.era.name;})); // a season of experience; stamp the era they came up in
   const o=seasonOutline(world.seasonCal);
   feedPush('note',`Season ${world.season} opens`,`Four stages on the circuit: ${o.feeders} feeder events, ${o.majors} Major${o.majors!==1?'s':''}${o.wc?', and the World Championship finale':''}. <b>Circuit Points reset — everyone starts level.</b> Climb the table to qualify for the premier events.`);
   if(world.season===WC_START)feedPush('note','A world title is born',`The circuit has grown up. From this season on, a season-ending <b>World Championship</b> crowns a single world champion — the highest honor in Cairn.`);
@@ -1348,7 +1464,7 @@ function leaveDesk(p){p.onDesk=false;world.casters=(world.casters||[]).filter(c=
   feedPush('note','Off the desk',`${nm(p)} steps away from the broadcast desk.`);}
 function toFA(p){p.faAge=0;p.standinFor=null;world.freeAgents.push(p);}
 function joinTeam(p,t){const had=t.players.includes(p);if(!had)t.players.push(p);const h=p.history=p.history||[];
-  const moved=!h.length||h[h.length-1].short!==t.short;if(moved){h.push({short:t.short,name:t.name,season:world.season});p.tenure=0;}
+  const moved=!h.length||h[h.length-1].short!==t.short;if(moved){h.push({short:t.short,name:t.name,season:world.season});p.tenure=0;p.unrest=0;p.wantsOut=null;} // a fresh start clears the air
   // A new face costs cohesion — bringing in a star costs more. It rebuilds slowly (regresses toward the mean each
   // season), so a club that buys its way to a super-team pays for it in chemistry and can't simply hoard its way to a dynasty.
   if(!had&&t.chem!=null)t.chem=clamp(t.chem-(skillIndex(p)>=72?0.07:0.035),0.42,0.92);}
@@ -1422,7 +1538,8 @@ function poach(){
       if(hasTrait(p,'loyal')&&rnd()<0.8)return;          // franchise players rarely move
       if(atCap&&skillIndex(p)>=ELITE)return;
       const merc=hasTrait(p,'mercenary');const reunite=duoPartnerOn(p,buyer); // getting the band back together
-      const gapNeed=merc||reunite?2:6;const pri=skillIndex(p)+(merc?6:0)+(reunite?16:0);
+      const wo=!!p.wantsOut; // an unhappy player is gettable, and cheap
+      const gapNeed=merc||reunite||wo?2:6;const pri=skillIndex(p)+(merc?6:0)+(reunite?16:0)+(wo?10:0);
       if(skillIndex(p)>skillIndex(weak)+gapNeed&&pri>bestPri){target=p;seller=t;bestPri=pri;}});});
     if(!target)continue;
     buyer.players=buyer.players.filter(p=>p!==weak);toFA(weak);
@@ -1458,6 +1575,11 @@ function disbandCheck(){
 function transactionWindow(){
   world.teams.filter(t=>t._disbandSoon).forEach(t=>{t._disbandSoon=false;disbandTeam(t,'champ');});
   if(rnd()<0.7)poach();
+  // grant a lingering request — a player who's wanted out for a season and nobody pried loose gets cut loose
+  world.teams.filter(t=>t.div===1).forEach(t=>{const wo=contracted(t).find(p=>p.wantsOut&&!p.pinned&&!p.bb&&(world.season-p.wantsOut)>=1);
+    if(wo&&contracted(t).length>5||wo&&rnd()<0.35){t.players=t.players.filter(p=>p!==wo);toFA(wo);wo.unrest=0;wo.wantsOut=null;
+      txn('drop',`${t.short} grant ${nm(wo)}'s request and release him to free agency.`);
+      feedPush('small','Request granted',`${esc(t.name)} let ${nm(wo)} <span class="role">${wo.role}</span> leave — to free agency, where he wanted to be.`);}});
   world.teams.filter(t=>t.div===1).forEach(t=>{if(rnd()<0.10){const c=contracted(t);if(c.length<5)return;const star=starOf(t);
     const cand=c.filter(p=>p!==star&&!p.injured&&!p.bb&&!p.pinned&&!hasTrait(p,'loyal')).sort((a,b)=>skillIndex(a)-skillIndex(b))[0];
     if(cand&&(skillIndex(cand)<58||cand.age>=29)){t.players=t.players.filter(p=>p!==cand);
@@ -1518,11 +1640,19 @@ function advanceCareers(){
   // release last season's stand-ins, recover injuries
   world.teams.forEach(t=>{(t.standins||[]).forEach(s=>{s.standinFor=null;world.freeAgents.push(s);});t.standins=[];
     t.players.forEach(p=>{if(p.injured){p.injured--;if(p.injured<=0){p.injured=0;txn('return',`${nm(p)} returns to ${t.short} from injury.`);}}});});
+  updateMorale(); // resolve last season's locker-room state before the offseason settles
   // age + develop + retire (Circuit Points reset separately at season rollover, they don't decay here)
   world.teams.forEach(t=>{
     const mentorP=contracted(t).find(p=>hasTrait(p,'mentor'));const ment=!!mentorP; // a mentor steadies and grows the squad
     if(bbFoundersComplete(t))t.chem=0.99; // the five founders intact — chemistry stays maxed, no regression
-    else if(t.chem!=null)t.chem=clamp((0.74+(ment?0.04:0))+(t.chem-0.74)*0.80,0.42,0.92);
+    else if(t.chem!=null){ // chemistry regresses toward a baseline that friction and an unhappy room drag down
+      const coachComp=t.coach?t.coach.composure:75,c=contracted(t);
+      const volatile=c.some(p=>hasTrait(p,'hothead')||hasTrait(p,'headcase'));
+      const friction=(volatile&&coachComp<72)?clamp((72-coachComp)/240,0,0.06):0; // a hot head + a coach who can't hold the room
+      const drag=clamp((c.reduce((s,p)=>s+(p.unrest||0),0)/Math.max(1,c.length))*0.10,0,0.07);
+      const target=0.74+(ment?0.04:0)-friction-drag;
+      t.chem=clamp(target+(t.chem-target)*0.80,0.42,0.92);
+    }
     t.players.forEach(p=>{if(p.retired)return;p.age++;p.tenure=(p.tenure||0)+1;if(p.slump>0)p.slump--;developPlayer(p,ment&&!hasTrait(p,'mentor'));
       if(mentorP&&p!==mentorP&&p.mentorId==null&&p.age<=21&&(p.tenure||0)>=1){p.mentorId=mentorP.id;(mentorP.proteges=mentorP.proteges||[]).push(p.id);} // a lineage begins
       const retAge=hasTrait(p,'ironman')?33:31;
@@ -1719,6 +1849,7 @@ function renderStory(){const el=$("p-story");
   let h="";
   // The desk talking about itself — this season's power rankings and the names catching eyes
   if(world.started){
+    if(world.era)h+=`<div class="story-card"><div class="lede">The Meta · current era</div><h4 style="margin:2px 0 4px">◷ ${esc(world.era.name)}</h4><p>${esc(world.era.blurb.charAt(0).toUpperCase()+world.era.blurb.slice(1))}. <span class="faint">Since S${world.era.since} — ${world.season-world.era.since} season${world.season-world.era.since!==1?'s':''} and counting.</span></p></div>`;
     const pr=[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a)).slice(0,10);
     h+=`<div class="story-card"><div class="lede">Power Rankings · Season ${world.season}${world.tick?` · stage ${world.tick}`:''}</div>`;
     h+=pr.map((t,i)=>{const prev=(world.prevRanks||{})[t.short],mv=prev?prev-(i+1):0;
@@ -1751,8 +1882,17 @@ function renderStory(){const el=$("p-story");
   h+=trivs.length?trivs.slice(0,8).map(r=>{const aw=r.wins[r.a]||0,bw=r.wins[r.b]||0;return `<div class="row2"><span>${esc(teamNameByShort(r.a))} <span class="faint">v</span> ${esc(teamNameByShort(r.b))} <span class="faint">(${aw}–${bw})</span></span><span class="ct">${roman(r.count)}</span></div>`;}).join(""):`<p>No team has met another twice with a title on the line yet.</p>`;
   h+=`</div>`;
   h+=`<div class="story-card"><div class="lede">Rivalries · Players</div>`;
-  h+=rivs.length?rivs.slice(0,8).map(r=>`<div class="row2"><span>${r.name}</span><span class="ct">${roman(r.count)}</span></div>`).join(""):`<p>No repeat title clashes between stars yet.</p>`;
+  h+=rivs.length?rivs.slice(0,8).map(r=>`<div class="row2"><span>${r.name}${r.fallout?' <span class="unmarked">former partners</span>':''}</span><span class="ct">${roman(r.count)}</span></div>`).join(""):`<p>No repeat title clashes between stars yet.</p>`;
   h+=`</div>`;
+  // Locker Room — the social friction the rosters are carrying right now
+  const requests=allPlayers().map(x=>x.p).filter(p=>p.wantsOut&&!p.retired).sort((a,b)=>(b.unrest||0)-(a.unrest||0));
+  const soured=(world.duos||[]).map(d=>({d,a:anyPlayerById(d.a),b:anyPlayerById(d.b)})).filter(x=>x.a&&x.b&&x.d.sour).sort((x,y)=>y.d.sour-x.d.sour);
+  if(requests.length||soured.length){
+    h+=`<div class="story-card"><div class="lede">Locker Room · friction</div>`;
+    if(requests.length)h+=requests.slice(0,6).map(p=>{const t=teamOf(p);return `<div class="row2 tap" data-tpid="${p.id}"><span>${nm(p)} <span class="faint">· ${t?esc(t.short):'—'}</span> <span class="unmarked">wants out</span></span><span class="ct">unrest ${Math.round((p.unrest||0)*100)}</span></div>`;}).join('');
+    if(soured.length)h+=soured.slice(0,5).map(({d,a,b})=>{const split=findHolderTeam(a)!==findHolderTeam(b);return `<div class="row2"><span>${nm(a)} <span class="cp-arr">✕</span> ${nm(b)} <span class="faint">${split?'(split, bad blood)':'(soured, still together)'}</span></span><span class="ct">${d.majors||0}▲</span></div>`;}).join('');
+    h+=`</div>`;
+  }
   h+=`<div class="story-card"><div class="lede">The Touchline · Coaches</div>`;
   const coaches=world.teams.map(t=>({t,c:t.coach})).sort((a,b)=>(b.c.former-a.c.former)||(b.c.prep-a.c.prep));
   h+=coaches.slice(0,9).map(({t,c})=>`<div class="row2"><span>${esc(coachName(c))} <span class="faint">· ${t.short}</span>${c.former?' <span class="good">◇ ex-player</span>':''}</span><span class="ct">prep ${Math.round(c.prep)}</span></div>`).join("");
@@ -1769,7 +1909,7 @@ function renderStory(){const el=$("p-story");
   // Core duos — the partnerships the rosters are built around
   const duos=(world.duos||[]).map(d=>({d,a:anyPlayerById(d.a),b:anyPlayerById(d.b)})).filter(x=>x.a&&x.b).sort((x,y)=>(y.d.majors||0)-(x.d.majors||0));
   h+=`<div class="story-card"><div class="lede">Partnerships · core duos</div>`;
-  h+=duos.length?duos.slice(0,8).map(({d,a,b})=>`<div class="row2"><span>${nm(a)} <span class="cp-arr">&</span> ${nm(b)}${d.split?' <span class="faint">(split)</span>':''}</span><span class="ct">${d.majors||0}▲ together</span></div>`).join(''):`<p>No core duos forged yet — they form when a pair wins a Major after years together.</p>`;
+  h+=duos.length?duos.slice(0,8).map(({d,a,b})=>`<div class="row2"><span>${nm(a)} <span class="cp-arr">&</span> ${nm(b)}${d.sour?' <span class="faint">(soured)</span>':d.split?' <span class="faint">(split)</span>':''}</span><span class="ct">${d.majors||0}▲ together</span></div>`).join(''):`<p>No core duos forged yet — they form when a pair wins a Major after years together.</p>`;
   h+=`</div>`;
   h+=`<div class="story-card"><div class="lede">The Marked — Major champions</div>`;
   h+=marked.length?marked.map(([t,n])=>`<div class="row2"><span>${esc(teamNameByShort(t))} <span class="role">${esc(t)}</span></span><span class="ct">${n} Major${n>1?"s":""}</span></div>`).join(""):`<p>No Major has been won yet.</p>`;
@@ -1900,10 +2040,18 @@ function chokesHtml(){
     `<div class="lede" style="margin:4px 0 6px">Team chokes</div>${annalList(team,'No team chokes yet — nobody has blown a big one.','chokeT')}`+
     `<div class="lede" style="margin:16px 0 6px">Individual chokes</div>${annalList(ind,'No individual chokes yet.','chokeI')}`;
 }
+function erasHtml(){
+  if(!world.era&&!(world.eraLog&&world.eraLog.length))return '';
+  const past=(world.eraLog||[]).slice().reverse();
+  let h=`<div class="story-card" style="margin-bottom:14px"><div class="lede">The Eras · how the sport has played</div>`;
+  if(world.era)h+=`<div class="row2"><span>◷ <b>${esc(world.era.name)}</b> <span class="faint">· ${esc(world.era.blurb)}</span></span><span class="ct" style="color:var(--gravl)">S${world.era.since}–now</span></div>`;
+  h+=past.map(e=>`<div class="row2"><span class="faint">◷ ${esc(e.name)}</span><span class="ct faint">S${e.from}–${e.to}</span></div>`).join('');
+  return h+`</div>`;
+}
 function timelineHtml(){
   const tl=world.timeline||[];
-  if(!tl.length)return `<p class="faint">No milestones yet — the timeline fills as teams win first Majors, break finals droughts, go back-to-back, and finally beat the rival that kept beating them.</p>`;
-  return `<p class="hint">Significant events, newest first — the moments the sport remembers, written as they happen and kept for all time.</p><div class="tline">`+
+  if(!tl.length)return erasHtml()+`<p class="faint">No milestones yet — the timeline fills as teams win first Majors, break finals droughts, go back-to-back, and finally beat the rival that kept beating them.</p>`;
+  return erasHtml()+`<p class="hint">Significant events, newest first — the moments the sport remembers, written as they happen and kept for all time.</p><div class="tline">`+
     [...tl].reverse().map(e=>`<div class="tl-row tl-${esc(e.kind)}"><div class="tl-when"><span class="tl-ic">${e.icon||'•'}</span><span class="tl-s">S${e.season}</span><span class="tl-s">${e.year||''}</span></div><div class="tl-b"><div class="tl-t">${esc(e.title)}</div><div class="tl-x">${esc(e.text)}</div></div></div>`).join('')+
     `</div>`;}
 function perfTable(top,ctxCol,viewKey){
@@ -2150,18 +2298,26 @@ function playoffPreLine(a,b,L){const bits=[];
   if(sa&&sa.titles===0&&careerGrav(sa)>=1.15)bits.push(`${sa.tag} chasing a first title`);
   else if(sb&&sb.titles===0&&careerGrav(sb)>=1.15)bits.push(`${sb.tag} chasing a first title`);
   return bits.length?bits[0]+'.':'';}
-function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box};}
+function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box,zone:pickZone(),buy:{a:'full',b:'full'}};}
 function roundLine(r,m,mp){
   const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
-  if(r.vigil)return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ${r.vigil.name} stands alone, 1v${r.vigil.x} at ${r.vigil.zone}, and it's theirs.`;
+  const wb=r.buy?r.buy[r.winA?'a':'b']:'full',lb=r.buy?r.buy[r.winA?'b':'a']:'full';
+  const wsc=r.winA?mp.sa:mp.sb,lsc=r.winA?mp.sb:mp.sa,behind=wsc<=lsc; // winner trailing/tied before this round
+  // only surface economy when it's dramatic: a trailing side stealing on a save, a reload answering, or a force that died
+  const econ=(wb==='eco'&&behind)?` — ${w.short} steal one on the save, and from behind!`
+    :(wb==='reload'&&behind)?` — ${w.short} reload, and answer.`
+    :(lb==='force')?` — ${(r.winA?m.b:m.a).short}'s force comes up empty.`:'';
+  if(r.vigil)return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ${r.vigil.name} stands alone, 1v${r.vigil.x} at ${r.vigil.zone}, and it's theirs.${econ}`;
   const s=r.star,e=s?r.box[s.id]:null;const tail=e&&e.k>=2?`${s.tag} ${e.k}-for`:(s?`${s.tag} on point`:'');
   const v=r.winA?pick(["break the hold","crack it open","take the contest","force the ember"]):pick(["hold the line","deny the break","smother the push","win the stand"]);
-  return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ember in ${r.zone}; ${w.short} ${v}${tail?`, ${tail}`:''}.`;
+  return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ember in ${r.zone}; ${w.short} ${v}${tail?`, ${tail}`:''}.${econ}`;
 }
 function stepRound(){
   const L=world.live,m=L.match,mp=m.map;
-  const r=simRound(m.a,m.b,{stage:L.stage==='f'?1:0,mom:momFromStreak(mp.stA||0,mp.stB||0,mp.sa,mp.sb)});
+  const r=simRound(m.a,m.b,{stage:L.stage==='f'?1:0,mom:momFromStreak(mp.stA||0,mp.stB||0,mp.sa,mp.sb),zone:mp.zone,buy:mp.buy});
   mp.lastZone=r.zone;if(r.winA){mp.sa++;mp.stA=(mp.stA||0)+1;mp.stB=0;}else{mp.sb++;mp.stB=(mp.stB||0)+1;mp.stA=0;}mp.round++;
+  mp.buy.a=nextBuy(mp.buy.a,r.winA,mp.sb>=13||mp.stB>=3);mp.buy.b=nextBuy(mp.buy.b,!r.winA,mp.sa>=13||mp.stA>=3);
+  mp.zone=nextZone(mp.zone,r.winA?m.a:m.b,r.winA?m.b:m.a);
   for(const id in r.grav)(m.perf[id]=m.perf[id]||[]).push(r.grav[id]);
   for(const id in r.grav)(mp.perf[id]=mp.perf[id]||[]).push(r.grav[id]);
   lineup(m.a).concat(lineup(m.b)).forEach(p=>{const e=r.box[p.id];if(!e)return;
