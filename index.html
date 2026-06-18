@@ -703,22 +703,30 @@ function fieldFor(tier){
 }
 // 16-team Swiss group stage: pair on equal records, 3 wins advance to the playoff bracket, 3 losses out.
 // High-stakes matches (a side at 2 wins or 2 losses) are best-of-3; the rest best-of-1.
+function swissPairings(active,rec){
+  const groups={};active.forEach(t=>{const r=rec.get(t);(groups[r.w+'-'+r.l]=groups[r.w+'-'+r.l]||[]).push(t);});
+  const pairs=[];
+  Object.keys(groups).forEach(k=>{const g=groups[k].slice().sort((a,b)=>rec.get(a).seed-rec.get(b).seed);
+    while(g.length>=2)pairs.push([g.shift(),g.pop()]);}); // top seed vs bottom seed within the record group
+  return pairs;
+}
+function swissStakes(x,y,rec){const rx=rec.get(x),ry=rec.get(y);return Math.max(rx.w,rx.l,ry.w,ry.l)>=2;}
+function swissResolveMatch(x,y,rec,ctx){
+  const s=simSeries(x,y,swissStakes(x,y,rec)?2:1,ctx?Object.assign({},ctx,{round:'Swiss'}):null);
+  rec.get(s.winner).w++;rec.get(s.loser).l++;return s;
+}
+function swissSeed(advanced,eliminated,rec){
+  advanced.sort((a,b)=>rec.get(a).l-rec.get(b).l||b.gravl-a.gravl); // seed playoffs by Swiss record
+  eliminated.sort((a,b)=>rec.get(b).w-rec.get(a).w||b.gravl-a.gravl);
+}
 function runSwiss(field,ctx){
   const rec=new Map();field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i}));
   const advanced=[],eliminated=[];let active=field.slice(),round=0;
   while(active.length&&round++<12){
-    const groups={};active.forEach(t=>{const r=rec.get(t);(groups[r.w+'-'+r.l]=groups[r.w+'-'+r.l]||[]).push(t);});
-    const pairs=[];
-    Object.keys(groups).forEach(k=>{const g=groups[k].slice().sort((a,b)=>rec.get(a).seed-rec.get(b).seed);
-      while(g.length>=2)pairs.push([g.shift(),g.pop()]);}); // top seed vs bottom seed within the record group
-    pairs.forEach(([x,y])=>{const rx=rec.get(x),ry=rec.get(y);
-      const stakes=Math.max(rx.w,rx.l,ry.w,ry.l)>=2;
-      const s=simSeries(x,y,stakes?2:1,ctx?Object.assign({},ctx,{round:'Swiss'}):null);
-      rec.get(s.winner).w++;rec.get(s.loser).l++;});
+    swissPairings(active,rec).forEach(([x,y])=>swissResolveMatch(x,y,rec,ctx));
     active=active.filter(t=>{const r=rec.get(t);if(r.w>=3){advanced.push(t);return false;}if(r.l>=3){eliminated.push(t);return false;}return true;});
   }
-  advanced.sort((a,b)=>rec.get(a).l-rec.get(b).l||b.gravl-a.gravl); // seed playoffs by Swiss record
-  eliminated.sort((a,b)=>rec.get(b).w-rec.get(a).w||b.gravl-a.gravl);
+  swissSeed(advanced,eliminated,rec);
   return {advanced,eliminated,rec};
 }
 function swissFeed(name,tier,swiss){
@@ -1820,23 +1828,71 @@ function pushLog(L,text,kind){L.log.unshift({text,kind});if(L.log.length>140)L.l
 function liveSetup(name,tier){
   transactionWindow();
   tier=tier||'SP';
-  // the 16-team Swiss is auto-resolved, then the eight survivors are broadcast through the playoff bracket
-  const swiss=runSwiss(fieldFor(tier),{event:name,tier,round:'Swiss'});
-  swiss.eliminated.forEach(t=>t.gravl+=Math.round(TIERS[tier].pts[8]*0.4));
-  swissFeed(name,tier,swiss);
-  const field=swiss.advanced;
-  const L={name,tier,field,swiss,stage:'qf',matchIdx:0,
-    qfPairs:[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]],
-    qfWinners:[],qfLosers:[],sfPairs:[],sfWinners:[],sfLosers:[],fPair:null,
+  const L={name,tier,field:[],swiss:null,stage:'swiss',matchIdx:0,
+    qfPairs:[],qfWinners:[],qfLosers:[],sfPairs:[],sfWinners:[],sfLosers:[],fPair:null,
     match:null,matchVigils:[],log:[],done:false};
   world.live=L;
-  const r=swiss.rec;
-  pushLog(L,`Swiss complete — eight advance to the ${name} playoffs: ${field.map(t=>`${t.short} (${r.get(t).w}–${r.get(t).l})`).join(', ')}.`,'map');
   const host=(world.casters||[]).find(c=>c.host);
-  if(host)pushLog(L,`${host.name}: Welcome to the ${name} playoffs — eight teams left, one trophy. Let's get to it.`,'map');
-  else pushLog(L,`The ${name} playoffs begin. Top Swiss seed: ${field[0].name}.`,'map');
-  startMatch(L);render();switchTab('cast');
+  pushLog(L,host?`${host.name}: Welcome to the ${name}. Sixteen teams, the Swiss to eight, then the playoffs — let's get to it.`:`The ${name} begins — the Swiss stage, sixteen teams.`,'map');
+  liveSwissInit(L);
+  render();switchTab('cast');
 }
+/* ---- live Swiss stage: play it match-by-match, round-by-round, or auto ---- */
+function liveSwissInit(L){
+  const field=fieldFor(L.tier);const rec=new Map();
+  if(L.tier==='SP'&&world.majorChamps.length===0){/* inaugural seeding already baked into fieldFor order */}
+  field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i}));
+  L.sw={field,rec,active:field.slice(),round:0,pairs:[],pairIdx:0,advanced:[],eliminated:[],ctx:{event:L.name,tier:L.tier,round:'Swiss'},done:false};
+  swissBeginRound(L);
+}
+function swissBeginRound(L){const sw=L.sw;
+  sw.active=sw.active.filter(t=>{const r=sw.rec.get(t);if(r.w>=3){if(sw.advanced.indexOf(t)<0)sw.advanced.push(t);return false;}if(r.l>=3){if(sw.eliminated.indexOf(t)<0)sw.eliminated.push(t);return false;}return true;});
+  if(!sw.active.length){swissComplete(L);return;}
+  sw.round++;sw.pairs=swissPairings(sw.active,sw.rec);sw.pairIdx=0;
+  pushLog(L,`— Swiss Round ${sw.round}: ${sw.pairs.length} match${sw.pairs.length>1?'es':''} —`,'map');
+}
+function swissStepMatch(L){const sw=L.sw;if(sw.done)return;
+  if(sw.pairIdx>=sw.pairs.length){swissBeginRound(L);if(sw.done)return;}
+  const pair=sw.pairs[sw.pairIdx];sw.pairIdx++;const[x,y]=pair;
+  pushLog(L,swissPreLine(L,x,y),'round');
+  const s=swissResolveMatch(x,y,sw.rec,sw.ctx);
+  pushLog(L,swissResultLine(L,s,s.winner,s.loser),'mapend');
+  [s.winner,s.loser].forEach(t=>{const r=sw.rec.get(t);
+    if(r.w>=3&&sw.advanced.indexOf(t)<0){sw.advanced.push(t);pushLog(L,`✦ ${t.name} are THROUGH to the playoffs — ${r.w}–${r.l}.`,'win');}
+    else if(r.l>=3&&sw.eliminated.indexOf(t)<0){sw.eliminated.push(t);pushLog(L,`${t.name} are out, ${r.w}–${r.l}. The run ends here.`,'win');}});
+  if(sw.pairIdx>=sw.pairs.length)swissBeginRound(L);
+}
+function swissPlayRound(L){const sw=L.sw,r0=sw.round;let guard=0;while(!sw.done&&sw.round===r0&&sw.pairIdx<sw.pairs.length&&guard++<20)swissStepMatch(L);}
+function swissAutoFinish(L){let guard=0;while(!L.sw.done&&guard++<300)swissStepMatch(L);}
+function swissComplete(L){const sw=L.sw;sw.done=true;
+  swissSeed(sw.advanced,sw.eliminated,sw.rec);
+  sw.eliminated.forEach(t=>t.gravl+=Math.round(TIERS[L.tier].pts[8]*0.5));
+  swissFeed(L.name,L.tier,{advanced:sw.advanced,eliminated:sw.eliminated,rec:sw.rec});
+  pushLog(L,`Swiss complete — eight advance. ${sw.advanced.map(t=>`${t.short} (${sw.rec.get(t).w}–${sw.rec.get(t).l})`).join(', ')}.`,'champion');
+}
+function swissToPlayoffs(L){const sw=L.sw,field=sw.advanced;
+  L.field=field;L.swiss={advanced:sw.advanced,eliminated:sw.eliminated,rec:sw.rec};
+  L.qfPairs=[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]];
+  L.stage='qf';L.matchIdx=0;
+  const host=(world.casters||[]).find(c=>c.host);
+  pushLog(L,host?`${host.name}: Eight left. The ${L.name} playoffs start now.`:`The ${L.name} playoffs begin.`,'map');
+  startMatch(L);
+}
+// Contextual desk commentary, aware of records, division, and storylines.
+function teamSwissCtx(t,r){const bits=[];
+  if(r.w===2)bits.push('a win from the playoffs');else if(r.l===2)bits.push('staring at elimination');else if(!r.w&&!r.l)bits.push('opening up');
+  if(t.div===2)bits.push('a tier-2 side punching up');
+  const star=starOf(t);if(star&&star.titles===0&&careerGrav(star)>=1.12)bits.push(`${star.tag} chasing a first title`);else if(t.heart)bits.push('the neutrals’ underdog');
+  return bits;}
+function swissPreLine(L,x,y){const rec=L.sw.rec,rx=rec.get(x),ry=rec.get(y);
+  const stake=swissStakes(x,y,rec)?(rx.w===2||ry.w===2?'advancement on the line':rx.l===2||ry.l===2?'win or go home':'Bo3'):'Bo1';
+  const cx=pick(teamSwissCtx(x,rx)),cy=pick(teamSwissCtx(y,ry));
+  return `${x.short} (${rx.w}–${rx.l}) vs ${y.short} (${ry.w}–${ry.l}) — ${stake}.${cx?` ${x.short}: ${cx}.`:''}${cy?` ${y.short}: ${cy}.`:''}`;}
+function swissResultLine(L,s,W,Ll){const sc=`${Math.max(s.wa,s.wb)}–${Math.min(s.wa,s.wb)}`;
+  let topId=null,topG=-1;for(const id in s.sg){if(s.sg[id]>topG){topG=s.sg[id];topId=+id;}}
+  const tp=topId?findPlayer(topId):null,onW=tp&&teamOf(tp)===W;
+  const mvp=tp&&topG>=1.15?` ${tp.tag} ${onW?'led it':`(${Ll.short}) the standout in defeat`} at ${topG.toFixed(2)}.`:'';
+  return `${W.short} beat ${Ll.short} ${sc}${s.deadlift?' — a deadlift!':'.'}${mvp}`;}
 function startMatch(L){
   let a,b;
   if(L.stage==='qf'){a=L.qfPairs[L.matchIdx][0];b=L.qfPairs[L.matchIdx][1];}
@@ -1845,9 +1901,18 @@ function startMatch(L){
   L.match={a,b,wins:{a:0,b:0},target:3,maps:[],perf:{},seriesBox:{},map:null};L.matchVigils=[];
   initSeriesState(a,b,L.stage==='f'?1:0); // big-stage nerves on the final
   const sn=L.stage==='qf'?'Quarterfinal':L.stage==='sf'?'Semifinal':'FINAL';
-  pushLog(L,`${sn}: ${a.short} vs ${b.short} — best of 5.`,'map');
+  pushLog(L,`${sn}: ${a.name} vs ${b.name} — best of 5. ${playoffPreLine(a,b,L)}`,'map');
   startMap(L);
 }
+// A contextual setup line for a playoff tie — Swiss form, a renewed rivalry, an unmarked star.
+function playoffPreLine(a,b,L){const bits=[];
+  if(L.swiss&&L.swiss.rec){const ra=L.swiss.rec.get(a),rb=L.swiss.rec.get(b);
+    if(ra&&rb&&ra.l!==rb.l){const cleaner=ra.l<rb.l?a:b,cr=ra.l<rb.l?ra:rb;bits.push(`${cleaner.short} came through the Swiss cleaner (${cr.w}–${cr.l})`);}}
+  const sa=starOf(a),sb=starOf(b);
+  if(sa&&sb){const riv=Object.values(world.rivalries).find(x=>(x.a.id===sa.id&&x.b.id===sb.id)||(x.a.id===sb.id&&x.b.id===sa.id));if(riv&&riv.count>=1)bits.push(`${sa.tag} v ${sb.tag} renewed`);}
+  if(sa&&sa.titles===0&&careerGrav(sa)>=1.15)bits.push(`${sa.tag} chasing a first title`);
+  else if(sb&&sb.titles===0&&careerGrav(sb)>=1.15)bits.push(`${sb.tag} chasing a first title`);
+  return bits.length?bits[0]+'.':'';}
 function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box};}
 function roundLine(r,m,mp){
   const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
@@ -1909,11 +1974,13 @@ function eventEnd(){
   world.pendingMajors=(world.pendingMajors||[]).filter(e=>pendName(e)!==L.name);
   pushLog(L,L.tier==='WC'?`${L.finalChamp.name} are crowned World Champions of Season ${world.season}. A crown cairn rises at ${data.zone}.`:`${L.finalChamp.name} are champions of the ${L.name}. A ${data.cairnStyle} cairn rises at ${data.zone}.`,'champion');
 }
-function liveRound(){const L=world.live;if(!L||L.done)return;stepRound();renderCast();}
-function liveMap(){const L=world.live;if(!L||L.done)return;let s;do{s=stepRound();}while(s==='round');renderCast();}
-function liveMatch(){const L=world.live;if(!L||L.done)return;let s;do{s=stepRound();}while(s==='round'||s==='mapend');renderCast();}
-function liveAuto(){const L=world.live;if(!L||L.done)return;let s;do{s=stepRound();}while(s!=='eventend');render();}
-function liveToFinal(){const L=world.live;if(!L||L.done)return;let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
+function liveRound(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;stepRound();renderCast();}
+function liveMap(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;let s;do{s=stepRound();}while(s==='round');renderCast();}
+function liveMatch(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;let s;do{s=stepRound();}while(s==='round'||s==='mapend');renderCast();}
+function liveAuto(){const L=world.live;if(!L||L.done)return;
+  if(L.stage==='swiss'){swissAutoFinish(L);swissToPlayoffs(L);} // finish the Swiss, then auto the playoffs
+  let s;do{s=stepRound();}while(s!=='eventend');render();}
+function liveToFinal(){const L=world.live;if(!L||L.done)return;if(L.stage==='swiss'){swissAutoFinish(L);swissToPlayoffs(L);}let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
 function endBroadcast(){world.live=null;render();switchTab('feed');}
 function buildFinalPreviewPrompt(L){
   const c=L.fPair[0],r=L.fPair[1];const sA=starOf(c),sB=starOf(r);const pn=p=>`${p.first} "${p.tag}" ${p.last}`;
@@ -1961,8 +2028,22 @@ function bracketStrip(L){
   if(L.stage==='f')h+=`<div class="brk-row"><span class="brk-lab">F</span> ${tie(L.fPair,null,true)}</div>`;
   return h+`</div>`;
 }
+function swissView(L){const sw=L.sw,rec=sw.rec;
+  const all=sw.field.slice().sort((a,b)=>{const ra=rec.get(a),rb=rec.get(b);return rb.w-ra.w||ra.l-rb.l||ra.seed-rb.seed;});
+  const status=t=>{const r=rec.get(t);return r.w>=3?'<span class="good">▲ in</span>':r.l>=3?'<span style="color:var(--bad)">✕ out</span>':`<span class="faint">${r.w}–${r.l}</span>`;};
+  let h=`<div class="cast-head"><div class="cast-title">${esc(L.name)}</div><div class="cast-stage">Swiss${sw.done?' · complete':` · Round ${sw.round}`}</div></div>`;
+  h+=`<div class="bracket"><div class="brk-row"><span class="brk-lab">SW</span> <span class="faint">16 teams · 3 wins advance, 3 losses out</span></div>`;
+  if(!sw.done&&sw.pairs.length)h+=`<div class="brk-row"><span class="brk-lab">R${sw.round}</span> ${sw.pairs.map((p,i)=>`<span class="brk-tie ${i===sw.pairIdx?'live':''}" style="${i<sw.pairIdx?'opacity:.5':''}">${p[0].short}/${p[1].short}</span>`).join(' ')}</div>`;
+  h+=`</div>`;
+  h+=`<div class="cast-ctl">${sw.done?`<button class="ctl primary" data-act="splay">▶ To the playoffs</button>`:`<button class="ctl primary" data-act="smatch">▶ Match</button><button class="ctl" data-act="sround">▶▶ Round</button><button class="ctl" data-act="sfinish">⏩ Auto-finish Swiss</button>`}<button class="ctl" data-act="auto">⏹ Auto whole event</button></div>`;
+  h+=`<div class="boxwrap" style="margin-bottom:10px"><div class="bx-cap">Swiss standings</div><table class="bx"><thead><tr><th>Team</th><th>W</th><th>L</th><th></th></tr></thead><tbody>`;
+  h+=all.map(t=>{const r=rec.get(t);return `<tr><td class="bx-nm">${esc(t.name)} <span class="role">${esc(t.short)}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="bx-k">${r.w}</td><td>${r.l}</td><td>${status(t)}</td></tr>`;}).join('');
+  h+=`</tbody></table></div>`;
+  h+=`<div class="pbp">${L.log.map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
+  return h;}
 function renderCast(){
   const el=$("p-cast");const L=world.live;
+  if(L&&!L.done&&L.stage==='swiss'){el.innerHTML=swissView(L);return;}
   if(L&&!L.done){
     const m=L.match,mp=m.map;
     const stageName=L.stage==='qf'?'Quarterfinals':L.stage==='sf'?'Semifinals':'Final';
@@ -2063,7 +2144,11 @@ document.getElementById("p-story").addEventListener("click",e=>{const pr=e.targe
   playerFilter=p.retired?'retired':(world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');}});
 document.getElementById("p-feed").addEventListener("click",e=>{const btn=e.target.closest("[data-narrate]");if(btn)narrate(+btn.dataset.narrate);});
 document.getElementById("p-cast").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;
-  if(a==='round')liveRound();else if(a==='map')liveMap();else if(a==='match')liveMatch();else if(a==='tofinal')liveToFinal();else if(a==='auto')liveAuto();
+  if(a==='smatch'){if(world.live){swissStepMatch(world.live);renderCast();}}
+  else if(a==='sround'){if(world.live){swissPlayRound(world.live);renderCast();}}
+  else if(a==='sfinish'){if(world.live){swissAutoFinish(world.live);renderCast();}}
+  else if(a==='splay'){if(world.live){swissToPlayoffs(world.live);renderCast();}}
+  else if(a==='round')liveRound();else if(a==='map')liveMap();else if(a==='match')liveMatch();else if(a==='tofinal')liveToFinal();else if(a==='auto')liveAuto();
   else if(a==='broadcast')liveSetup(el.dataset.name,el.dataset.tier);else if(a==='autosim'){autoOneEvent(el.dataset.name,el.dataset.tier);render();}else if(a==='stage')narrateStage();
   else if(a==='recap'){const L=world.live;if(L&&L.feedId!=null)narrate(L.feedId);}else if(a==='end')endBroadcast();
   else if(a==='vbox'){if(world.live){world.live.view='box';renderCast();}}else if(a==='vlog'){if(world.live){world.live.view='log';renderCast();}}
