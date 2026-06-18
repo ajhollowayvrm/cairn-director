@@ -88,6 +88,8 @@
   .row2{display:flex;justify-content:space-between;border-bottom:1px solid #221c14;padding:7px 0;font-size:14px;}
   .row2:last-child{border-bottom:none;}
   .row2 .ct{font-family:ui-monospace,monospace;color:var(--ember);}
+  .row2.tap{cursor:pointer;border-radius:4px;}
+  .row2.tap:hover{background:var(--stone-1);}
   .hint{color:var(--faint);font-size:12px;margin:2px 0 14px;}
   .desk{border-left:2px solid var(--ember);padding:8px 0 2px 14px;margin-top:10px;}
   .desk-label{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ember);margin-bottom:6px;}
@@ -96,6 +98,10 @@
   @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
   @media (prefers-reduced-motion:reduce){.desk-loading{animation:none}}
   .desk-err{color:var(--bad);font-size:12px;margin-top:7px;}
+  .intv{border-left:2px solid var(--cold);padding:8px 0 2px 14px;margin-top:10px;}
+  .intv-h{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--cold);margin-bottom:6px;}
+  .intv-q{font-size:12.5px;color:var(--faint);font-style:italic;margin-bottom:4px;}
+  .intv-a{font-family:Georgia,serif;color:var(--bone);font-size:14.5px;line-height:1.55;}
   button.ctl.narrate{margin-top:10px;border-color:var(--ember-dim);}
   .cast-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px;}
   .cast-title{font-family:Georgia,serif;font-size:18px;}
@@ -502,8 +508,9 @@ function newWorld(){
   const setT=(short,tag,tr)=>{const t=w.teams.find(x=>x.short===short);const p=t&&t.players.find(x=>x.tag===tag);if(p)p.traits=tr;};
   setT('LG','vell',['prodigy','clutch']);setT('VNG','Kaiser',['bigGame']);setT('VNG','Clock',['ironman','loyal']);
   setT('100T','Riptide',['mercenary']);setT('HEMI','Gordo',['hothead']);setT('HEMI','lan',['mentor']);
-  // The broadcast desk — former players who call games now (not on any staff)
+  // The broadcast desk — the host, plus former players who call games now
   w.casters=[
+    {name:'Sam Herring',tag:'Herring',role:'host',host:true,female:true,note:'The voice of the Majors — host and anchor of every premier broadcast, and the mic on the floor for the post-match.'},
     {name:'Reza "Books" Haddad',tag:'Books',role:'read',former:'BB',bb:true,injured:true,desk:'injured',note:'Beastie Bois read and IGL — now the desk\u2019s lead analyst.'},
     {name:'Reverend',tag:'Reverend',role:'read',former:'PALL',note:'Pallbearers\u2019 old caller — the calm, sermonous voice of the broadcast.'}
   ];
@@ -878,6 +885,15 @@ function detectUpsetsChokes(tier,name,qf,sf,fin){
       text:`${l.name} ${cr.join(', and ')} — ${round} at ${name}.`},Infinity);
   });
 }
+// Sam Herring's post-match — a short, context-aware interview with the winning MVP (or the champions' star).
+function mkInterview(d){
+  if(!d||!d.top)return null;const mvp=d.top;const who=mvp.won?mvp.name:(d.champStar||mvp.name);let q='Walk me through that one.',a;
+  if(d.deadlift){q='You were 0–2 down and gone. What changed?';a=pick(["Honestly, nothing changed — we just stopped missing. 0–2 to champions. I'll never forget this.","Dead and buried, and not one of us believed it. A reverse sweep, on this stage. Surreal."]);}
+  else if(d.champStarBreakthrough&&d.champStar){q='Your first premier title, after all the near-misses — how does it feel?';a=pick(["Everyone said I couldn't win the big one. Well — I'm not unmarked anymore.","Years of falling at the last step. Tonight it's mine. I can finally breathe."]);}
+  else if(mvp.vigils>0||d.vigil){q='That clutch to seal it — talk me through it.';a=pick(["Last alive, three of them on the ember. You stop thinking, trust the aim, let it go.","1vX — no time to be scared. You just play. Glad it landed."]);}
+  else {a=pick(["We earned this the hard way, round by round. Proudest I've been of these four.","Came here to win it. We did. That's the whole story.","Still doesn't feel real. The boys showed up when it mattered most."]);}
+  return {host:'Sam Herring',who,q,a};
+}
 function commitMajor(name,champ,run,sfL,qfL,F){
   const T=TIERS.SP;
   champ.gravl+=T.pts[1];run.gravl+=T.pts[2];sfL.forEach(t=>t.gravl+=T.pts[4]);qfL.forEach(t=>t.gravl+=T.pts[8]);
@@ -906,6 +922,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
     teamRivalry:triv.count>1?{a:triv.a,b:triv.b,count:triv.count,champLeads:`${triv.wins[champ.short]||0}–${triv.wins[run.short]||0}`}:null,
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former),
     standin:usedStandin?(winLine.find(p=>p.standinFor)?`${winLine.find(p=>p.standinFor).first} "${winLine.find(p=>p.standinFor).tag}" ${winLine.find(p=>p.standinFor).last}`:null):null};
+  data.interview=mkInterview(data);
   feedPush('final',`${champ.name} win the ${name}`,`<b>Major champions.</b> def. ${run.name} ${F.scoreStr}. They raise a <b>${data.cairnStyle}</b> cairn at ${zone}.`,'Major',data);
   if(usedStandin){const s=winLine.find(p=>p.standinFor);if(s)feedPush('note','A cairn for a borrowed name',`${nm(s)} came in as a stand-in and leaves with a Major. The rarest line in the sport — a cairn raised by someone who wasn't even on the wall a month ago.`);}
   // significant-moment + individual-choke detection
@@ -959,6 +976,7 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
     vigil:vg?{name:vg.name,x:vg.x,zone:vg.zone}:null,
     champStar:starC?pname(starC):null,runnerStarUnmarked:(starR&&starR.titles===0)?pname(starR):null,
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former)};
+  data.interview=mkInterview(data);
   feedPush('final',`${champ.name} are crowned World Champions`,`<b>World champions — Season ${world.season}.</b> def. ${run.name} ${F.scoreStr}. The season's world title, and a <b>crown</b> cairn at ${zone}.`,'World Championship',data);
   timelinePush({kind:'worlds',icon:'♛',short:champ.short,title:`${champ.name} are crowned World Champions`,
     text:`${champ.name} win the ${name}, def. ${run.name} ${F.scoreStr} — the season's world title and the highest honor on the Yard.`});
@@ -984,6 +1002,7 @@ function commitMasters(name,champ,run,sfL,qfL,F){
     top:tp?{name:pname(tp),g:topG.toFixed(2),won:teamOf(tp)===champ,kd:tb?kd(tb).toFixed(2):null,k:tb?tb.k:null,d:tb?tb.d:null,vigils:tb?tb.vigils:0}:null,
     vigil:vg?{name:vg.name,x:vg.x,zone:vg.zone}:null,champStar:starC?pname(starC):null,
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former)};
+  data.interview=mkInterview(data);
   feedPush('final',`${champ.name} win the ${name}`,`<b>Masters champions.</b> def. ${run.name} ${F.scoreStr} — the circuit's premier title, ranked above any Major.`,'Masters',data);
   timelinePush({kind:'dynasty',icon:'◈',short:champ.short,title:`${champ.name} win the ${name}`,text:`${champ.name} take the ${name} — a Masters, the sport's premier title, def. ${run.name} ${F.scoreStr}.`});
   recordMajorPerfs(name,champ,run,F);
@@ -1145,7 +1164,16 @@ function retire(p,t,opts){opts=opts||{};p.retired=true;p.standinFor=null;
     feedPush('note','A long walk',`${nm(p)} retires${tail}`);}
   txn('retire',`${nm(p)} retires${t?` from ${t.short}`:''}.`);
   if(p.titles>=4)timelinePush({kind:'retire',icon:'⚑',short:t?t.short:'—',title:`${p.tag} walks away`,text:`${p.first} "${p.tag}" ${p.last} retires with ${p.titles} Majors — one of the marked greats steps off the Yard.`});}
-function unretire(p){p.retired=false;p.injured=0;if(p.age>33)p.age=33;const t=findHolderTeam(p);if(t)t.players=t.players.filter(x=>x!==p);if(!world.freeAgents.includes(p))world.freeAgents.push(p);}
+function unretire(p){p.retired=false;p.injured=0;if(p.age>33)p.age=33;if(p.onDesk){p.onDesk=false;world.casters=(world.casters||[]).filter(c=>!(c.pid===p.id||c.tag===p.tag));}const t=findHolderTeam(p);if(t)t.players=t.players.filter(x=>x!==p);if(!world.freeAgents.includes(p))world.freeAgents.push(p);}
+// Former players can take a seat on the broadcast desk, and step away from it.
+function onDeskCaster(p){return (world.casters||[]).find(c=>c.pid===p.id||c.tag===p.tag);}
+function toDesk(p){if(p.onDesk||!p.retired)return;p.onDesk=true;world.casters=world.casters||[];
+  const former=p.history&&p.history.length?p.history[p.history.length-1].short:null;
+  if(!onDeskCaster(p))world.casters.unshift({name:`${p.first} "${p.tag}" ${p.last}`,tag:p.tag,role:p.role,pid:p.id,former});
+  feedPush('note','To the desk',`${nm(p)} takes a seat on the broadcast desk${p.titles?` — ${p.titles} premier title${p.titles>1?'s':''} as a player, now a voice on the call`:' — calling the games he used to play'}.`);
+  txn('retire',`${nm(p)} joins the broadcast desk.`);}
+function leaveDesk(p){p.onDesk=false;world.casters=(world.casters||[]).filter(c=>!(c.pid===p.id||c.tag===p.tag));
+  feedPush('note','Off the desk',`${nm(p)} steps away from the broadcast desk.`);}
 function toFA(p){p.faAge=0;p.standinFor=null;world.freeAgents.push(p);}
 function joinTeam(p,t){const had=t.players.includes(p);if(!had)t.players.push(p);const h=p.history=p.history||[];
   const moved=!h.length||h[h.length-1].short!==t.short;if(moved){h.push({short:t.short,name:t.name,season:world.season});p.tenure=0;}
@@ -1362,8 +1390,11 @@ function renderFeed(){const el=$("p-feed");
       if(f.narrated)body=`<div class="desk"><div class="desk-label">From the desk</div>${fmtAI(f.narrated)}</div>`;
       else if(f.narrating)body=`<p>${f.body}</p><div class="desk-loading">the desk is calling it…</div>`;
       else body=`<p>${f.body}</p>${f.narrateError?`<div class="desk-err">${esc(f.narrateError)}</div>`:''}<button class="ctl narrate" data-narrate="${f.id}">✦ Have the desk call it</button>`;
+      if(f.data.interview)body+=interviewHtml(f.data.interview);
     } else body=`<p>${f.body}</p>`;
     return `<div class="feed-item ${cls}"><div class="kicker"><span>S${f.season}</span><span class="tag-pill">${f.stage||'Dispatch'}</span></div><h3>${f.title}</h3>${body}</div>`;}).join("");}
+function interviewHtml(iv){if(!iv)return '';
+  return `<div class="intv"><div class="intv-h">🎙 Post-match · ${esc(iv.host)} with <b>${esc(iv.who)}</b></div><div class="intv-q">“${esc(iv.q)}”</div><div class="intv-a">“${esc(iv.a)}”</div></div>`;}
 function renderCal(){const el=$("p-cal");
   if(!world.thisSeasonEvents.length){el.innerHTML=`<div class="feed-empty">No calendar yet — sim a season.</div>`;return;}
   el.innerHTML=`<p class="hint">Season ${world.season} circuit, stage by stage. Every result banks <b>Circuit Points</b>; the premier events build to the World Championship finale.</p>`+
@@ -1401,7 +1432,7 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
       +`<div class="editmeta">age <button class="step" data-act="agedn" data-p="${p.id}">−</button> ${p.age} <button class="step" data-act="ageup" data-p="${p.id}">+</button> · role <button class="mact" data-act="rolecycle" data-p="${p.id}">${p.role}</button></div>`
     : bar('Aim',r.aim)+bar('Read',r.read)+bar('Entry',r.entry)+bar('Clutch',r.clutch)+bar('Util',r.util)+bar('Consist',r.consistency);
   return `<div class="scout">
-    <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?esc(t.name):'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':honours.length?' · '+honours.join(' · '):''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
+    <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?esc(t.name):'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.onDesk?' · <span class="good">🎙 on the desk</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':honours.length?' · '+honours.join(' · '):''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
     ${traitPills(p)}
     ${careerPath(p)}
     ${relLine(p)}
@@ -1425,6 +1456,7 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
     <div class="scout-actions">
       <button class="mact ${editing?'on':''}" data-act="edit" data-p="${p.id}">${editing?'✓ Done':'✎ Edit stats'}</button>
       ${p.retired?`<button class="mact" data-act="unretire" data-p="${p.id}">Un-retire</button>`:`<button class="mact" data-act="retire" data-p="${p.id}">Retire</button>`}
+      ${p.retired?(p.onDesk?`<button class="mact" data-act="leavedesk" data-p="${p.id}">Leave the desk</button>`:`<button class="mact" data-act="todesk" data-p="${p.id}">🎙 To the desk</button>`):''}
       <button class="mact" data-act="movestart" data-p="${p.id}">⇄ Move to…</button>
       <button class="mact" data-act="pin" data-p="${p.id}">${p.pinned?'Unpin':'Pin'}</button>
       ${t?`<button class="mact" data-act="release" data-p="${p.id}">Release</button>`:''}
@@ -1531,9 +1563,9 @@ function renderStory(){const el=$("p-story");
   const coaches=world.teams.map(t=>({t,c:t.coach})).sort((a,b)=>(b.c.former-a.c.former)||(b.c.prep-a.c.prep));
   h+=coaches.slice(0,9).map(({t,c})=>`<div class="row2"><span>${esc(coachName(c))} <span class="faint">· ${t.short}</span>${c.former?' <span class="good">◇ ex-player</span>':''}</span><span class="ct">prep ${Math.round(c.prep)}</span></div>`).join("");
   h+=`</div>`;
-  h+=`<div class="story-card"><div class="lede">On the Desk · Casters</div>`;
-  h+=(world.casters&&world.casters.length)?world.casters.map(c=>`<div class="row2"><span>${esc(c.name)} <span class="faint">· ${c.former?'ex-'+esc(c.former)+' ':''}${c.role||''}</span></span><span class="ct">${c.injured?'<span class="unmarked">injured · on the desk</span>':'caster'}</span></div>`).join(""):`<p>No casters yet.</p>`;
-  h+=`</div>`;
+  h+=`<div class="story-card"><div class="lede">On the Desk</div>`;
+  h+=(world.casters&&world.casters.length)?world.casters.map(c=>`<div class="row2${c.pid?' tap':''}"${c.pid?` data-tpid="${c.pid}"`:''}><span>${esc(c.name)} <span class="faint">· ${c.former?'ex-'+esc(c.former)+' ':''}${c.role||''}</span></span><span class="ct">${c.host?'<span class="good">host</span>':c.injured?'<span class="unmarked">injured · on the desk</span>':'analyst'}</span></div>`).join(""):`<p>No casters yet.</p>`;
+  h+=`<div class="hint" style="margin-top:4px">Tap an analyst to their card — retire a player to the desk, or bring them back, from there.</div></div>`;
   // Personalities — the characters that give the circuit its texture
   const activeP=allPlayers().map(x=>x.p).filter(p=>!p.retired&&p.games>=1);
   const byTrait=tr=>activeP.filter(p=>hasTrait(p,tr)).sort((a,b)=>skillIndex(b)-skillIndex(a));
@@ -1800,7 +1832,9 @@ function liveSetup(name,tier){
   world.live=L;
   const r=swiss.rec;
   pushLog(L,`Swiss complete — eight advance to the ${name} playoffs: ${field.map(t=>`${t.short} (${r.get(t).w}–${r.get(t).l})`).join(', ')}.`,'map');
-  pushLog(L,`The ${name} playoffs begin. Top Swiss seed: ${field[0].name}.`,'map');
+  const host=(world.casters||[]).find(c=>c.host);
+  if(host)pushLog(L,`${host.name}: Welcome to the ${name} playoffs — eight teams left, one trophy. Let's get to it.`,'map');
+  else pushLog(L,`The ${name} playoffs begin. Top Swiss seed: ${field[0].name}.`,'map');
   startMatch(L);render();switchTab('cast');
 }
 function startMatch(L){
@@ -1955,6 +1989,7 @@ function renderCast(){
       else if(fi.narrating)h+=`<div class="desk-loading">the desk is calling it…</div>`;
       else h+=`<button class="ctl primary narrate" data-act="recap">✦ Have the desk call it</button>${fi.narrateError?`<div class="desk-err">${esc(fi.narrateError)}</div>`:''}`;
     }
+    if(d&&d.interview)h+=interviewHtml(d.interview);
     h+=`<div class="pbp" style="margin-top:14px">${L.log.slice(0,50).map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
     h+=`<button class="ctl" data-act="end" style="margin-top:14px">End broadcast</button>`;
     el.innerHTML=h;return;
@@ -1992,6 +2027,8 @@ document.getElementById("p-players").addEventListener("click",e=>{
   if(act&&act.dataset.p){const p=anyPlayerById(+act.dataset.p);if(!p){renderPlayers();return;}const a=act.dataset.act;
     if(a==='retire')retire(p,findHolderTeam(p));
     else if(a==='unretire'){unretire(p);feedPush('note','Back in the server',`${nm(p)} comes out of retirement.`);txn('return',`${nm(p)} un-retires.`);}
+    else if(a==='todesk')toDesk(p);
+    else if(a==='leavedesk')leaveDesk(p);
     else if(a==='release')forceMove(p,null);
     else if(a==='pin')p.pinned=!p.pinned;
     else if(a==='edit')editPid=editPid===p.id?null:p.id;
@@ -2022,6 +2059,8 @@ document.getElementById("p-annals").addEventListener("click",e=>{
   const pr=e.target.closest("[data-tpid]");if(pr){const pid=+pr.dataset.tpid;const p=anyPlayerById(pid);if(!p)return;selectedPid=pid;editPid=null;movePid=null;
     playerFilter=p.retired?'retired':(world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');}
 });
+document.getElementById("p-story").addEventListener("click",e=>{const pr=e.target.closest("[data-tpid]");if(pr){const pid=+pr.dataset.tpid;const p=anyPlayerById(pid);if(!p)return;selectedPid=pid;editPid=null;movePid=null;
+  playerFilter=p.retired?'retired':(world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');}});
 document.getElementById("p-feed").addEventListener("click",e=>{const btn=e.target.closest("[data-narrate]");if(btn)narrate(+btn.dataset.narrate);});
 document.getElementById("p-cast").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;
   if(a==='round')liveRound();else if(a==='map')liveMap();else if(a==='match')liveMatch();else if(a==='tofinal')liveToFinal();else if(a==='auto')liveAuto();
