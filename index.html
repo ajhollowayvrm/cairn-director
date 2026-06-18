@@ -106,6 +106,13 @@
   .aw-slot{font-size:11px;border:1px solid var(--line);border-radius:9px;padding:2px 9px;background:#1a1610;}
   .aw-slot[data-tpid]{cursor:pointer;}.aw-slot[data-tpid]:hover{border-color:var(--ember-dim);}
   .aw-slot .aw-role{color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-size:9px;margin-right:2px;}
+  .pv-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#16130e;margin-bottom:12px;}
+  .pv-h{font-size:13px;color:var(--ember);margin-bottom:12px;letter-spacing:.02em;}
+  .pv-row{display:flex;gap:10px;padding:7px 0;border-top:1px solid #221d15;font-size:13px;line-height:1.5;}
+  .pv-row:first-of-type{border-top:none;}
+  .pv-lab{flex:0 0 116px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;font-size:10px;padding-top:2px;}
+  .pv-val{flex:1;color:var(--bone);}
+  .pv-wd{background:#1f1410;border:1px solid #3a2418;border-radius:9px;padding:9px 12px;margin-bottom:12px;font-size:13px;color:#e8c9a0;}
   button.ctl.narrate{margin-top:10px;border-color:var(--ember-dim);}
   .cast-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px;}
   .cast-title{font-family:Georgia,serif;font-size:18px;}
@@ -752,21 +759,78 @@ function swissFeed(name,tier,swiss){
 function majorField(){let ranked=[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a));
   if(world.majorChamps.length===0){const seeds=['VNG','LG','HEMI'].map(s=>world.teams.find(t=>t.short===s)).filter(Boolean);ranked=seeds.concat(ranked.filter(t=>!seeds.includes(t)));}
   return ranked;}
-function majorSplit(){const all=majorField();return {legends:all.slice(0,8),challengers:all.slice(8,24)};}
+function majorSplit(withdrawn){let all=majorField();
+  if(withdrawn&&withdrawn.length){const set=new Set(withdrawn);all=all.filter(t=>!set.has(t.short));} // a withdrawal lets the next club up
+  return {legends:all.slice(0,8),challengers:all.slice(8,24)};}
+function majorWithdrawn(name){const e=(world.pendingMajors||[]).find(x=>pendName(x)===name);return (e&&e.withdrawn)||[];}
 function majorSwissFeed(name,chall,leg){const lr=leg.rec;
   feedPush('note',`${name} — Challengers & Legends`,`<b>Challengers Stage:</b> ${chall.advanced.map(t=>esc(t.short)).join(', ')} climb into Legends; out — ${chall.eliminated.map(t=>esc(t.short)).join(', ')}. <b>Legends Stage → playoffs:</b> ${leg.advanced.map(t=>`${esc(t.name)} <span class="faint">${lr.get(t).w}–${lr.get(t).l}</span>`).join(', ')}.`);
 }
-// The desk sets the stage when a premier event is staged — favourites, a dark horse, the unmarked star to watch.
-function majorPreview(name,tier){
-  const host=(world.casters||[]).find(c=>c.host);const ranked=[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a));
-  const favs=ranked.slice(0,3),t2=ranked.find(t=>t.div===2&&ranked.indexOf(t)<(tier==='WC'?16:24));
-  let star=null,sg=0;world.teams.forEach(t=>contracted(t).forEach(p=>{if((p.titles||0)===0&&p.games>=2){const cg=careerGrav(p);if(cg>=1.15&&cg>sg){sg=cg;star=p;}}}));
-  const buzz=Object.values(world.buzz||{}).filter(b=>b.n>=2).sort((a,b)=>b.n-a.n||b.best-a.best)[0];
-  const bits=[`Favourites: <b>${favs.map(t=>esc(t.name)).join('</b>, <b>')}</b>`];
-  if(t2)bits.push(`dark horse — <b>${esc(t2.name)}</b>, a tier-2 side with the points to make a run`);
-  if(star)bits.push(`${nm(star)} (${sg.toFixed(2)} career, still unmarked) has everything to prove`);
-  else if(buzz)bits.push(`watch the feeder riser <span class="tg">${esc(buzz.tag)}</span>`);
-  feedPush('note',`${name} — the desk sets the stage`,`${host?host.name+': ':''}${bits.join('. ')}. ${tier==='WC'?'The season comes down to this.':'Sixteen fight through Challengers; eight are seeded to Legends.'}`);
+/* ---- staging a premier event: an optional withdrawal (an org's call, not money) + the desk's preview ---- */
+const WITHDRAW_REASONS=[
+  'are rebuilding through the break and have chosen to sit this one out',
+  'pulled out over a contract standoff with their core',
+  'are resting a banged-up roster rather than force it onto the stage',
+  'withdrew in protest of a brutal calendar',
+  'stepped back to retool — they would rather miss it than show up unprepared',
+  'are between rosters after the offseason and opted not to field a patched lineup',
+];
+// Occasionally a near-the-cut club withdraws by choice; the next club up takes its place. Never a contender.
+function majorWithdrawal(field,reserves){
+  if(!reserves.length)return null; // a withdrawal only happens when there's a club to call up
+  const cands=field.slice(16).filter(Boolean); // the lower Challengers seeds only
+  if(!cands.length||rnd()>0.22)return null;
+  const t=cands.slice().sort((a,b)=>rosterStrength(a)-rosterStrength(b))[0]; // the most vulnerable near-cut side
+  const reason=t.chem<0.6?pick(WITHDRAW_REASONS.slice(0,1).concat(WITHDRAW_REASONS.slice(4))):pick(WITHDRAW_REASONS);
+  return {short:t.short,name:t.name,reason,callup:{short:reserves[0].short,name:reserves[0].name}};
+}
+function teamMini(t){const s=starOf(t);return {short:t.short,name:t.name,heart:!!t.heart,div:t.div,gravl:Math.round(t.gravl),majors:t.majors||0,star:s?s.tag:null,starUnmarked:!!(s&&(s.titles||0)===0)};}
+function snapshotMajorRosters(){const snap={};world.teams.forEach(t=>contracted(t).forEach(p=>{snap[p.id]=t.short;}));world._lastMajorRosters=snap;}
+function majorMovers(field){const snap=world._lastMajorRosters;if(!snap)return [];
+  const fset=new Set(field.map(t=>t.short)),movers=[];
+  field.forEach(t=>contracted(t).forEach(p=>{const prev=snap[p.id];if(prev&&prev!==t.short&&fset.has(t.short))movers.push({tag:p.tag,role:p.role,from:prev,to:t.short,grav:careerGrav(p),titles:p.titles||0});}));
+  return movers.sort((a,b)=>(b.titles-a.titles)||(b.grav-a.grav)).slice(0,4);
+}
+function buildPreviewData(name,tier,field,wd){
+  const favs=field.slice(0,3).map(teamMini);
+  const t2=field.find(t=>t.div===2),darkHorse=t2?teamMini(t2):(field[8]?teamMini(field[8]):null);
+  // players to watch: the headline stars of the favourites + the best unmarked star in the field
+  const fset=new Set(field.map(t=>t.short));
+  const watch=[];favs.forEach(f=>{if(f.star)watch.push({tag:f.star,short:f.short,hook:f.starUnmarked?'still unmarked':`leads ${f.short}`});});
+  let uStar=null,ug=0;field.forEach(t=>contracted(t).forEach(p=>{if((p.titles||0)===0&&p.games>=2){const cg=careerGrav(p);if(cg>=1.12&&cg>ug){ug=cg;uStar=p;}}}));
+  if(uStar&&!watch.some(w=>w.tag===uStar.tag))watch.push({tag:uStar.tag,short:(teamOf(uStar)||{}).short||'',hook:`${ug.toFixed(2)} career, no cairn yet`});
+  // trending up: the rising-star buzz; down: marquee veterans the years are catching up to
+  const up=Object.values(world.buzz||{}).filter(b=>b.n>=2).sort((a,b)=>b.n-a.n||b.best-a.best).slice(0,2).map(b=>({tag:b.tag,short:b.short,hook:`${b.n} standout runs this season`}));
+  const down=[];field.forEach(t=>contracted(t).forEach(p=>{if(p.age>=30&&((p.titles||0)>=1||careerGrav(p)>=1.05))down.push(p);}));
+  down.sort((a,b)=>(a.stamina||60)-(b.stamina||60)||b.age-a.age);
+  const downList=down.slice(0,2).map(p=>({tag:p.tag,short:(teamOf(p)||{}).short||'',hook:`age ${p.age}, stamina ${p.stamina||'—'} — the legs aren't what they were`}));
+  return {tier,favs,darkHorse,watch:watch.slice(0,4),up,down:downList,newFaces:majorMovers(field),withdrawal:wd};
+}
+function previewBodyHtml(pv){
+  const line=(lab,inner)=>`<div class="pv-row"><span class="pv-lab">${lab}</span><span class="pv-val">${inner}</span></div>`;
+  let h='';
+  if(pv.withdrawal)h+=`<div class="pv-wd">✕ <b>${esc(pv.withdrawal.name)}</b> ${esc(pv.withdrawal.reason)} — <b>${esc(pv.withdrawal.callup.name)}</b> get the call-up.</div>`;
+  h+=line('Favourites',pv.favs.map(f=>`<b>${esc(f.name)}</b>${f.star?` <span class="faint">(${esc(f.star)})</span>`:''}`).join(' · '));
+  if(pv.darkHorse)h+=line('Dark horse',`<b>${esc(pv.darkHorse.name)}</b>${pv.darkHorse.div===2?' <span class="t2pill">T2</span>':''}${pv.darkHorse.star?` <span class="faint">(${esc(pv.darkHorse.star)})</span>`:''}`);
+  if(pv.watch.length)h+=line('Players to watch',pv.watch.map(w=>`<span class="tg">${esc(w.tag)}</span> <span class="faint">${esc(w.hook)}</span>`).join(' · '));
+  if(pv.up.length)h+=line('Trending up',pv.up.map(w=>`▲ <span class="tg">${esc(w.tag)}</span> <span class="faint">${esc(w.hook)}</span>`).join(' · '));
+  if(pv.down.length)h+=line('Trending down',pv.down.map(w=>`▼ <span class="tg">${esc(w.tag)}</span> <span class="faint">${esc(w.hook)}</span>`).join(' · '));
+  if(pv.newFaces.length)h+=line('New faces',pv.newFaces.map(m=>`<span class="tg">${esc(m.tag)}</span> <span class="faint">${esc(m.from)}→${esc(m.to)}</span>`).join(' · '));
+  return h;
+}
+function majorPreviewFeed(name,tier,pv){const host=(world.casters||[]).find(c=>c.host);
+  feedPush('note',`${name} — the desk sets the stage`,`${host?'<b>'+esc(host.name)+':</b> ':''}${tier==='WC'?'The season comes down to this.':'Sixteen fight through Challengers; eight are seeded straight to Legends.'}${previewBodyHtml(pv)}`);
+}
+// Called when a premier event is staged: roll any withdrawal, build + post the preview, store it on the pending event.
+function stageMajor(name,tier){
+  const ranked=[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a));
+  let field=ranked.slice(0,24);const reserves=ranked.slice(24);
+  let withdrawn=[],wd=null;
+  if(tier==='SP'){wd=majorWithdrawal(field,reserves);if(wd){withdrawn=[wd.short];field=field.filter(t=>t.short!==wd.short).concat(reserves[0]);txn('drop',`${wd.short} withdraw from the ${name} — ${wd.reason}.`);}}
+  const pv=buildPreviewData(name,tier,field,wd);
+  majorPreviewFeed(name,tier,pv);
+  snapshotMajorRosters(); // mark this field so the next Major can flag who has since moved
+  world.pendingMajors.push({name,tier,withdrawn,preview:pv});
 }
 function mkEventName(tier){
   if(tier==='WC')return `${world.year} Cairn World Championship`;
@@ -1083,7 +1147,7 @@ function runEvent(tier,name){
   if(T.premier)startEventPerf(); // begin tallying the tournament MVP / All-Major team
   let field;
   if(tier==='SP'){ // Majors run a three-stage Swiss: Challengers -> Legends -> Champions
-    const {legends,challengers}=majorSplit();
+    const {legends,challengers}=majorSplit(majorWithdrawn(name));
     const chall=runSwiss(challengers,cx('Challengers'));chall.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.25));
     const leg=runSwiss(legends.concat(chall.advanced),cx('Legends'));leg.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.5));
     majorSwissFeed(name,chall,leg);
@@ -1146,7 +1210,7 @@ function runTick(){
   world.tick++;const events=world.seasonCal[world.tick-1]||[];
   feedPush('note',`Stage ${world.tick} of 4`,`${events.map(t=>TIERS[t].name).join(' · ')||'a quiet stage'}.`);
   events.forEach(tier=>{transactionWindow();
-    if(TIERS[tier].premier){const evn=mkEventName(tier);majorPreview(evn,tier);world.pendingMajors.push({name:evn,tier});}
+    if(TIERS[tier].premier){stageMajor(mkEventName(tier),tier);}
     else world.thisSeasonEvents.push(runEvent(tier,mkEventName(tier)));});
 }
 function stepTick(){
@@ -1650,7 +1714,7 @@ function teamCard(t,rankAll){
   const roster=contracted(t).concat(t.standins||[]);
   let h=`<div class="scout teamcard">
     <div class="scout-top"><div><div class="scout-nm">${t.name} <span class="role">${t.short}</span></div>
-      <div class="scout-sub"><span class="${t.div===2?'t2pill':'role'}">Div ${t.div}</span> · ${t.heart?'<span class="good">♥ heart side</span>':'<span class="faint">money side</span>'} · coach ${esc(coachName(t.coach))}${t.coach.former?' <span class="good">◇ ex-player</span>':''}${t.bb?' · <span class="t2pill">Beastie Bois</span>':''}</div></div>
+      <div class="scout-sub"><span class="${t.div===2?'t2pill':'role'}">Div ${t.div}</span> · ${t.heart?'<span class="good">♥ heart side</span>':'<span class="faint">marquee side</span>'} · coach ${esc(coachName(t.coach))}${t.coach.former?' <span class="good">◇ ex-player</span>':''}${t.bb?' · <span class="t2pill">Beastie Bois</span>':''}</div></div>
       <button class="ctl" data-tclose="1">close</button></div>
     <div class="scout-cols"><div class="scout-stats" style="flex:1">
       <div class="ss"><span>GRAVL</span><b class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</b></div>
@@ -1686,7 +1750,7 @@ function defunctCard(d){
   const era=`${d.founded===0?'S0':'S'+d.founded}–${d.folded==null?'—':'S'+d.folded}`;
   let h=`<div class="scout teamcard">
     <div class="scout-top"><div><div class="scout-nm">${esc(d.name)} <span class="role">${esc(d.short)}</span></div>
-      <div class="scout-sub"><span class="unmarked">● defunct</span> · ${era} · ${d.heart?'<span class="good">♥ heart side</span>':'<span class="faint">money side</span>'}${d.short==='BB'?' · <span class="t2pill">founding org</span>':''}</div></div>
+      <div class="scout-sub"><span class="unmarked">● defunct</span> · ${era} · ${d.heart?'<span class="good">♥ heart side</span>':'<span class="faint">marquee side</span>'}${d.short==='BB'?' · <span class="t2pill">founding org</span>':''}</div></div>
       <button class="ctl" data-tclose="1">close</button></div>
     <div class="scout-actions"><button class="mact" data-act="revive" data-tid="${esc(d.short)}">↺ Bring back ${esc(d.name)}</button></div>`;
   if(d.note)h+=`<p class="df-note">${esc(d.note)}</p>`;
@@ -1827,7 +1891,7 @@ function buildMajorPrompt(d){
   f.push(isW?`Event: ${d.eventName} — Season ${d.season} (${d.year}). The World Championship: the season finale and the highest title in the sport, ranked above every Major. Its winner is crowned the season's World Champion.`:`Event: ${d.eventName} — Season ${d.season} (${d.year}). A Major: the only tier that builds a cairn.`);
   f.push(`Result: ${d.champ.name} defeated ${d.runner.name} ${d.score}.`);
   if(d.deadlift)f.push(`It was a DEADLIFT — ${d.champ.short} came back from 0–2 down to win.`);
-  f.push(`Champions placed a ${d.cairnStyle} cairn at ${d.zone}${d.champ.heart?" — a heart team, humble in the founders' tradition":" — a money/star team, a louder mark"}.`);
+  f.push(`Champions placed a ${d.cairnStyle} cairn at ${d.zone}${d.champ.heart?" — a heart team, humble in the founders' tradition":" — a marquee side, a louder mark"}.`);
   if(d.top){const box=d.top.kd?` (${d.top.k}-${d.top.d}, ${d.top.kd} K/D${d.top.vigils?`, ${d.top.vigils} vigil${d.top.vigils>1?'s':''}`:''})`:'';f.push(d.top.won?`Top performer: ${d.top.name} led the winners at ${d.top.g} Gravity${box}.`:`Top performer was ${d.top.name} at ${d.top.g} Gravity${box} — for the LOSING side. Great and unlucky: the math loved him, the scoreboard didn't.`);}
   if(d.vigil)f.push(`${d.vigil.name} kept a vigil — a 1v${d.vigil.x} clutch at ${d.vigil.zone}.`);
   if(d.rivalry)f.push(`This was ${d.rivalry.name} ${roman(d.rivalry.chapter)} — a recurring star rivalry between ${d.rivalry.a} and ${d.rivalry.b}.`);
@@ -1864,21 +1928,24 @@ function pushLog(L,text,kind){L.log.unshift({text,kind});if(L.log.length>140)L.l
 function liveSetup(name,tier){
   transactionWindow();
   tier=tier||'SP';
-  const L={name,tier,field:[],swiss:null,stage:'swiss',matchIdx:0,
+  const L={name,tier,field:[],swiss:null,stage:'preview',matchIdx:0,
     qfPairs:[],qfWinners:[],qfLosers:[],sfPairs:[],sfWinners:[],sfLosers:[],fPair:null,
     match:null,matchVigils:[],log:[],done:false};
   world.live=L;
   startEventPerf(); // tally the tournament MVP / All-Major team across the broadcast
-  const host=(world.casters||[]).find(c=>c.host);
-  if(tier==='SP'){
-    const {legends,challengers}=majorSplit();L.legendsSeed=legends;
-    pushLog(L,host?`${host.name}: Welcome to the ${name}. Twenty-four teams — eight seeded to Legends, sixteen fighting through Challengers. Here we go.`:`The ${name} begins — the Challengers stage.`,'map');
-    liveSwissInit(L,challengers,'Challengers');
-  } else {
-    pushLog(L,host?`${host.name}: Welcome to the ${name}. The best sixteen, a Swiss to eight, then the playoffs.`:`The ${name} begins — the Swiss stage.`,'map');
-    liveSwissInit(L,fieldFor(tier),'Swiss');
-  }
+  const pe=(world.pendingMajors||[]).find(e=>pendName(e)===name);
+  L.withdrawn=(pe&&pe.withdrawn)||[];
+  L.preview=(pe&&pe.preview)||buildPreviewData(name,tier,[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a)).slice(0,24),null);
+  if(tier==='SP'){const {legends,challengers}=majorSplit(L.withdrawn);L.legendsSeed=legends;L._swissStart={field:challengers,label:'Challengers'};}
+  else L._swissStart={field:fieldFor(tier),label:'Swiss'};
   render();switchTab('cast');
+}
+// The desk's pre-tournament preview is its own screen; the Swiss only begins when the director calls for it.
+function startSwissStage(L){
+  const host=(world.casters||[]).find(c=>c.host);
+  if(L.tier==='SP')pushLog(L,host?`${host.name}: Welcome to the ${L.name}. Eight seeded to Legends, sixteen fighting through Challengers — here we go.`:`The ${L.name} begins — the Challengers stage.`,'map');
+  else pushLog(L,host?`${host.name}: Welcome to the ${L.name}. The best sixteen, a Swiss to eight, then the playoffs.`:`The ${L.name} begins — the Swiss stage.`,'map');
+  liveSwissInit(L,L._swissStart.field,L._swissStart.label);
 }
 /* ---- live Swiss stage: play it match-by-match, round-by-round, or auto ---- */
 function liveSwissInit(L,field,stageLabel){
@@ -2038,9 +2105,10 @@ function liveRound(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;
 function liveMap(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;let s;do{s=stepRound();}while(s==='round');renderCast();}
 function liveMatch(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;let s;do{s=stepRound();}while(s==='round'||s==='mapend');renderCast();}
 function liveAuto(){const L=world.live;if(!L||L.done)return;
+  if(L.stage==='preview')startSwissStage(L);
   let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);} // finish each Swiss stage, then auto the playoffs
   let s;do{s=stepRound();}while(s!=='eventend');render();}
-function liveToFinal(){const L=world.live;if(!L||L.done)return;let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);}let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
+function liveToFinal(){const L=world.live;if(!L||L.done)return;if(L.stage==='preview')startSwissStage(L);let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);}let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
 function endBroadcast(){world.live=null;render();switchTab('feed');}
 function buildFinalPreviewPrompt(L){
   const c=L.fPair[0],r=L.fPair[1];const sA=starOf(c),sB=starOf(r);const pn=p=>`${p.first} "${p.tag}" ${p.last}`;
@@ -2102,8 +2170,14 @@ function swissView(L){const sw=L.sw,rec=sw.rec;
   h+=`</tbody></table></div>`;
   h+=`<div class="pbp">${L.log.map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
   return h;}
+function previewView(L){const host=(world.casters||[]).find(c=>c.host);
+  let h=`<div class="cast-head"><div class="cast-title">${esc(L.name)}</div><div class="cast-stage">Preview${L.tier==='WC'?' · the finale':''}</div></div>`;
+  h+=`<div class="pv-card"><div class="pv-h">🎙 ${host?esc(host.name)+' sets the stage':'The desk sets the stage'}</div>${previewBodyHtml(L.preview)}</div>`;
+  h+=`<div class="cast-ctl"><button class="ctl primary" data-act="startswiss">▶ ${L.tier==='SP'?'Begin the Challengers Stage':'Begin the Swiss'}</button><button class="ctl" data-act="auto">⏹ Auto the whole event</button></div>`;
+  return h;}
 function renderCast(){
   const el=$("p-cast");const L=world.live;
+  if(L&&!L.done&&L.stage==='preview'){el.innerHTML=previewView(L);return;}
   if(L&&!L.done&&L.stage==='swiss'){el.innerHTML=swissView(L);return;}
   if(L&&!L.done){
     const m=L.match,mp=m.map;
@@ -2206,7 +2280,8 @@ document.getElementById("p-story").addEventListener("click",e=>{const pr=e.targe
   playerFilter=p.retired?'retired':(world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');}});
 document.getElementById("p-feed").addEventListener("click",e=>{const btn=e.target.closest("[data-narrate]");if(btn)narrate(+btn.dataset.narrate);});
 document.getElementById("p-cast").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;
-  if(a==='smatch'){if(world.live){swissStepMatch(world.live);renderCast();}}
+  if(a==='startswiss'){if(world.live){startSwissStage(world.live);renderCast();}}
+  else if(a==='smatch'){if(world.live){swissStepMatch(world.live);renderCast();}}
   else if(a==='sround'){if(world.live){swissPlayRound(world.live);renderCast();}}
   else if(a==='sfinish'){if(world.live){swissAutoFinish(world.live);renderCast();}}
   else if(a==='snext'){if(world.live){swissNext(world.live);renderCast();}}
