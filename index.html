@@ -76,6 +76,8 @@
   .cairn:hover .stones i{background:var(--ember);}
   .cairn.crown .stones i{background:var(--gravl);}
   .cairn.crown:hover .stones i{background:#f0d96a;}
+  .cairn.masters .stones i{background:var(--good);}
+  .cairn.masters:hover .stones i{background:#b9d6a4;}
   .cairn .clabel{font-size:9.5px;color:var(--muted);letter-spacing:.04em;line-height:1.25;}
   .cairn .cyear{font-family:ui-monospace,monospace;font-size:10px;color:var(--faint);}
   .yard-empty{color:var(--faint);font-style:italic;}
@@ -241,13 +243,14 @@
       <h1>CAIR<span class="em">N</span></h1>
       <div>
         <div class="sub">Director Console</div>
-        <div class="season-tag">Season <b id="seasonNo">1</b> · <span id="yearNo">2016</span> · powered by <span class="gravl-mark">GRAVL</span></div>
+        <div class="season-tag">Season <b id="seasonNo">1</b> · <span id="stageNo">pre-season</span> · <span id="yearNo">2016</span> · powered by <span class="gravl-mark">GRAVL</span></div>
       </div>
     </div>
     <div class="controls">
-      <button class="ctl primary" id="btnSeason">Sim season</button>
+      <button class="ctl primary" id="btnStage">Sim stage ▸</button>
+      <button class="ctl" id="btnSeason">Sim season</button>
       <button class="ctl" id="btnFive">Skip 5 seasons</button>
-      <button class="ctl" id="btnReset">Reset to Season Zero</button>
+      <button class="ctl" id="btnReset">Reset</button>
     </div>
   </div>
 </header>
@@ -308,13 +311,18 @@ const ZONES=[
   {name:"the Mouth",  w:{aim:.9,read:.8,entry:1.4,util:.9}},
   {name:"B-Side River",w:{aim:1.1,read:1.0,entry:.9,util:.9}},
 ];
+// Circuit ladder (ascending prestige): feeder tournaments (D/C tier-2 circuit, B/A tier-1 circuit) <
+// Majors < Masters < the World Championship. Premier tiers run a 16-team Swiss and can be broadcast live.
 const TIERS={
-  B :{name:"B-Tier", pts:{1:100,2:55,4:25,8:10}, bo:"bo3", cairn:false},
-  A :{name:"A-Tier", pts:{1:210,2:115,4:60,8:25}, bo:"bo3", cairn:false},
-  S :{name:"Masters",pts:{1:420,2:240,4:130,8:60},bo:"bo3", cairn:false},
-  SP:{name:"Major",  pts:{1:760,2:430,4:240,8:120},bo:"bo5",cairn:true},
-  WC:{name:"World Championship",pts:{1:1300,2:760,4:420,8:210},bo:"bo5",cairn:true,worlds:true},
+  D :{name:"D-Tier", pts:{1:60, 2:35, 4:18, 8:8 }, bo:"bo1", feeder:'lo'},
+  C :{name:"C-Tier", pts:{1:120,2:70, 4:38, 8:16}, bo:"bo3", feeder:'lo'},
+  B :{name:"B-Tier", pts:{1:200,2:115,4:60, 8:26}, bo:"bo3", feeder:'hi'},
+  A :{name:"A-Tier", pts:{1:340,2:195,4:105,8:45}, bo:"bo3", feeder:'hi'},
+  SP:{name:"Major",  pts:{1:640,2:370,4:205,8:100},bo:"bo5",cairn:true,premier:true,swiss:true},
+  S :{name:"Masters",pts:{1:980,2:570,4:320,8:160},bo:"bo5",cairn:true,premier:true,swiss:true,masters:true},
+  WC:{name:"World Championship",pts:{1:1600,2:940,4:520,8:260},bo:"bo5",cairn:true,worlds:true,premier:true,swiss:true},
 };
+const FEEDER_TIERS=['D','C','B','A'];
 const WC_START=7; // the World Championship is established once the circuit matures
 const CITIES=["Orlando","Cologne","Katowice","Rio","Austin","Seoul","Lisbon","Dallas","Malmö","Shanghai","Belgrade","Toronto"];
 const MSPON=["GRAVL","Pepsi","Intel","Red Bull","Vantablack"];
@@ -482,8 +490,8 @@ function newWorld(){
   const d2=tier2Teams();
   const teams=d1.concat(d2);
   const freeAgents=[];for(let i=0;i<12;i++)freeAgents.push(procWeak(pick(ROLES),17+Math.floor(rnd()*4)));
-  const w={season:1,year:2016,started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],mastersChamps:[],seasonChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[],duos:[]};
-  w.teams.forEach(t=>{t.gravl=teamPower(t)*4*(t.div===2?0.7:1);t.majors=0;t.masters=0;t.worlds=0;t.divHistory=[{season:1,div:t.div}];t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:1}];});});
+  const w={season:1,year:2016,tick:0,seasonCal:[],started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],mastersChamps:[],seasonChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[],duos:[],results:[]};
+  w.teams.forEach(t=>{const seed=teamPower(t)*4*(t.div===2?0.7:1);t.gravl=0;t.lastGravl=seed;t.majors=0;t.masters=0;t.worlds=0;t.divHistory=[{season:1,div:t.div}];t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:1}];});});
   // Season Zero (2015) origins — the founding DreamHack LA final
   const findP=(short,tag)=>{const t=w.teams.find(x=>x.short===short);return t?t.players.find(p=>p.tag===tag):null;};
   [['LG','vell'],['HEMI','Gordo'],['HEMI','lan']].forEach(([s,tag])=>{const p=findP(s,tag);if(p){p.bb=true;p.history.unshift({short:'BB',name:'Beastie Bois',season:0});}});
@@ -668,20 +676,23 @@ function simSeries(a,b,wins,ctx){
 }
 
 /* events & season */
+// Seeding leans on current-season Circuit Points, with a little weight from last season so the first
+// events of a fresh season aren't a coin flip (a preseason ranking, like real circuits).
+function seedScore(t){return (t.gravl||0)+(t.lastGravl||0)*0.2;}
 function fieldFor(tier){
-  const ranked=[...world.teams].sort((x,y)=>y.gravl-x.gravl);
-  if(tier==='SP'||tier==='WC'){ // Majors & Worlds open with a 16-team Swiss stage
+  const T=TIERS[tier];const ranked=[...world.teams].sort((x,y)=>seedScore(y)-seedScore(x));
+  if(T.swiss){ // premier events: top 16 by points, open to both divisions
     if(tier==='SP'&&world.majorChamps.length===0){
-      // The inaugural Major: the founding-era headliners are seeded in by right
       const seeds=['VNG','LG','HEMI'].map(s=>world.teams.find(t=>t.short===s)).filter(Boolean);
-      const rest=ranked.filter(t=>!seeds.includes(t));
-      return seeds.concat(rest).slice(0,16);
+      return seeds.concat(ranked.filter(t=>!seeds.includes(t))).slice(0,16);
     }
     return ranked.slice(0,16);
   }
-  if(tier==='S')return ranked.slice(0,8);
-  if(tier==='A'){const top=ranked.slice(0,4);const rest=shuffle(ranked.slice(4)).slice(0,4);return shuffle(top.concat(rest));}
-  const lower=shuffle(ranked.slice(4)).slice(0,6);const couple=shuffle(ranked.slice(0,4)).slice(0,2);return shuffle(lower.concat(couple));
+  // feeders are tier-split: a tier-1 circuit (A/B) and a tier-2 circuit (C/D)
+  let pool=T.feeder==='hi'?ranked.filter(t=>t.div===1):T.feeder==='lo'?ranked.filter(t=>t.div===2):ranked;
+  if(pool.length<8)pool=ranked; // safety if a division is thin
+  if(tier==='A'||tier==='C'){const top=pool.slice(0,4),rest=shuffle(pool.slice(4)).slice(0,4);return shuffle(top.concat(rest));}
+  return shuffle(pool.slice(0,Math.max(8,Math.min(12,pool.length)))).slice(0,8); // B/D: more open
 }
 // 16-team Swiss group stage: pair on equal records, 3 wins advance to the playoff bracket, 3 losses out.
 // High-stakes matches (a side at 2 wins or 2 losses) are best-of-3; the rest best-of-1.
@@ -709,9 +720,11 @@ function swissFeed(name,tier,swiss){
 }
 function mkEventName(tier){
   if(tier==='WC')return `${world.year} Cairn World Championship`;
+  if(tier==='S')return `${pick(MSPON)} Masters · ${pick(CITIES)}`;
   if(tier==='SP')return `${pick(CITIES)} Major`;
-  if(tier==='S')return `${pick(MSPON)} Cairn Masters · ${pick(CITIES)}`;
   if(tier==='A')return `${pick(CITIES)} Open`;
+  if(tier==='B')return `${pick(CITIES)} Invitational`;
+  if(tier==='C')return `${pick(CITIES)} Challenger`;
   return `${pick(CITIES)} Cup`;
 }
 function starOf(t){
@@ -953,64 +966,111 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
   sc.box=finalBoxSnapshot(champ,run,F.box); // box of the season decider
   return data;
 }
+// Masters — the premier title, above any Major (but below the World Championship).
+function commitMasters(name,champ,run,sfL,qfL,F){
+  const T=TIERS.S;
+  champ.gravl+=T.pts[1];run.gravl+=T.pts[2];sfL.forEach(t=>t.gravl+=T.pts[4]);qfL.forEach(t=>t.gravl+=T.pts[8]);
+  regTeamRiv(champ,run,champ);
+  champ.masters=(champ.masters||0)+1;
+  const winLine=lineup(champ);winLine.forEach(p=>{p.mastersTitles=(p.mastersTitles||0)+1;p.titles++;});
+  formDuo(champ,winLine);grudgeBeat(name,champ,run);
+  const zone=F.lastZone,pname=p=>`${p.first} "${p.tag}" ${p.last}`;
+  world.cairns.push({season:world.season,team:champ.name,short:champ.short,zone,style:'masters',event:name});
+  world.mastersChamps.push({season:world.season,year:world.year,team:champ.short,teamName:champ.name,run:run.short,runName:run.name,event:name,score:F.scoreStr});
+  const starC=starOf(champ);let topId=null,topG=-1;for(const id in F.sg){if(F.sg[id]>topG){topG=F.sg[id];topId=+id;}}
+  const tp=topId?findPlayer(topId):null;const tb=tp&&F.box?F.box[tp.id]:null;const vg=F.vigilsAll&&F.vigilsAll.length?pick(F.vigilsAll):null;
+  const data={type:'masters',season:world.season,year:world.year,eventName:name,zone,cairnStyle:'masters',
+    champ:{name:champ.name,short:champ.short,heart:champ.heart},runner:{name:run.name,short:run.short},score:F.scoreStr,deadlift:F.deadlift,
+    top:tp?{name:pname(tp),g:topG.toFixed(2),won:teamOf(tp)===champ,kd:tb?kd(tb).toFixed(2):null,k:tb?tb.k:null,d:tb?tb.d:null,vigils:tb?tb.vigils:0}:null,
+    vigil:vg?{name:vg.name,x:vg.x,zone:vg.zone}:null,champStar:starC?pname(starC):null,
+    champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former)};
+  feedPush('final',`${champ.name} win the ${name}`,`<b>Masters champions.</b> def. ${run.name} ${F.scoreStr} — the circuit's premier title, ranked above any Major.`,'Masters',data);
+  timelinePush({kind:'dynasty',icon:'◈',short:champ.short,title:`${champ.name} win the ${name}`,text:`${champ.name} take the ${name} — a Masters, the sport's premier title, def. ${run.name} ${F.scoreStr}.`});
+  recordMajorPerfs(name,champ,run,F);
+  return data;
+}
+// Every tournament emits a result packet (winner, runner-up, the standout of the final) so the desk can write about it.
+function recordResult(tier,name,champ,run,fin,b){
+  let topId=null,topG=-1;for(const id in fin.sg){if(fin.sg[id]>topG){topG=fin.sg[id];topId=+id;}}
+  const tp=topId?findPlayer(topId):null;const tt=tp?teamOf(tp):null;
+  const pk={season:world.season,year:world.year,tick:world.tick||0,tier,name,
+    champ:champ.short,champName:champ.name,run:run.short,runName:run.name,score:b.score,deadlift:!!fin.deadlift,premier:!!TIERS[tier].premier,
+    standout:tp?{pid:tp.id,tag:tp.tag,name:`${tp.first} "${tp.tag}" ${tp.last}`,short:tt?tt.short:'—',grav:+topG.toFixed(2),role:tp.role,won:tt===champ}:null};
+  (world.results=world.results||[]).push(pk);if(world.results.length>500)world.results.shift();
+  return pk;
+}
 function runEvent(tier,name){
   const T=TIERS[tier];
-  const logMaps=(tier==='SP'||tier==='S'||tier==='WC');const cx=r=>logMaps?{event:name,tier,round:r}:null;
+  const logMaps=!!T.premier;const cx=r=>logMaps?{event:name,tier,round:r}:null;
   let field;
-  if(tier==='SP'||tier==='WC'){ // 16-team Swiss decides the eight playoff teams
+  if(T.swiss){ // premier events open with a 16-team Swiss that decides the eight playoff teams
     const swiss=runSwiss(fieldFor(tier),cx('Swiss'));
-    swiss.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.4)); // Swiss participation points
+    swiss.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.5)); // Swiss participation points
     swissFeed(name,tier,swiss);
-    field=swiss.advanced; // the eight survivors, seeded by Swiss record
-  } else field=fieldFor(tier).slice(0,8).sort((x,y)=>y.gravl-x.gravl);
-  const wins=T.bo==='bo5'?3:2;
-  const finalRound=tier==='WC'?'World final':tier==='SP'?'Major final':'Masters final';
+    field=swiss.advanced;
+  } else field=fieldFor(tier).slice(0,8).sort((x,y)=>seedScore(y)-seedScore(x));
+  if(field.length<8){const extra=[...world.teams].filter(t=>!field.includes(t)).sort((a,b)=>seedScore(b)-seedScore(a));while(field.length<8&&extra.length)field.push(extra.shift());}
+  const wins=T.bo==='bo5'?3:T.bo==='bo1'?1:2;
+  const finalRound=tier==='WC'?'World final':tier==='S'?'Masters final':tier==='SP'?'Major final':'final';
   const qf=[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]].map(([a,b])=>simSeries(a,b,wins,cx('QF')));
   const qfL=qf.map(s=>s.loser);
   const sf=[simSeries(qf[0].winner,qf[1].winner,wins,cx('SF')),simSeries(qf[2].winner,qf[3].winner,wins,cx('SF'))];
   const sfL=sf.map(s=>s.loser);
   const fin=simSeries(sf[0].winner,sf[1].winner,T.bo==='bo5'?3:wins,cx(finalRound));
-  const champ=fin.winner,run=fin.loser;
-  const b=seriesBlurb(fin);
+  const champ=fin.winner,run=fin.loser;const b=seriesBlurb(fin);
   detectUpsetsChokes(tier,name,qf,sf,fin);
   let cairn=null;
-  if(T.cairn){
+  if(T.premier){
     const F={scoreStr:b.score,deadlift:fin.deadlift,lastZone:fin.maps[fin.maps.length-1].zone,vigilsAll:[].concat(...fin.maps.map(m=>m.vigils)),sg:fin.sg,box:fin.box};
-    if(tier==='WC')commitWorlds(name,champ,run,sfL,qfL,F);else commitMajor(name,champ,run,sfL,qfL,F);
+    if(tier==='WC')commitWorlds(name,champ,run,sfL,qfL,F);else if(tier==='S')commitMasters(name,champ,run,sfL,qfL,F);else commitMajor(name,champ,run,sfL,qfL,F);
     cairn=world.cairns[world.cairns.length-1];
-  } else {
-    const add=(t,p)=>t.gravl+=p;
-    add(champ,T.pts[1]);add(run,T.pts[2]);sfL.forEach(t=>add(t,T.pts[4]));qfL.forEach(t=>add(t,T.pts[8]));
-    if(tier==='S'){
-      champ.masters=(champ.masters||0)+1;lineup(champ).forEach(p=>{p.mastersTitles=(p.mastersTitles||0)+1;});
-      world.mastersChamps.push({season:world.season,year:world.year,team:champ.short,teamName:champ.name,run:run.short,runName:run.name,event:name,score:b.score});
-      const a1=starOf(champ),b1=starOf(run);
-      if(a1&&b1){const key=[a1.id,b1.id].sort().join('-');world.rivalries[key]=world.rivalries[key]||{a:a1,b:b1,count:0,name:rivName(a1,b1)};const r=world.rivalries[key];r.count++;if(r.count>1)feedPush('note','Rivalry renewed',`${r.name} ${roman(r.count)} — met again with a title on the line (${name}).`);}
-      regTeamRiv(champ,run,champ);
-      feedPush('match',`${champ.name} take ${name}`,`def. ${run.name} ${b.score} — Masters gold, big GRAVL, no cairn. ${b.text}`,'Masters');
-    } else {
-      feedPush('small',`${champ.name} win ${name}`,`over ${run.name} ${b.score}. GRAVL banked.`,T.name);
-    }
+  } else { // feeder: bank circuit points, a one-line wire summary
+    const add=(t,p)=>t.gravl+=p;add(champ,T.pts[1]);add(run,T.pts[2]);sfL.forEach(t=>add(t,T.pts[4]));qfL.forEach(t=>add(t,T.pts[8]));
+    feedPush('small',`${champ.name} win ${name}`,`def. ${run.name} ${b.score} — ${T.name} circuit points banked.`,T.name);
   }
-  return {tier,name,champ,run,score:b.score,cairn};
+  const packet=recordResult(tier,name,champ,run,fin,b);
+  return {tier,name,champ,run,score:b.score,cairn,packet};
 }
-function calendarFor(s){
-  const cal=['B'];
-  const aN=Math.min(1+Math.floor(s/3),2);for(let i=0;i<aN;i++)cal.push('A');
-  const mN=Math.min(1+Math.floor(s/2),3);for(let i=0;i<mN;i++)cal.push('S');
-  const majN=s>=5?2:1;for(let i=0;i<majN;i++)cal.push('SP');
-  return cal;
+// A season is 4 stages. Feeders run every stage (T1 circuit A/B, T2 circuit C/D); premier events build toward
+// the finale — Majors mid-season, Masters later, the World Championship last.
+function buildSeasonCal(s){
+  const ticks=[[],[],[],[]];
+  ['B','A','B','A'].forEach((t,i)=>ticks[i].push(t)); // tier-1 feeder circuit
+  ['D','C','D','C'].forEach((t,i)=>ticks[i].push(t)); // tier-2 feeder circuit
+  const majN=s>=5?2:1;if(majN>=1)ticks[1].push('SP');if(majN>=2)ticks[2].push('SP');
+  const masN=Math.min(1+Math.floor((s-1)/4),2);if(masN>=1)ticks[2].push('S');if(masN>=2)ticks[3].push('S');
+  if(s>=WC_START)ticks[3].push('WC');
+  return ticks;
 }
-function runRegular(){
-  if(world.season>=2&&!world.bbReturned)bbReturn(); // the founders come home in S2
-  const cal=calendarFor(world.season);world.thisSeasonEvents=[];world.pendingMajors=[];
+function seasonOutline(cal){const all=[].concat(...cal);const c=t=>all.filter(x=>x===t).length;
+  return {majors:c('SP'),masters:c('S'),wc:c('WC'),feeders:all.length-c('SP')-c('S')-c('WC')};}
+function startSeason(){
+  world.tick=0;world.seasonCal=buildSeasonCal(world.season);world.thisSeasonEvents=[];world.pendingMajors=[];
   world.teams.forEach(t=>t.players.forEach(p=>{p._gravMark=p.gravs.length;}));
-  const mj=cal.filter(t=>t==='SP').length;const hasWC=world.season>=WC_START;
-  feedPush('note',`Season ${world.season} opens`,`${cal.length} events on the GRAVL circuit. ${mj} Major${mj>1?'s':''}${hasWC?' and the World Championship':''} ahead — broadcast live or auto-sim. Top 8 of the Standings qualify.`);
-  if(hasWC&&world.season===WC_START)feedPush('note','A world title is born',`The circuit has grown up. From this season on, a season-ending <b>World Championship</b> crowns a single world champion — the highest honor in Cairn, above any Major.`);
-  cal.forEach(tier=>{transactionWindow();if(tier==='SP'){world.pendingMajors.push({name:mkEventName('SP'),tier:'SP'});}else{world.thisSeasonEvents.push(runEvent(tier,mkEventName(tier)));}});
-  if(hasWC){transactionWindow();world.pendingMajors.push({name:mkEventName('WC'),tier:'WC'});}
-  world.teams.forEach(t=>lineup(t).forEach(p=>{p.games++;}));
+  if(world.season>=2&&!world.bbReturned)bbReturn(); // the founders come home in S2
+  world.teams.forEach(t=>lineup(t).forEach(p=>{p.games++;})); // a season of experience
+  const o=seasonOutline(world.seasonCal);
+  feedPush('note',`Season ${world.season} opens`,`Four stages on the circuit: ${o.feeders} feeder events, ${o.majors} Major${o.majors!==1?'s':''}, ${o.masters} Masters${o.wc?', and the World Championship finale':''}. <b>Circuit Points reset — everyone starts level.</b> Climb the table to qualify for the premier events.`);
+  if(world.season===WC_START)feedPush('note','A world title is born',`The circuit has grown up. From this season on, a season-ending <b>World Championship</b> crowns a single world champion — the highest honor in Cairn.`);
+}
+function runTick(){
+  world.tick++;const events=world.seasonCal[world.tick-1]||[];
+  feedPush('note',`Stage ${world.tick} of 4`,`${events.map(t=>TIERS[t].name).join(' · ')||'a quiet stage'}.`);
+  events.forEach(tier=>{transactionWindow();
+    if(TIERS[tier].premier)world.pendingMajors.push({name:mkEventName(tier),tier});
+    else world.thisSeasonEvents.push(runEvent(tier,mkEventName(tier)));});
+}
+function stepTick(){
+  if(world.pendingMajors&&world.pendingMajors.length)autoResolveMajors(); // resolve any premier event left pending
+  if(!world.started){world.started=true;startSeason();}
+  else if(world.tick>=4){endSeasonRollover();}
+  runTick();
+}
+function endSeasonRollover(){
+  advanceCareers(); // offseason: prom/rel runs off the season's final points
+  world.teams.forEach(t=>{t.lastGravl=t.gravl;t.gravl=0;}); // Circuit Points reset for the new season
+  world.season++;world.year++;
+  startSeason();
 }
 function pendName(e){return typeof e==='string'?e:e.name;}
 function pendTier(e){return typeof e==='string'?'SP':(e.tier||'SP');}
@@ -1227,8 +1287,8 @@ function advanceCareers(){
   // release last season's stand-ins, recover injuries
   world.teams.forEach(t=>{(t.standins||[]).forEach(s=>{s.standinFor=null;world.freeAgents.push(s);});t.standins=[];
     t.players.forEach(p=>{if(p.injured){p.injured--;if(p.injured<=0){p.injured=0;txn('return',`${nm(p)} returns to ${t.short} from injury.`);}}});});
-  // decay + age + develop + retire
-  world.teams.forEach(t=>{t.gravl*=0.6;
+  // age + develop + retire (Circuit Points reset separately at season rollover, they don't decay here)
+  world.teams.forEach(t=>{
     const mentorP=contracted(t).find(p=>hasTrait(p,'mentor'));const ment=!!mentorP; // a mentor steadies and grows the squad
     if(t.chem!=null)t.chem=clamp((0.74+(ment?0.04:0))+(t.chem-0.74)*0.80,0.42,0.92);
     t.players.forEach(p=>{if(p.retired)return;p.age++;p.tenure=(p.tenure||0)+1;if(p.slump>0)p.slump--;developPlayer(p,ment&&!hasTrait(p,'mentor'));
@@ -1268,6 +1328,7 @@ function advanceCareers(){
 function $(id){return document.getElementById(id);}
 function careerGrav(p){return p.gravs.length?p.gravs.reduce((s,x)=>s+x,0)/p.gravs.length:0;}
 function render(){$("seasonNo").textContent=world.season;$("yearNo").textContent=world.year;
+  $("stageNo").textContent=!world.started?'pre-season':world.tick>=4?'season complete':world.tick>=1?`stage ${world.tick} of 4`:'pre-season';
   renderFeed();renderCast();renderCal();renderStandings();renderPlayers();renderTeams();renderMarket();renderYard();renderStory();renderAnnals();}
 function renderFeed(){const el=$("p-feed");
   const hint=`<p class="hint">The desk can narrate any Major final with Claude — sim a Major, then press "Have the desk call it." (Runs inside the Claude app.)</p>`;
@@ -1283,17 +1344,17 @@ function renderFeed(){const el=$("p-feed");
     return `<div class="feed-item ${cls}"><div class="kicker"><span>S${f.season}</span><span class="tag-pill">${f.stage||'Dispatch'}</span></div><h3>${f.title}</h3>${body}</div>`;}).join("");}
 function renderCal(){const el=$("p-cal");
   if(!world.thisSeasonEvents.length){el.innerHTML=`<div class="feed-empty">No calendar yet — sim a season.</div>`;return;}
-  el.innerHTML=`<p class="hint">Season ${world.season} circuit, in order. Every result feeds the GRAVL Standings; only the Major marks the Yard.</p>`+
-   world.thisSeasonEvents.map(e=>`<div class="match"><span class="side"><span class="tag-pill">${TIERS[e.tier].name}</span> ${esc(e.name)}</span>
-     <span class="side"><span class="win">${esc(e.champ.name)}</span><span class="ms">${e.score}</span><span class="lose">${esc(e.run.name)}</span>${e.tier==='WC'?' <span class="unmarked">♛ World</span>':e.cairn?' <span class="unmarked">▲ Major</span>':''}</span></div>`).join("");}
+  el.innerHTML=`<p class="hint">Season ${world.season} circuit, stage by stage. Every result banks <b>Circuit Points</b>; the premier events build to the World Championship finale.</p>`+
+   world.thisSeasonEvents.map(e=>`<div class="match"><span class="side"><span class="tag-pill">${TIERS[e.tier].name}</span> ${esc(e.name)}${e.packet&&e.packet.tick?` <span class="cp-s">stage ${e.packet.tick}</span>`:''}</span>
+     <span class="side"><span class="win">${esc(e.champ.name)}</span><span class="ms">${e.score}</span><span class="lose">${esc(e.run.name)}</span>${e.tier==='WC'?' <span class="unmarked">♛ World</span>':e.tier==='S'?' <span class="good">◈ Masters</span>':e.tier==='SP'?' <span class="unmarked">▲ Major</span>':''}</span></div>`).join("");}
 function reigningWorldChamp(){const sc=world.seasonChamps;return sc&&sc.length?sc[sc.length-1]:null;}
 function renderStandings(){const el=$("p-gravl");const ranked=[...world.teams].sort((x,y)=>y.gravl-x.gravl);
   const wc=reigningWorldChamp();
-  let h=`<p class="hint">GRAVL Standings — a rolling tally of circuit results (decays each year). Top 8 qualify for every Major and the World Championship. Columns: ♛ World titles · ▲ Majors · ◇ Masters.</p>`;
+  let h=`<p class="hint"><b>Circuit Points</b> — this season's running table, earned across the stages and <b>reset each season</b>. The top 16 qualify for the premier events' Swiss stage. Division (T1/T2) is a separate, persistent thing — settled by promotion/relegation at season's end. Title columns: ♛ World · ◈ Masters · ▲ Majors.</p>`;
   if(wc)h+=`<div class="champ-banner" style="margin-bottom:14px"><div class="champ-sub" style="margin:0 0 3px;letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:var(--ember)">♛ Reigning World Champion · S${wc.season} · ${wc.year}</div><div class="champ-name">${esc(wc.name)}</div><div class="champ-sub">def. ${esc(wc.runName||wc.runShort)} ${esc(wc.score||'')}${wc.deadlift?' — a deadlift':''} at the ${esc(wc.event)}</div></div>`;
-  h+=`<table><thead><tr><th>#</th><th>Team</th><th>GRAVL</th><th title="World Championships">♛</th><th title="Majors">▲</th><th title="Masters">◇</th></tr></thead><tbody>
-   ${ranked.map((t,i)=>`<tr class="${i===7?'cut':''} ${i>7?'below':''}"><td class="grav">${i+1}</td><td>${esc(t.name)} <span class="role">${esc(t.short)}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</td><td class="grav" style="${t.worlds?'color:var(--ember)':''}">${t.worlds||'—'}</td><td class="grav">${t.majors||'—'}</td><td class="grav faint">${t.masters||'—'}</td></tr>`).join("")}
-   </tbody></table><p class="hint" style="margin-top:8px">The amber line is the Major cut — below it, you watch from home. A <b>T2</b> tag is a tier-2 side; bank enough GRAVL and they crash the party.</p>`;
+  h+=`<table><thead><tr><th>#</th><th>Team</th><th title="Circuit Points">CP</th><th title="World Championships">♛</th><th title="Masters">◈</th><th title="Majors">▲</th></tr></thead><tbody>
+   ${ranked.map((t,i)=>`<tr class="${i===15?'cut':''} ${i>15?'below':''}"><td class="grav">${i+1}</td><td>${esc(t.name)} <span class="role">${esc(t.short)}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</td><td class="grav" style="${t.worlds?'color:var(--ember)':''}">${t.worlds||'—'}</td><td class="grav good">${t.masters||'—'}</td><td class="grav">${t.majors||'—'}</td></tr>`).join("")}
+   </tbody></table><p class="hint" style="margin-top:8px">The amber line is the premier cut (top 16). A <b>T2</b> tag is a tier-2 side — bank enough points and a feeder team crashes the Swiss.</p>`;
   el.innerHTML=h;}
 let sortKey="grav";let selectedPid=null;let playerFilter="active";let movePid=null;let editPid=null;let showCreate=false;
 let selectedTid=null;let teamFilter="all";let teamSortKey="gravl";let annalsView="timeline";let expandedBoxKey=null;
@@ -1309,7 +1370,7 @@ function allPlayers(){const a=[];
   if(playerFilter==='fa'){world.freeAgents.forEach(p=>a.push({p,t:null}));return a;}
   world.teams.forEach(t=>{t.players.forEach(p=>{if(!p.retired)a.push({p,t});});(t.standins||[]).forEach(s=>a.push({p:s,t,sub:true}));});return a;}
 function bar(label,v){return `<div class="atr"><span class="atr-l">${label}</span><span class="atr-bar"><i style="width:${Math.round(v)}%"></i></span><span class="atr-v">${Math.round(v)}</span></div>`;}
-function majorTitles(p){return Math.max(0,(p.titles||0)-(p.worlds||0));}
+function majorTitles(p){return Math.max(0,(p.titles||0)-(p.worlds||0)-(p.mastersTitles||0));}
 function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!==null&&cg>=1.15&&p.titles===0;const r=p.r;const editing=editPid===p.id;
   const wt=p.worlds||0,mt=majorTitles(p),mst=p.mastersTitles||0;
   const honours=[];if(wt)honours.push(`<span class="good">♛ ${wt} World${wt>1?'s':''}</span>`);if(mt)honours.push(`<span class="good">${mt} Major${mt>1?'s':''}</span>`);
@@ -1393,9 +1454,9 @@ function renderMarket(){const el=$("p-market");
   el.innerHTML=h;}
 function renderYard(){const el=$("p-yard");
   if(!world.cairns.length){el.innerHTML=`<p class="hint">Only Majors and World Championships leave a mark here. None yet.</p><div class="yard"><span class="yard-empty">Clean stone.</span></div>`;return;}
-  const stones=style=>{let h="",n=style==='crown'?6:style==='loud'?5:3;for(let i=0;i<n;i++){const w=24-i*3;h+=`<i style="width:${w}px;height:${6+(style==='crown'?3:style==='loud'?2:0)}px"></i>`;}return h;};
-  el.innerHTML=`<p class="hint">Each stack is a title, placed at the callout where it turned. <span style="color:var(--gravl)">♛ Crown cairns</span> are World Championships; loud cairns tower; quiet ones keep the founders' tradition.</p>
-   <div class="yard">${world.cairns.map(c=>`<div class="cairn ${c.style==='crown'?'crown':''}" title="S${c.season} · ${esc(c.event)} · ${esc(c.team)} at ${esc(c.zone)}"><div class="stones">${stones(c.style)}</div><div class="clabel">${c.style==='crown'?'<span style="color:var(--gravl)">♛</span> ':''}${esc(c.team)}<br>${esc(c.zone)}</div><div class="cyear">S${c.season}</div></div>`).join("")}</div>`;}
+  const stones=style=>{let h="",n=style==='crown'?6:style==='masters'?5:style==='loud'?5:3;for(let i=0;i<n;i++){const w=24-i*3;h+=`<i style="width:${w}px;height:${6+(style==='crown'?3:style==='masters'?2:style==='loud'?2:0)}px"></i>`;}return h;};
+  el.innerHTML=`<p class="hint">Each stack is a premier title. <span style="color:var(--gravl)">♛ Crown</span> = World Championship; <span style="color:var(--good)">◈ Masters</span>; the rest are Majors.</p>
+   <div class="yard">${world.cairns.map(c=>`<div class="cairn ${c.style==='crown'?'crown':c.style==='masters'?'masters':''}" title="S${c.season} · ${esc(c.event)} · ${esc(c.team)} at ${esc(c.zone)}"><div class="stones">${stones(c.style)}</div><div class="clabel">${c.style==='crown'?'<span style="color:var(--gravl)">♛</span> ':c.style==='masters'?'<span style="color:var(--good)">◈</span> ':''}${esc(c.team)}<br>${esc(c.zone)}</div><div class="cyear">S${c.season}</div></div>`).join("")}</div>`;}
 function renderStory(){const el=$("p-story");
   const watch=allPlayers().map(({p})=>({p,cg:careerGrav(p)})).filter(x=>x.p.games>=1&&x.cg>=1.15&&x.p.titles===0).sort((a,b)=>b.cg-a.cg);
   const teamWatch=[...world.teams].filter(t=>t.majors===0).sort((a,b)=>b.gravl-a.gravl)[0];
@@ -1769,7 +1830,7 @@ function matchEnd(){
 }
 function eventEnd(){
   const L=world.live;
-  const data=L.tier==='WC'?commitWorlds(L.name,L.finalChamp,L.finalRun,L.sfLosers,L.qfLosers,L.finalSummary):commitMajor(L.name,L.finalChamp,L.finalRun,L.sfLosers,L.qfLosers,L.finalSummary);
+  const data=L.tier==='WC'?commitWorlds(L.name,L.finalChamp,L.finalRun,L.sfLosers,L.qfLosers,L.finalSummary):L.tier==='S'?commitMasters(L.name,L.finalChamp,L.finalRun,L.sfLosers,L.qfLosers,L.finalSummary):commitMajor(L.name,L.finalChamp,L.finalRun,L.sfLosers,L.qfLosers,L.finalSummary);
   L.championData=data;L.feedId=world.feed[0].id;L.done=true;
   world.pendingMajors=(world.pendingMajors||[]).filter(e=>pendName(e)!==L.name);
   pushLog(L,L.tier==='WC'?`${L.finalChamp.name} are crowned World Champions of Season ${world.season}. A crown cairn rises at ${data.zone}.`:`${L.finalChamp.name} are champions of the ${L.name}. A ${data.cairnStyle} cairn rises at ${data.zone}.`,'champion');
@@ -1859,7 +1920,7 @@ function renderCast(){
     el.innerHTML=h;return;
   }
   if(world.pendingMajors&&world.pendingMajors.length){
-    el.innerHTML=`<p class="hint">A championship is staged. Broadcast it round-by-round, or let it resolve on its own.</p>`+world.pendingMajors.map(e=>{const n=pendName(e),tr=pendTier(e);const lab=tr==='WC'?'World Championship':'Major';
+    el.innerHTML=`<p class="hint">A championship is staged. Broadcast it round-by-round, or let it resolve on its own.</p>`+world.pendingMajors.map(e=>{const n=pendName(e),tr=pendTier(e);const lab=tr==='WC'?'World Championship':tr==='S'?'Masters':'Major';
       return `<div class="match"><span class="side"><span class="tag-pill">${lab}</span> ${esc(n)}</span><span class="side"><button class="ctl primary" data-act="broadcast" data-name="${esc(n)}" data-tier="${tr}">◉ Broadcast live</button> <button class="ctl" data-act="autosim" data-name="${esc(n)}" data-tier="${tr}">Auto-sim</button></span></div>`;}).join("");
     return;
   }
@@ -1867,19 +1928,17 @@ function renderCast(){
 }
 
 /* controls */
-function doSeason(){
-  if(world.pendingMajors&&world.pendingMajors.length)autoResolveMajors();
-  if(world.started){advanceCareers();world.season++;world.year++;}
-  world.started=true;runRegular();render();switchTab(world.pendingMajors.length?'cast':'feed');
-}
-function doFive(){
-  for(let i=0;i<5;i++){if(world.pendingMajors&&world.pendingMajors.length)autoResolveMajors();if(world.started){advanceCareers();world.season++;world.year++;}world.started=true;runRegular();}
+function doStage(){stepTick();render();switchTab(world.pendingMajors.length?'cast':'feed');}
+function doSeason(){ // play through the rest of the current season's four stages
+  let guard=0;do{stepTick();}while(world.tick<4&&guard++<8);
   autoResolveMajors();render();switchTab('feed');
 }
+function doFive(){for(let n=0;n<5;n++){let guard=0;do{stepTick();}while(world.tick<4&&guard++<8);}autoResolveMajors();render();switchTab('feed');}
 function doReset(){world=newWorld();render();switchTab("feed");}
 function switchTab(p){document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.p===p));
   document.querySelectorAll(".panel").forEach(s=>s.classList.toggle("active",s.id==="p-"+p));}
 document.getElementById("tabs").addEventListener("click",e=>{const t=e.target.closest(".tab");if(t)switchTab(t.dataset.p);});
+$("btnStage").addEventListener("click",doStage);
 $("btnSeason").addEventListener("click",doSeason);
 $("btnFive").addEventListener("click",doFive);
 $("btnReset").addEventListener("click",doReset);
