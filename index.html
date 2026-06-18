@@ -100,6 +100,12 @@
   .intv-h{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--cold);margin-bottom:6px;}
   .intv-q{font-size:12.5px;color:var(--faint);font-style:italic;margin-bottom:4px;}
   .intv-a{font-family:Georgia,serif;color:var(--bone);font-size:14.5px;line-height:1.55;}
+  .awards{border-left:2px solid var(--gravl);padding:8px 0 4px 14px;margin-top:10px;}
+  .aw-h{font-size:13px;color:var(--bone);margin-bottom:7px;}
+  .aw-team{display:flex;flex-wrap:wrap;gap:6px;}
+  .aw-slot{font-size:11px;border:1px solid var(--line);border-radius:9px;padding:2px 9px;background:#1a1610;}
+  .aw-slot[data-tpid]{cursor:pointer;}.aw-slot[data-tpid]:hover{border-color:var(--ember-dim);}
+  .aw-slot .aw-role{color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-size:9px;margin-right:2px;}
   button.ctl.narrate{margin-top:10px;border-color:var(--ember-dim);}
   .cast-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px;}
   .cast-title{font-family:Georgia,serif;font-size:18px;}
@@ -493,7 +499,7 @@ function newWorld(){
   const d2=tier2Teams();
   const teams=d1.concat(d2);
   const freeAgents=[];for(let i=0;i<12;i++)freeAgents.push(procWeak(pick(ROLES),17+Math.floor(rnd()*4)));
-  const w={season:1,year:2016,tick:0,seasonCal:[],started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],seasonChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[],duos:[],results:[]};
+  const w={season:1,year:2016,tick:0,seasonCal:[],started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],seasonChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[],duos:[],results:[],majorMVPs:[]};
   w.teams.forEach(t=>{const seed=teamPower(t)*4*(t.div===2?0.7:1);t.gravl=0;t.lastGravl=seed;t.majors=0;t.worlds=0;t.divHistory=[{season:1,div:t.div}];t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:1}];});});
   // Season Zero (2015) origins — the founding DreamHack LA final
   const findP=(short,tag)=>{const t=w.teams.find(x=>x.short===short);return t?t.players.find(p=>p.tag===tag):null;};
@@ -710,7 +716,7 @@ function swissPairings(active,rec){
 function swissStakes(x,y,rec){const rx=rec.get(x),ry=rec.get(y);return Math.max(rx.w,rx.l,ry.w,ry.l)>=2;}
 function swissResolveMatch(x,y,rec,ctx){
   const s=simSeries(x,y,swissStakes(x,y,rec)?2:1,ctx?Object.assign({},ctx,{round:'Swiss'}):null);
-  rec.get(s.winner).w++;rec.get(s.loser).l++;return s;
+  rec.get(s.winner).w++;rec.get(s.loser).l++;accEventPerf(s.sg,1);return s;
 }
 function swissSeed(advanced,eliminated,rec){
   advanced.sort((a,b)=>rec.get(a).l-rec.get(b).l||b.gravl-a.gravl); // seed playoffs by Swiss record
@@ -936,6 +942,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former),
     standin:usedStandin?(winLine.find(p=>p.standinFor)?`${winLine.find(p=>p.standinFor).first} "${winLine.find(p=>p.standinFor).tag}" ${winLine.find(p=>p.standinFor).last}`:null):null};
   data.interview=mkInterview(data);
+  attachAwards(data,name,'SP');
   feedPush('final',`${champ.name} win the ${name}`,`<b>Major champions.</b> def. ${run.name} ${F.scoreStr}. They raise a <b>${data.cairnStyle}</b> cairn at ${zone}.`,'Major',data);
   if(usedStandin){const s=winLine.find(p=>p.standinFor);if(s)feedPush('note','A cairn for a borrowed name',`${nm(s)} came in as a stand-in and leaves with a Major. The rarest line in the sport — a cairn raised by someone who wasn't even on the wall a month ago.`);}
   // significant-moment + individual-choke detection
@@ -990,6 +997,7 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
     champStar:starC?pname(starC):null,runnerStarUnmarked:(starR&&starR.titles===0)?pname(starR):null,
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former)};
   data.interview=mkInterview(data);
+  attachAwards(data,name,'WC');
   feedPush('final',`${champ.name} are crowned World Champions`,`<b>World champions — Season ${world.season}.</b> def. ${run.name} ${F.scoreStr}. The season's world title, and a <b>crown</b> cairn at ${zone}.`,'World Championship',data);
   timelinePush({kind:'worlds',icon:'♛',short:champ.short,title:`${champ.name} are crowned World Champions`,
     text:`${champ.name} win the ${name}, def. ${run.name} ${F.scoreStr} — the season's world title and the highest honor on the Yard.`});
@@ -997,6 +1005,24 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
   sc.box=finalBoxSnapshot(champ,run,F.box); // box of the season decider
   return data;
 }
+// Per-event player impact, weighted by stage (Swiss 1 < QF 2 < SF 3 < Final 4) — drives the MVP and the All-Major team.
+function startEventPerf(){world._eventPerf={};}
+function accEventPerf(sg,weight){if(!world._eventPerf||!sg)return;
+  for(const id in sg){const p=findPlayer(+id);if(!p)continue;const t=teamOf(p);
+    const e=world._eventPerf[id]=world._eventPerf[id]||{pid:+id,tag:p.tag,name:`${p.first} "${p.tag}" ${p.last}`,short:t?t.short:'—',role:p.role,sum:0,n:0,best:0};
+    e.sum+=sg[id]*weight;e.n+=weight;e.best=Math.max(e.best,sg[id]);if(t)e.short=t.short;}
+}
+function eventAwards(){
+  const arr=Object.values(world._eventPerf||{});if(!arr.length)return null;
+  const mvp=arr.slice().sort((a,b)=>b.sum-a.sum)[0];
+  const allMajor=ROLES.map(role=>{const c=arr.filter(e=>e.role===role).sort((a,b)=>b.sum-a.sum)[0];
+    return c?{role,name:c.name,tag:c.tag,short:c.short,pid:c.pid,avg:+(c.sum/Math.max(1,c.n)).toFixed(2)}:{role,name:null};});
+  return {mvp:{pid:mvp.pid,name:mvp.name,tag:mvp.tag,short:mvp.short,role:mvp.role,avg:+(mvp.sum/Math.max(1,mvp.n)).toFixed(2)},allMajor};
+}
+function attachAwards(data,name,tier){const aw=eventAwards();if(!aw)return;
+  data.mvp=aw.mvp;data.allMajor=aw.allMajor;
+  (world.majorMVPs=world.majorMVPs||[]).push({season:world.season,year:world.year,event:name,tier,mvp:aw.mvp,allMajor:aw.allMajor});
+  world._eventPerf=null;}
 // Every tournament emits a result packet (winner, runner-up, the standout of the final) so the desk can write about it.
 function recordResult(tier,name,champ,run,fin,b){
   let topId=null,topG=-1;for(const id in fin.sg){if(fin.sg[id]>topG){topG=fin.sg[id];topId=+id;}}
@@ -1029,6 +1055,7 @@ function trackBuzz(pk){
 function runEvent(tier,name){
   const T=TIERS[tier];
   const logMaps=!!T.premier;const cx=r=>logMaps?{event:name,tier,round:r}:null;
+  if(T.premier)startEventPerf(); // begin tallying the tournament MVP / All-Major team
   let field;
   if(tier==='SP'){ // Majors run a three-stage Swiss: Challengers -> Legends -> Champions
     const {legends,challengers}=majorSplit();
@@ -1050,6 +1077,7 @@ function runEvent(tier,name){
   const sf=[simSeries(qf[0].winner,qf[1].winner,wins,cx('SF')),simSeries(qf[2].winner,qf[3].winner,wins,cx('SF'))];
   const sfL=sf.map(s=>s.loser);
   const fin=simSeries(sf[0].winner,sf[1].winner,T.bo==='bo5'?3:wins,cx(finalRound));
+  if(T.premier){qf.forEach(s=>accEventPerf(s.sg,2));sf.forEach(s=>accEventPerf(s.sg,3));accEventPerf(fin.sg,4);}
   const champ=fin.winner,run=fin.loser;const b=seriesBlurb(fin);
   detectUpsetsChokes(tier,name,qf,sf,fin);
   const packet=recordResult(tier,name,champ,run,fin,b);
@@ -1385,10 +1413,14 @@ function renderFeed(){const el=$("p-feed");
       else if(f.narrating)body=`<p>${f.body}</p><div class="desk-loading">the desk is calling it…</div>`;
       else body=`<p>${f.body}</p>${f.narrateError?`<div class="desk-err">${esc(f.narrateError)}</div>`:''}<button class="ctl narrate" data-narrate="${f.id}">✦ Have the desk call it</button>`;
       if(f.data.interview)body+=interviewHtml(f.data.interview);
+      if(f.data.mvp)body+=awardsHtml(f.data);
     } else body=`<p>${f.body}</p>`;
     return `<div class="feed-item ${cls}"><div class="kicker"><span>S${f.season}</span><span class="tag-pill">${f.stage||'Dispatch'}</span></div><h3>${f.title}</h3>${body}</div>`;}).join("");}
 function interviewHtml(iv){if(!iv)return '';
   return `<div class="intv"><div class="intv-h">🎙 Post-match · ${esc(iv.host)} with <b>${esc(iv.who)}</b></div><div class="intv-q">“${esc(iv.q)}”</div><div class="intv-a">“${esc(iv.a)}”</div></div>`;}
+function awardsHtml(d){if(!d||!d.mvp)return '';
+  return `<div class="awards"><div class="aw-h">★ Tournament MVP — <b>${esc(d.mvp.name)}</b> <span class="faint">· ${d.mvp.role} · ${esc(d.mvp.short)} · ${d.mvp.avg} avg</span></div>`+
+    (d.allMajor?`<div class="aw-team">${d.allMajor.filter(a=>a.name).map(a=>`<span class="aw-slot"${a.pid?` data-tpid="${a.pid}"`:''}><span class="aw-role">${a.role}</span> <span class="tg">${esc(a.tag||a.name)}</span></span>`).join('')}</div>`:'')+`</div>`;}
 function renderCal(){const el=$("p-cal");
   if(!world.thisSeasonEvents.length){el.innerHTML=`<div class="feed-empty">No calendar yet — sim a season.</div>`;return;}
   el.innerHTML=`<p class="hint">Season ${world.season} circuit, stage by stage. Every result banks <b>Circuit Points</b>; the premier events build to the World Championship finale.</p>`+
@@ -1804,6 +1836,7 @@ function liveSetup(name,tier){
     qfPairs:[],qfWinners:[],qfLosers:[],sfPairs:[],sfWinners:[],sfLosers:[],fPair:null,
     match:null,matchVigils:[],log:[],done:false};
   world.live=L;
+  startEventPerf(); // tally the tournament MVP / All-Major team across the broadcast
   const host=(world.casters||[]).find(c=>c.host);
   if(tier==='SP'){
     const {legends,challengers}=majorSplit();L.legendsSeed=legends;
@@ -1939,6 +1972,7 @@ function matchEnd(){
   clearSeriesState(m.a,m.b);
   const sg={};for(const id in m.perf){const arr=m.perf[id];sg[id]=arr.reduce((s,x)=>s+x,0)/arr.length;}
   for(const id in sg){const p=findPlayer(+id);if(p)p.gravs.push(sg[id]);}
+  accEventPerf(sg,L.stage==='qf'?2:L.stage==='sf'?3:4); // tally toward the tournament MVP / All-Major team
   const champ=m.wins.a>m.wins.b?m.a:m.b,loser=champ===m.a?m.b:m.a;
   let ra=0,rb=0,dA=false,dB=false;for(const mm of m.maps){if(mm.aWon)ra++;else rb++;if(ra===0&&rb===2)dA=true;if(rb===0&&ra===2)dB=true;}
   const deadlift=(champ===m.a&&dA)||(champ===m.b&&dB);
@@ -2060,6 +2094,7 @@ function renderCast(){
       else h+=`<button class="ctl primary narrate" data-act="recap">✦ Have the desk call it</button>${fi.narrateError?`<div class="desk-err">${esc(fi.narrateError)}</div>`:''}`;
     }
     if(d&&d.interview)h+=interviewHtml(d.interview);
+    if(d&&d.mvp)h+=awardsHtml(d);
     h+=`<div class="pbp" style="margin-top:14px">${L.log.slice(0,50).map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
     h+=`<button class="ctl" data-act="end" style="margin-top:14px">End broadcast</button>`;
     el.innerHTML=h;return;
