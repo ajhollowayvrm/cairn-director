@@ -586,7 +586,7 @@ function simRound(a,b,opts){
   const side={};A.forEach(p=>side[p.id]='a');B.forEach(p=>side[p.id]='b');
   const rate=p=>zoneSkill(p,z)*formMult(p)*confMult(p);
   const fragW=p=>Math.max(0.2,rate(p)*(0.7+0.6*rnd()));
-  const tchem=t=>(0.78+0.46*t.chem)*coachMult(t);
+  const tchem=t=>(0.78+0.46*t.chem)*coachMult(t)*fatigueMult(t);
   // opening duel — the entry/star players contest the ember first
   const oa=pickW(A,p=>p.r.entry*1.5+p.r.aim+1),ob=pickW(B,p=>p.r.entry*1.5+p.r.aim+1);
   const ra=rate(oa)*mom.a*tchem(a),rb=rate(ob)*mom.b*tchem(b);
@@ -669,6 +669,7 @@ function teamNameByShort(s){const t=world.teams.find(x=>x.short===s);if(t)return
 function oppNameFor(s){return teamNameByShort(s);}
 function simSeries(a,b,wins,ctx){
   wins=wins||3;let wa=0,wb=0;const maps=[];const sgA={},sbox={};
+  if(world._eventPerf){a._load=(a._load||0)+1;b._load=(b._load||0)+1;} // a series of wear, during a premier event
   const stage=ctx&&/final/i.test(ctx.round||'')?1:0;
   initSeriesState(a,b,stage);
   const acc=g=>{for(const id in g){(sgA[id]=sgA[id]||[]).push(g[id]);}};
@@ -706,24 +707,28 @@ function fieldFor(tier){
 }
 // 16-team Swiss group stage: pair on equal records, 3 wins advance to the playoff bracket, 3 losses out.
 // High-stakes matches (a side at 2 wins or 2 losses) are best-of-3; the rest best-of-1.
+// Buchholz = strength of schedule (sum of opponents' wins) — fairer pairing/seeding, and "the toughest run".
+function buchholz(t,rec){const r=rec.get(t);if(!r||!r.opp)return 0;return r.opp.reduce((s,o)=>{const ro=rec.get(o);return s+(ro?ro.w:0);},0);}
 function swissPairings(active,rec){
   const groups={};active.forEach(t=>{const r=rec.get(t);(groups[r.w+'-'+r.l]=groups[r.w+'-'+r.l]||[]).push(t);});
   const pairs=[];
-  Object.keys(groups).forEach(k=>{const g=groups[k].slice().sort((a,b)=>rec.get(a).seed-rec.get(b).seed);
-    while(g.length>=2)pairs.push([g.shift(),g.pop()]);}); // top seed vs bottom seed within the record group
+  Object.keys(groups).forEach(k=>{const g=groups[k].slice().sort((a,b)=>buchholz(b,rec)-buchholz(a,rec)||rec.get(a).seed-rec.get(b).seed);
+    while(g.length>=2)pairs.push([g.shift(),g.pop()]);}); // within a record group, the harder schedule is the higher seed
   return pairs;
 }
 function swissStakes(x,y,rec){const rx=rec.get(x),ry=rec.get(y);return Math.max(rx.w,rx.l,ry.w,ry.l)>=2;}
 function swissResolveMatch(x,y,rec,ctx){
   const s=simSeries(x,y,swissStakes(x,y,rec)?2:1,ctx?Object.assign({},ctx,{round:'Swiss'}):null);
-  rec.get(s.winner).w++;rec.get(s.loser).l++;accEventPerf(s.sg,1);return s;
+  rec.get(s.winner).w++;rec.get(s.loser).l++;
+  const rx=rec.get(x),ry=rec.get(y);if(rx.opp)rx.opp.push(y);if(ry.opp)ry.opp.push(x);
+  accEventPerf(s.sg,1);return s;
 }
 function swissSeed(advanced,eliminated,rec){
-  advanced.sort((a,b)=>rec.get(a).l-rec.get(b).l||b.gravl-a.gravl); // seed playoffs by Swiss record
-  eliminated.sort((a,b)=>rec.get(b).w-rec.get(a).w||b.gravl-a.gravl);
+  advanced.sort((a,b)=>rec.get(a).l-rec.get(b).l||buchholz(b,rec)-buchholz(a,rec)||b.gravl-a.gravl); // seed by record, then strength of schedule
+  eliminated.sort((a,b)=>rec.get(b).w-rec.get(a).w||buchholz(b,rec)-buchholz(a,rec)||b.gravl-a.gravl);
 }
 function runSwiss(field,ctx){
-  const rec=new Map();field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i}));
+  const rec=new Map();field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i,opp:[]}));
   const advanced=[],eliminated=[];let active=field.slice(),round=0;
   while(active.length&&round++<12){
     swissPairings(active,rec).forEach(([x,y])=>swissResolveMatch(x,y,rec,ctx));
@@ -744,6 +749,18 @@ function majorField(){let ranked=[...world.teams].sort((a,b)=>seedScore(b)-seedS
 function majorSplit(){const all=majorField();return {legends:all.slice(0,8),challengers:all.slice(8,24)};}
 function majorSwissFeed(name,chall,leg){const lr=leg.rec;
   feedPush('note',`${name} — Challengers & Legends`,`<b>Challengers Stage:</b> ${chall.advanced.map(t=>esc(t.short)).join(', ')} climb into Legends; out — ${chall.eliminated.map(t=>esc(t.short)).join(', ')}. <b>Legends Stage → playoffs:</b> ${leg.advanced.map(t=>`${esc(t.name)} <span class="faint">${lr.get(t).w}–${lr.get(t).l}</span>`).join(', ')}.`);
+}
+// The desk sets the stage when a premier event is staged — favourites, a dark horse, the unmarked star to watch.
+function majorPreview(name,tier){
+  const host=(world.casters||[]).find(c=>c.host);const ranked=[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a));
+  const favs=ranked.slice(0,3),t2=ranked.find(t=>t.div===2&&ranked.indexOf(t)<(tier==='WC'?16:24));
+  let star=null,sg=0;world.teams.forEach(t=>contracted(t).forEach(p=>{if((p.titles||0)===0&&p.games>=2){const cg=careerGrav(p);if(cg>=1.15&&cg>sg){sg=cg;star=p;}}}));
+  const buzz=Object.values(world.buzz||{}).filter(b=>b.n>=2).sort((a,b)=>b.n-a.n||b.best-a.best)[0];
+  const bits=[`Favourites: <b>${favs.map(t=>esc(t.name)).join('</b>, <b>')}</b>`];
+  if(t2)bits.push(`dark horse — <b>${esc(t2.name)}</b>, a tier-2 side with the points to make a run`);
+  if(star)bits.push(`${nm(star)} (${sg.toFixed(2)} career, still unmarked) has everything to prove`);
+  else if(buzz)bits.push(`watch the feeder riser <span class="tg">${esc(buzz.tag)}</span>`);
+  feedPush('note',`${name} — the desk sets the stage`,`${host?host.name+': ':''}${bits.join('. ')}. ${tier==='WC'?'The season comes down to this.':'Sixteen fight through Challengers; eight are seeded to Legends.'}`);
 }
 function mkEventName(tier){
   if(tier==='WC')return `${world.year} Cairn World Championship`;
@@ -1006,7 +1023,8 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
   return data;
 }
 // Per-event player impact, weighted by stage (Swiss 1 < QF 2 < SF 3 < Final 4) — drives the MVP and the All-Major team.
-function startEventPerf(){world._eventPerf={};}
+function startEventPerf(){world._eventPerf={};world.teams.forEach(t=>{t._load=0;});} // also reset tournament fatigue
+function fatigueMult(t){return 1-clamp(t._load||0,0,16)*0.005;} // deep runs run on fumes — up to ~8% drag
 function accEventPerf(sg,weight){if(!world._eventPerf||!sg)return;
   for(const id in sg){const p=findPlayer(+id);if(!p)continue;const t=teamOf(p);
     const e=world._eventPerf[id]=world._eventPerf[id]||{pid:+id,tag:p.tag,name:`${p.first} "${p.tag}" ${p.last}`,short:t?t.short:'—',role:p.role,sum:0,n:0,best:0};
@@ -1071,12 +1089,14 @@ function runEvent(tier,name){
   } else field=fieldFor(tier).slice(0,8).sort((x,y)=>seedScore(y)-seedScore(x));
   if(field.length<8){const extra=[...world.teams].filter(t=>!field.includes(t)).sort((a,b)=>seedScore(b)-seedScore(a));while(field.length<8&&extra.length)field.push(extra.shift());}
   const wins=T.bo==='bo5'?3:T.bo==='bo1'?1:2;
+  const qfWins=T.premier?2:wins; // premier QF/SF are best-of-3, the final best-of-5
+  const finalWins=T.bo==='bo5'?3:wins;
   const finalRound=tier==='WC'?'World final':tier==='SP'?'Major final':'final';
-  const qf=[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]].map(([a,b])=>simSeries(a,b,wins,cx('QF')));
+  const qf=[[field[0],field[7]],[field[3],field[4]],[field[1],field[6]],[field[2],field[5]]].map(([a,b])=>simSeries(a,b,qfWins,cx('QF')));
   const qfL=qf.map(s=>s.loser);
-  const sf=[simSeries(qf[0].winner,qf[1].winner,wins,cx('SF')),simSeries(qf[2].winner,qf[3].winner,wins,cx('SF'))];
+  const sf=[simSeries(qf[0].winner,qf[1].winner,qfWins,cx('SF')),simSeries(qf[2].winner,qf[3].winner,qfWins,cx('SF'))];
   const sfL=sf.map(s=>s.loser);
-  const fin=simSeries(sf[0].winner,sf[1].winner,T.bo==='bo5'?3:wins,cx(finalRound));
+  const fin=simSeries(sf[0].winner,sf[1].winner,finalWins,cx(finalRound));
   if(T.premier){qf.forEach(s=>accEventPerf(s.sg,2));sf.forEach(s=>accEventPerf(s.sg,3));accEventPerf(fin.sg,4);}
   const champ=fin.winner,run=fin.loser;const b=seriesBlurb(fin);
   detectUpsetsChokes(tier,name,qf,sf,fin);
@@ -1119,7 +1139,7 @@ function runTick(){
   world.tick++;const events=world.seasonCal[world.tick-1]||[];
   feedPush('note',`Stage ${world.tick} of 4`,`${events.map(t=>TIERS[t].name).join(' · ')||'a quiet stage'}.`);
   events.forEach(tier=>{transactionWindow();
-    if(TIERS[tier].premier)world.pendingMajors.push({name:mkEventName(tier),tier});
+    if(TIERS[tier].premier){const evn=mkEventName(tier);majorPreview(evn,tier);world.pendingMajors.push({name:evn,tier});}
     else world.thisSeasonEvents.push(runEvent(tier,mkEventName(tier)));});
 }
 function stepTick(){
@@ -1850,7 +1870,7 @@ function liveSetup(name,tier){
 }
 /* ---- live Swiss stage: play it match-by-match, round-by-round, or auto ---- */
 function liveSwissInit(L,field,stageLabel){
-  const rec=new Map();field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i}));
+  const rec=new Map();field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i,opp:[]}));
   L.sw={field,rec,active:field.slice(),round:0,pairs:[],pairIdx:0,advanced:[],eliminated:[],ctx:{event:L.name,tier:L.tier,round:'Swiss'},done:false,label:stageLabel};
   L.stage='swiss';L.swStage=stageLabel;
   pushLog(L,`— ${stageLabel} Stage —`,'map');
@@ -1883,7 +1903,8 @@ function swissComplete(L){const sw=L.sw;sw.done=true;
   } else {
     sw.eliminated.forEach(t=>t.gravl+=Math.round(TIERS[L.tier].pts[8]*0.5));
     swissFeed(L.name,L.tier,{advanced:sw.advanced,eliminated:sw.eliminated,rec:sw.rec});
-    pushLog(L,`${sw.label} complete — eight advance to the playoffs.`,'champion');
+    const tough=sw.advanced.slice().sort((a,b)=>buchholz(b,sw.rec)-buchholz(a,sw.rec))[0];
+    pushLog(L,`${sw.label} complete — eight advance to the playoffs. Toughest road: ${tough.short} (Buchholz ${buchholz(tough,sw.rec)}).`,'champion');
   }
 }
 // Advance from a finished Swiss stage: Challengers → Legends, or Legends/Swiss → the playoff bracket.
@@ -1919,14 +1940,17 @@ function startMatch(L){
   if(L.stage==='qf'){a=L.qfPairs[L.matchIdx][0];b=L.qfPairs[L.matchIdx][1];}
   else if(L.stage==='sf'){a=L.sfPairs[L.matchIdx][0];b=L.sfPairs[L.matchIdx][1];}
   else{a=L.fPair[0];b=L.fPair[1];}
-  L.match={a,b,wins:{a:0,b:0},target:3,maps:[],perf:{},seriesBox:{},map:null};L.matchVigils=[];
+  const target=L.stage==='f'?3:2; // final is Bo5, QF/SF Bo3
+  L.match={a,b,wins:{a:0,b:0},target,maps:[],perf:{},seriesBox:{},map:null};L.matchVigils=[];
   initSeriesState(a,b,L.stage==='f'?1:0); // big-stage nerves on the final
   const sn=L.stage==='qf'?'Quarterfinal':L.stage==='sf'?'Semifinal':'FINAL';
-  pushLog(L,`${sn}: ${a.name} vs ${b.name} — best of 5. ${playoffPreLine(a,b,L)}`,'map');
+  pushLog(L,`${sn}: ${a.name} vs ${b.name} — best of ${target*2-1}. ${playoffPreLine(a,b,L)}`,'map');
   startMap(L);
 }
 // A contextual setup line for a playoff tie — Swiss form, a renewed rivalry, an unmarked star.
 function playoffPreLine(a,b,L){const bits=[];
+  const lo=Math.min(a._load||0,b._load||0),hi=Math.max(a._load||0,b._load||0);
+  if(hi-lo>=4){const tired=(a._load||0)>(b._load||0)?a:b,fresh=tired===a?b:a;bits.push(`${tired.short} running on fumes after the Challengers grind, ${fresh.short} far fresher`);}
   if(L.swiss&&L.swiss.rec){const ra=L.swiss.rec.get(a),rb=L.swiss.rec.get(b);
     if(ra&&rb&&ra.l!==rb.l){const cleaner=ra.l<rb.l?a:b,cr=ra.l<rb.l?ra:rb;bits.push(`${cleaner.short} came through the Swiss cleaner (${cr.w}–${cr.l})`);}}
   const sa=starOf(a),sb=starOf(b);
@@ -2059,8 +2083,8 @@ function swissView(L){const sw=L.sw,rec=sw.rec;
   if(!sw.done&&sw.pairs.length)h+=`<div class="brk-row"><span class="brk-lab">R${sw.round}</span> ${sw.pairs.map((p,i)=>`<span class="brk-tie ${i===sw.pairIdx?'live':''}" style="${i<sw.pairIdx?'opacity:.5':''}">${p[0].short}/${p[1].short}</span>`).join(' ')}</div>`;
   h+=`</div>`;
   h+=`<div class="cast-ctl">${sw.done?`<button class="ctl primary" data-act="snext">${nextLbl}</button>`:`<button class="ctl primary" data-act="smatch">▶ Match</button><button class="ctl" data-act="sround">▶▶ Round</button><button class="ctl" data-act="sfinish">⏩ Auto-finish ${esc(sw.label||'Swiss')}</button>`}<button class="ctl" data-act="auto">⏹ Auto whole event</button></div>`;
-  h+=`<div class="boxwrap" style="margin-bottom:10px"><div class="bx-cap">Swiss standings</div><table class="bx"><thead><tr><th>Team</th><th>W</th><th>L</th><th></th></tr></thead><tbody>`;
-  h+=all.map(t=>{const r=rec.get(t);return `<tr><td class="bx-nm">${esc(t.name)} <span class="role">${esc(t.short)}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="bx-k">${r.w}</td><td>${r.l}</td><td>${status(t)}</td></tr>`;}).join('');
+  h+=`<div class="boxwrap" style="margin-bottom:10px"><div class="bx-cap">Swiss standings · Buch = strength of schedule</div><table class="bx"><thead><tr><th>Team</th><th>W</th><th>L</th><th title="Buchholz">Buch</th><th></th></tr></thead><tbody>`;
+  h+=all.map(t=>{const r=rec.get(t);return `<tr><td class="bx-nm">${esc(t.name)} <span class="role">${esc(t.short)}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="bx-k">${r.w}</td><td>${r.l}</td><td class="faint">${buchholz(t,rec)}</td><td>${status(t)}</td></tr>`;}).join('');
   h+=`</tbody></table></div>`;
   h+=`<div class="pbp">${L.log.map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
   return h;}
