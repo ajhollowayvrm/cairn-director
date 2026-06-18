@@ -439,12 +439,17 @@ function assignTraits(p){const t=[];const add=x=>{if(t.length<2&&t.indexOf(x)<0)
   if(rnd()<0.07)add('glass');
   if(rnd()<0.07)add('ironman');
   p.traits=t;}
+// Stamina: how well a player holds up across a long tournament run. Situational, so it stays out of skillIndex.
+function rollStamina(p){let s=56+(p.r.consistency-55)*0.4+gauss()*12; // steadier players tend to last
+  if(hasTrait(p,'ironman'))s=Math.max(s+12,86);
+  if(hasTrait(p,'glass'))s-=12;if(hasTrait(p,'hothead'))s-=7;
+  return Math.round(clamp(s,30,99));}
 function mkPlayer(first,tag,last,role,age,rt){
   let r,pot;
   if(rt){r=rt;pot=clamp(peakAttr(r)+2+rnd()*6,60,99);}else{const g=ratingsFor(role);r=g.r;pot=g.pot;}
   if(tag)usedTags.add(tag);
   const p={id:pid++,first,tag,last,role,age,r,pot:Math.round(pot),titles:0,worlds:0,gravs:[],games:0,retired:false,stat:blankBox2(),history:[],traits:[]};
-  assignTraits(p);return p;
+  assignTraits(p);p.stamina=rollStamina(p);return p;
 }
 function blankBox2(){return blankBox();}
 function proc(role,age){return mkPlayer(pick(FIRST),freshTag(),pick(LAST),role,age||16+Math.floor(rnd()*8));}
@@ -584,9 +589,10 @@ function simRound(a,b,opts){
   const A=lineup(a),B=lineup(b);
   const box={};A.concat(B).forEach(p=>box[p.id]=newRoundBox());
   const side={};A.forEach(p=>side[p.id]='a');B.forEach(p=>side[p.id]='b');
-  const rate=p=>zoneSkill(p,z)*formMult(p)*confMult(p);
+  const loadA=a._load||0,loadB=b._load||0; // tournament fatigue is felt per player, scaled by his stamina
+  const rate=p=>zoneSkill(p,z)*formMult(p)*confMult(p)*staminaFatigue(p,side[p.id]==='a'?loadA:loadB);
   const fragW=p=>Math.max(0.2,rate(p)*(0.7+0.6*rnd()));
-  const tchem=t=>(0.78+0.46*t.chem)*coachMult(t)*fatigueMult(t);
+  const tchem=t=>(0.78+0.46*t.chem)*coachMult(t);
   // opening duel — the entry/star players contest the ember first
   const oa=pickW(A,p=>p.r.entry*1.5+p.r.aim+1),ob=pickW(B,p=>p.r.entry*1.5+p.r.aim+1);
   const ra=rate(oa)*mom.a*tchem(a),rb=rate(ob)*mom.b*tchem(b);
@@ -1024,7 +1030,8 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
 }
 // Per-event player impact, weighted by stage (Swiss 1 < QF 2 < SF 3 < Final 4) — drives the MVP and the All-Major team.
 function startEventPerf(){world._eventPerf={};world.teams.forEach(t=>{t._load=0;});} // also reset tournament fatigue
-function fatigueMult(t){return 1-clamp(t._load||0,0,16)*0.005;} // deep runs run on fumes — up to ~8% drag
+// Per-player fatigue: deep tournament runs drag, but a high-stamina (iron-lunged) player barely feels it.
+function staminaFatigue(p,load){const drain=clamp(load,0,16)*(1-(p.stamina||60)/125);return 1-clamp(drain*0.012,0,0.13);}
 function accEventPerf(sg,weight){if(!world._eventPerf||!sg)return;
   for(const id in sg){const p=findPlayer(+id);if(!p)continue;const t=teamOf(p);
     const e=world._eventPerf[id]=world._eventPerf[id]||{pid:+id,tag:p.tag,name:`${p.first} "${p.tag}" ${p.last}`,short:t?t.short:'—',role:p.role,sum:0,n:0,best:0};
@@ -1359,6 +1366,11 @@ function forceMove(p,to){
 // generational rookie (pot 90+) actually becomes a star while a low-ceiling journeyman plateaus. Past ~29 they decline.
 function developPlayer(p,mentored){
   const d=(k,v)=>p.r[k]=clamp(p.r[k]+v,26,99);
+  if(p.stamina==null)p.stamina=rollStamina(p);
+  // stamina firms up young and fades from the late 20s — earlier than raw skill; ironmen hold it far longer
+  const sAge=hasTrait(p,'ironman')?30:27;
+  if(p.age>=sAge)p.stamina=clamp(p.stamina-(0.7+(p.age-sAge)*0.45)*(hasTrait(p,'ironman')?0.55:1),28,99);
+  else if(p.age<=21)p.stamina=clamp(p.stamina+0.5,28,99);
   // Late bloomers keep climbing and decline later; ironmen age slowly; prodigies surge early.
   const declineAge=hasTrait(p,'ironman')?32:hasTrait(p,'lateBloomer')?31:29;
   if(p.age>=declineAge){let fall=0.6+(p.age-declineAge)*0.35;if(hasTrait(p,'ironman'))fall*=0.6;
@@ -1475,8 +1487,8 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
   const honours=[];if(wt)honours.push(`<span class="good">♛ ${wt} World${wt>1?'s':''}</span>`);if(mt)honours.push(`<span class="good">${mt} Major${mt>1?'s':''}</span>`);
   const attrs=editing
     ? editRow('Aim','aim',r.aim,p.id)+editRow('Read','read',r.read,p.id)+editRow('Entry','entry',r.entry,p.id)+editRow('Clutch','clutch',r.clutch,p.id)+editRow('Util','util',r.util,p.id)+editRow('Consist','consistency',r.consistency,p.id)
-      +`<div class="editmeta">age <button class="step" data-act="agedn" data-p="${p.id}">−</button> ${p.age} <button class="step" data-act="ageup" data-p="${p.id}">+</button> · role <button class="mact" data-act="rolecycle" data-p="${p.id}">${p.role}</button></div>`
-    : bar('Aim',r.aim)+bar('Read',r.read)+bar('Entry',r.entry)+bar('Clutch',r.clutch)+bar('Util',r.util)+bar('Consist',r.consistency);
+      +`<div class="editmeta">age <button class="step" data-act="agedn" data-p="${p.id}">−</button> ${p.age} <button class="step" data-act="ageup" data-p="${p.id}">+</button> · role <button class="mact" data-act="rolecycle" data-p="${p.id}">${p.role}</button></div>`+bar('Stamina',p.stamina||60)
+    : bar('Aim',r.aim)+bar('Read',r.read)+bar('Entry',r.entry)+bar('Clutch',r.clutch)+bar('Util',r.util)+bar('Consist',r.consistency)+bar('Stamina',p.stamina||60);
   return `<div class="scout">
     <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?esc(t.name):'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.onDesk?' · <span class="good">🎙 on the desk</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':honours.length?' · '+honours.join(' · '):''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
     ${traitPills(p)}
@@ -1950,7 +1962,9 @@ function startMatch(L){
 // A contextual setup line for a playoff tie — Swiss form, a renewed rivalry, an unmarked star.
 function playoffPreLine(a,b,L){const bits=[];
   const lo=Math.min(a._load||0,b._load||0),hi=Math.max(a._load||0,b._load||0);
-  if(hi-lo>=4){const tired=(a._load||0)>(b._load||0)?a:b,fresh=tired===a?b:a;bits.push(`${tired.short} running on fumes after the Challengers grind, ${fresh.short} far fresher`);}
+  if(hi-lo>=4){const tired=(a._load||0)>(b._load||0)?a:b,fresh=tired===a?b:a;
+    const fade=lineup(tired).slice().sort((x,y)=>(x.stamina||60)-(y.stamina||60))[0];
+    bits.push(`${tired.short} running on fumes after the Challengers grind${fade&&(fade.stamina||60)<48?` — watch ${fade.tag}'s legs go`:''}, ${fresh.short} far fresher`);}
   if(L.swiss&&L.swiss.rec){const ra=L.swiss.rec.get(a),rb=L.swiss.rec.get(b);
     if(ra&&rb&&ra.l!==rb.l){const cleaner=ra.l<rb.l?a:b,cr=ra.l<rb.l?ra:rb;bits.push(`${cleaner.short} came through the Swiss cleaner (${cr.w}–${cr.l})`);}}
   const sa=starOf(a),sb=starOf(b);
