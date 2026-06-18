@@ -435,6 +435,11 @@ const TRAITS={
   ironman:{name:'Ironman',blurb:'durable, ages slowly',col:'var(--good)'},
 };
 function hasTrait(p,t){return !!(p&&p.traits&&p.traits.indexOf(t)>=0);}
+// Traits aren't fixed at birth — they're earned and lost on the biggest stage. These mutate them and log the arc.
+function addTrait(p,t){if(!p.traits)p.traits=[];if(p.traits.indexOf(t)<0){p.traits.push(t);return true;}return false;}
+function dropTrait(p,t){if(!p.traits)return false;const i=p.traits.indexOf(t);if(i>=0){p.traits.splice(i,1);return true;}return false;}
+function swapTrait(p,from,to){dropTrait(p,from);return addTrait(p,to);}
+function logTraitArc(p,text){(p.traitLog=p.traitLog||[]).push({season:world.season,year:world.year,text});}
 function assignTraits(p){const t=[];const add=x=>{if(t.length<2&&t.indexOf(x)<0)t.push(x);};
   if(rnd()<0.16)add(rnd()<0.62?'bigGame':'headcase');
   if(rnd()<0.16)add(rnd()<0.55?'loyal':'mercenary');
@@ -752,7 +757,15 @@ function runSwiss(field,ctx){
 }
 function swissFeed(name,tier,swiss){
   const r=swiss.rec;const threeOh=swiss.advanced.filter(t=>r.get(t).l===0);
-  feedPush('note',`${name} — Swiss stage`,`Sixteen teams, Swiss to eight. Into the playoffs: ${swiss.advanced.map(t=>`${esc(t.name)} <span class="faint">${r.get(t).w}–${r.get(t).l}</span>`).join(', ')}.${threeOh.length?` <b>${threeOh.map(t=>esc(t.name)).join(', ')}</b> ran the table 3–0.`:''} Out of the Swiss: ${swiss.eliminated.map(t=>esc(t.short)).join(', ')}.`);
+  const t2=swiss.advanced.filter(t=>t.div===2),survived=swiss.advanced.filter(t=>r.get(t).l===2);
+  const tough=swiss.advanced.slice().sort((a,b)=>buchholz(b,r)-buchholz(a,r))[0];
+  const colour=[
+    threeOh.length?`<b>${threeOh.map(t=>esc(t.name)).join(', ')}</b> ran the table 3–0.`:'',
+    t2.length?`Feeder run: ${t2.map(t=>esc(t.short)).join(', ')} crashed through from tier 2.`:'',
+    survived.length?`Backs to the wall and through anyway: ${survived.map(t=>esc(t.short)).join(', ')}.`:'',
+    tough?`Toughest road belonged to ${esc(tough.short)} (Buchholz ${buchholz(tough,r)}).`:'',
+  ].filter(Boolean).join(' ');
+  feedPush('note',`${name} — Swiss stage`,`Sixteen teams, Swiss to eight. Into the playoffs: ${swiss.advanced.map(t=>`${esc(t.name)} <span class="faint">${r.get(t).w}–${r.get(t).l}</span>`).join(', ')}. Out of the Swiss: ${swiss.eliminated.map(t=>esc(t.short)).join(', ')}.${colour?' '+colour:''}`);
 }
 // The Major field: every club by Circuit Points. Top 8 are seeded straight into Legends; 9–24 grind through
 // the Challengers Swiss for the other eight Legends spots, then the eight Legends survivors make the playoffs.
@@ -863,7 +876,9 @@ function relLine(p){const bits=[];
   const d=duoOf(p.id);if(d){const pa=anyPlayerById(duoPartnerId(p.id));if(pa)bits.push(`<span class="cp-l">Core duo</span> with <span class="tg">${esc(pa.tag)}</span>${d.split?' <span class="faint">(split up)</span>':''}${d.majors>1?` <span class="faint">· ${d.majors} Majors together</span>`:''}`);}
   if(p.mentorId!=null){const m=anyPlayerById(p.mentorId);if(m)bits.push(`<span class="cp-l">Mentored by</span> <span class="tg">${esc(m.tag)}</span>`);}
   if(p.proteges&&p.proteges.length){const ns=p.proteges.map(id=>anyPlayerById(id)).filter(Boolean).slice(0,3).map(x=>`<span class="tg">${esc(x.tag)}</span>`);if(ns.length)bits.push(`<span class="cp-l">Mentor to</span> ${ns.join(', ')}`);}
-  return bits.length?`<div class="career-path" style="margin-top:6px">${bits.join(' <span class="cp-arr">·</span> ')}</div>`:'';}
+  let arc='';
+  if(p.traitLog&&p.traitLog.length){const a=p.traitLog[p.traitLog.length-1];arc=`<div class="career-path" style="margin-top:6px"><span class="cp-l">Arc</span> <span class="faint">S${a.season}</span> ${esc(a.text)}</div>`;}
+  return (bits.length?`<div class="career-path" style="margin-top:6px">${bits.join(' <span class="cp-arr">·</span> ')}</div>`:'')+arc;}
 let feedId=1;
 function feedPush(kind,title,body,stage,data){world.feed.unshift({id:feedId++,kind,title,body,stage,season:world.season,data:data||null,narrated:null,narrating:false,narrateError:null});}
 
@@ -929,6 +944,15 @@ function goatScore(p){
   const cg=p.games?careerGrav(p):0;const log=(world.goatLog&&world.goatLog[p.role])||[];
   const bests=log.filter(e=>e.id===p.id).length;const longevity=Math.min(p.gravs.length,160)/40;
   return +(p.titles*4 + Math.max(0,cg-0.9)*34 + bests*2.2 + longevity).toFixed(2);
+}
+// Position-independent: the most important player of all time, any role. Trophies (Worlds above Majors),
+// sustained impact (career Gravity), peer recognition (All-Star #1s across every role), and longevity.
+function allStarCount(p){return ROLES.reduce((n,r)=>n+(((world.goatLog&&world.goatLog[r])||[]).filter(e=>e.id===p.id).length),0);}
+function legendScore(p){
+  const cg=p.games?careerGrav(p):0;
+  const worlds=p.worlds||0,majors=Math.max(0,(p.titles||0)-worlds);
+  const longevity=Math.min(p.gravs.length,200)/30;
+  return +(majors*4 + worlds*7 + Math.max(0,cg-0.9)*36 + allStarCount(p)*2.4 + longevity).toFixed(2);
 }
 function endSeasonRecords(){
   const s=world.season;world.goatLog=world.goatLog||{};
@@ -1000,6 +1024,39 @@ function mkInterview(d){
   else {a=pick(["We earned this the hard way, round by round. Proudest I've been of these four.","Came here to win it. We did. That's the whole story.","Still doesn't feel real. The boys showed up when it mattered most."]);}
   return {host:'Sam Herring',who,q,a};
 }
+// Trait evolution off a premier final: the stage reshapes who a player is.
+// A front-runner who delivers sheds the label; a closer earns Ice; a young star who keeps
+// falling short hardens into a front-runner. Per-player finals streaks are stamped here too.
+function evolveTraitsFromFinal(champ,run,F,isWorlds){
+  const stageName=isWorlds?'the World final':'a Major final';
+  const winLine=lineup(champ),loseLine=lineup(run);
+  winLine.forEach(p=>{p.finalsWon=(p.finalsWon||0)+1;p.finalLossStreak=0;});
+  loseLine.forEach(p=>{p.finalsLost=(p.finalsLost||0)+1;p.finalLossStreak=(p.finalLossStreak||0)+1;});
+  winLine.forEach(p=>{
+    const e=F.box&&F.box[p.id];const sg=F.sg?F.sg[p.id]:null;const vigils=e?e.vigils:0;
+    const bigFinal=(sg!=null&&sg>=1.12)||vigils>=1;
+    if(hasTrait(p,'headcase')&&bigFinal&&rnd()<0.55){
+      const earned=vigils>=1?'clutch':'bigGame';swapTrait(p,'headcase',earned);
+      logTraitArc(p,`Shed the front-runner label — delivered on ${stageName}, becomes ${TRAITS[earned].name}.`);
+      feedPush('note','The label comes off',`${nm(p)} was the man who shrank on the big stage. Not tonight — ${vigils>=1?`${vigils} clutch hold${vigils>1?'s':''} and `:''}a title to bury it. Something broke loose in him.`);
+      timelinePush({kind:'marked',icon:'❖',short:champ.short,title:`${p.tag} sheds the front-runner tag`,text:`${p.first} "${p.tag}" ${p.last} was branded a player who shrank when it mattered. Winning ${stageName} for ${champ.name}, he proved it wrong — ${TRAITS[earned].name} now.`});
+    } else if(vigils>=2&&!hasTrait(p,'clutch')&&!hasTrait(p,'headcase')&&!hasTrait(p,'bigGame')&&(p.traits||[]).length<3&&rnd()<0.4){
+      addTrait(p,'clutch');
+      logTraitArc(p,`Earned Ice — ${vigils} clutch holds in ${stageName}.`);
+      feedPush('note','Ice in the veins',`${nm(p)} closed ${vigils} rounds alone in ${stageName}. The desk has a new word for him: ice.`);
+    }
+  });
+  loseLine.forEach(p=>{
+    if((p.finalLossStreak||0)>=3&&(p.titles||0)===0&&p.age<=28&&!hasTrait(p,'clutch')&&!hasTrait(p,'bigGame')&&!hasTrait(p,'headcase')&&!hasTrait(p,'ironman')&&(p.traits||[]).length<3){
+      const sg=F.sg?F.sg[p.id]:null;const cg=p.games?careerGrav(p):1;const choked=sg!=null&&(cg-sg)>=0.10;
+      if(choked&&rnd()<0.5){
+        addTrait(p,'headcase');
+        logTraitArc(p,`Hardened into a front-runner — a ${p.finalLossStreak}th final lost, still unmarked.`);
+        feedPush('note','It is getting to him',`${nm(p)} falls at the final step again — ${p.finalLossStreak} finals now, no Major. You can see it in how he plays the big rounds. The doubt is setting in.`);
+      }
+    }
+  });
+}
 function commitMajor(name,champ,run,sfL,qfL,F){
   const T=TIERS.SP;
   champ.gravl+=T.pts[1];run.gravl+=T.pts[2];sfL.forEach(t=>t.gravl+=T.pts[4]);qfL.forEach(t=>t.gravl+=T.pts[8]);
@@ -1057,6 +1114,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
       text:`${pname(p)} (${run.name}) went missing in the ${name} final — ${why.join(', ')}. The no-show that cost the title.`},Infinity);});
   recordMajorPerfs(name,champ,run,F);
   recordMajorTimeline(name,champ,run,F,{priorStreak,starC,champStarBreakthrough:data.champStarBreakthrough});
+  evolveTraitsFromFinal(champ,run,F,false);
   return data;
 }
 // The World Championship: the season finale, above any Major. Its winner is the season's World Champion,
@@ -1089,6 +1147,7 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
   timelinePush({kind:'worlds',icon:'♛',short:champ.short,title:`${champ.name} are crowned World Champions`,
     text:`${champ.name} win the ${name}, def. ${run.name} ${F.scoreStr} — the season's world title and the highest honor on the Yard.`});
   recordMajorPerfs(name,champ,run,F);
+  evolveTraitsFromFinal(champ,run,F,true);
   sc.box=finalBoxSnapshot(champ,run,F.box); // box of the season decider
   return data;
 }
@@ -1317,16 +1376,20 @@ function reviveOrg(d,opts){opts=opts||{};
     txn('sign',`${d.name} rejoin the circuit (Div 2)${opts.byHand?' — reinstated by the commissioner':''}.`);}
   return t;}
 function findByTag(tag){for(const t of world.teams){const p=t.players.find(x=>x.tag===tag)||(t.standins||[]).find(x=>x.tag===tag);if(p)return p;}return world.freeAgents.find(x=>x.tag===tag)||null;}
+// The five founding Beastie Bois — when all five share a roster, their chemistry is unmatched (see bbFoundersComplete).
+const BB_FOUNDERS=['Books','vell','Gordo','lan','DadBod'];
+function bbFoundersComplete(t){return !!(t&&t.bbTeam&&BB_FOUNDERS.every(tag=>contracted(t).some(p=>p.tag===tag)));}
 // Scripted lore: in Season 2, Books heals, walks off the desk, and pulls the five Beastie Bois originals back together.
 function bbReturn(){
   if(world.bbReturned)return;world.bbReturned=true;
   const bbDef=(world.defunct||[]).find(d=>d.short==='BB');
   const bb=bbDef?reviveOrg(bbDef,{silent:true}):null;
   if(!bb)return;
-  bb.heart=true;bb.bbTeam=true;bb.chem=0.86; // the founders know each other cold
-  const tags=['Books','vell','Gordo','lan','DadBod'];
-  const back=tags.map(findByTag).filter(Boolean);
+  bb.heart=true;bb.bbTeam=true;
+  const back=BB_FOUNDERS.map(findByTag).filter(Boolean);
   back.forEach(p=>{p.injured=0;p.retired=false;p.onDesk=false;forceMove(p,bb);p.pinned=true;});
+  // Set chem AFTER the moves — joinTeam erodes cohesion on every arrival, but the five founders know each other cold.
+  if(bbFoundersComplete(bb))bb.chem=0.99;
   world.casters=(world.casters||[]).filter(c=>c.tag!=='Books'); // off the desk, back on the wall
   const names=back.map(p=>nm(p)).join(', ');
   feedPush('note','Beastie Bois reform',`<b>The founders come home.</b> Reza "Books" Haddad — healed at last — steps off the desk and pulls the old band back together: ${names}. The Beastie Bois fly again, two seasons after they dissolved into the league they built. They start in tier 2; nobody expects them to stay there.`,'The Return');
@@ -1458,7 +1521,8 @@ function advanceCareers(){
   // age + develop + retire (Circuit Points reset separately at season rollover, they don't decay here)
   world.teams.forEach(t=>{
     const mentorP=contracted(t).find(p=>hasTrait(p,'mentor'));const ment=!!mentorP; // a mentor steadies and grows the squad
-    if(t.chem!=null)t.chem=clamp((0.74+(ment?0.04:0))+(t.chem-0.74)*0.80,0.42,0.92);
+    if(bbFoundersComplete(t))t.chem=0.99; // the five founders intact — chemistry stays maxed, no regression
+    else if(t.chem!=null)t.chem=clamp((0.74+(ment?0.04:0))+(t.chem-0.74)*0.80,0.42,0.92);
     t.players.forEach(p=>{if(p.retired)return;p.age++;p.tenure=(p.tenure||0)+1;if(p.slump>0)p.slump--;developPlayer(p,ment&&!hasTrait(p,'mentor'));
       if(mentorP&&p!==mentorP&&p.mentorId==null&&p.age<=21&&(p.tenure||0)>=1){p.mentorId=mentorP.id;(mentorP.proteges=mentorP.proteges||[]).push(p.id);} // a lineage begins
       const retAge=hasTrait(p,'ironman')?33:31;
@@ -1475,6 +1539,15 @@ function advanceCareers(){
     else if(hasTrait(p,'lateBloomer')&&p.age>=26&&si>=80){p._broke=1;
       feedPush('note','The late bloomer',`${nm(p)} finally clicks at ${p.age} — ${Math.round(si)}-rated for ${esc(t.name)} after years as a journeyman. He never stopped grinding.`);
       timelinePush({kind:'marked',icon:'◆',short:t.short,title:`${p.tag} blooms late`,text:`Written off for years, ${p.first} "${p.tag}" ${p.last} becomes an elite ${p.role} at ${p.age} for ${t.name}.`});}}));
+  // disillusionment — a loyal one-club man, a veteran still unmarked at a club going nowhere, can curdle into a mercenary
+  world.teams.forEach(t=>contracted(t).forEach(p=>{
+    if(hasTrait(p,'loyal')&&!hasTrait(p,'mercenary')&&(p.titles||0)===0&&p.age>=27&&(p.tenure||0)>=4&&careerGrav(p)>=1.05&&(t.majors||0)===0&&rnd()<0.14){
+      swapTrait(p,'loyal','mercenary');
+      logTraitArc(p,`Loyalty curdled — ${p.age}, still unmarked at ${t.short}, wants out.`);
+      feedPush('note','Loyalty has a limit',`${nm(p)} has given ${esc(t.name)} everything and has no Major to show for it. At ${p.age}, the franchise man is done waiting — he wants a ring, wherever it is.`);
+      timelinePush({kind:'rivalry',icon:'⚑',short:t.short,title:`${p.tag} wants out`,text:`Once a one-club man, ${p.first} "${p.tag}" ${p.last} sours on ${t.name} after years unmarked — a mercenary now, chasing a title elsewhere.`});
+    }
+  }));
   // drops & signings now happen in transaction windows between events; fill retirement holes here
   fillHoles();
   // free agency upkeep
@@ -1798,9 +1871,20 @@ function annalList(arr,empty,viewKey){
     const boxBtn=(m.box&&viewKey)?` <button class="boxbtn ${expanded?'on':''}" data-box="${viewKey}:${i}">▦ box</button>`:'';
     return `<div class="rec${m.id?' tap':''}"${m.id?` data-tpid="${m.id}"`:''}><span class="rec-sc">${m.score}</span><div class="rec-b"><div class="rec-x">${esc(m.text)}${boxBtn}</div><div class="rec-m">S${m.season}${m.year?' · '+m.year:''}${m.round?' · '+esc(m.round):''}</div>${expanded?storedBoxHtml(m.box):''}</div></div>`;}).join('');
 }
+function pantheonHtml(){
+  const everyone=world.teams.flatMap(t=>t.players).concat(world.freeAgents);
+  const ranked=everyone.filter(p=>p.games>=8).map(p=>({p,s:legendScore(p)})).sort((a,b)=>b.s-a.s).slice(0,15);
+  let h=`<div class="story-card"><div class="lede">The Pantheon — all-time, any role</div>`;
+  h+=`<p class="hint" style="margin-top:0">The most important players the sport has produced, regardless of position — weighing titles (<b>♛</b> Worlds above <b>▲</b> Majors), sustained Gravity, All-Star recognition, and longevity.</p>`;
+  if(!ranked.length)return h+`<p class="faint">No careers long enough yet — play more seasons.</p></div>`;
+  h+=ranked.map(({p,s},i)=>{const cg=p.games?careerGrav(p):0;const worlds=p.worlds||0,majors=Math.max(0,(p.titles||0)-worlds);
+    const unmarked=(p.titles||0)===0&&cg>=1.15;
+    return `<div class="trow" data-tpid="${p.id}"><span class="trole">${i+1}</span><span class="tnm">${nm(p)} <span class="faint">·${p.role}</span>${p.retired?' <span class="faint">·ret</span>':''}${unmarked?' <span class="unmarked">unmarked</span>':''}</span><span class="tstat grav" title="career Gravity">${cg.toFixed(2)}</span><span class="tstat grav" title="titles — ♛ Worlds · ▲ Majors">${worlds?worlds+'♛ ':''}${majors}▲</span><span class="tstat grav" title="all-time score" style="color:var(--ember)">${s.toFixed(0)}</span></div>`;}).join('');
+  return h+`</div>`;
+}
 function goatsHtml(){
   const everyone=world.teams.flatMap(t=>t.players).concat(world.freeAgents);
-  return ROLES.map(role=>{
+  return pantheonHtml()+ROLES.map(role=>{
     const convo=everyone.filter(p=>p.role===role&&p.games>=15).map(p=>({p,s:goatScore(p)})).sort((a,b)=>b.s-a.s).slice(0,5);
     const log=(world.goatLog[role]||[]);const seasons=log.slice(-14);
     let h=`<div class="story-card"><div class="lede">${role.toUpperCase()} — GOAT conversation</div>`;
@@ -1960,6 +2044,18 @@ function swissBeginRound(L){const sw=L.sw;
   if(!sw.active.length){swissComplete(L);return;}
   sw.round++;sw.pairs=swissPairings(sw.active,sw.rec);sw.pairIdx=0;
   pushLog(L,`— Swiss Round ${sw.round}: ${sw.pairs.length} match${sw.pairs.length>1?'es':''} —`,'map');
+  pushLog(L,swissRoundColor(L),'round');
+}
+// A desk read on the round ahead: who can advance, who's on the brink, who's still perfect.
+function swissRoundColor(L){const sw=L.sw,r=sw.rec;
+  const a2=sw.active.filter(t=>r.get(t).w===2),e2=sw.active.filter(t=>r.get(t).l===2),und=sw.active.filter(t=>r.get(t).l===0);
+  const host=(world.casters||[]).find(c=>c.host),lead=host?`${host.name}:`:'Desk:';
+  if(sw.round===1)return `${lead} Sixteen down to eight. Three wins and you're through, three losses and you're gone. Let's play.`;
+  const bits=[];
+  if(a2.length)bits.push(`${a2.length} side${a2.length>1?'s':''} can punch a playoff ticket today`);
+  if(e2.length)bits.push(`${e2.length} fighting to stay alive`);
+  if(und.length)bits.push(`${und.length} still perfect${und.length<=3?` (${und.map(t=>t.short).join(', ')})`:''}`);
+  return bits.length?`${lead} Round ${sw.round} — ${bits.join('; ')}.`:`${lead} Round ${sw.round} is set.`;
 }
 function swissStepMatch(L){const sw=L.sw;if(sw.done)return;
   if(sw.pairIdx>=sw.pairs.length){swissBeginRound(L);if(sw.done)return;}
@@ -2002,18 +2098,33 @@ function swissToPlayoffs(L){const sw=L.sw,field=sw.advanced;
 // Contextual desk commentary, aware of records, division, and storylines.
 function teamSwissCtx(t,r){const bits=[];
   if(r.w===2)bits.push('a win from the playoffs');else if(r.l===2)bits.push('staring at elimination');else if(!r.w&&!r.l)bits.push('opening up');
+  if(r.w>=2&&r.l===0)bits.push('still unbeaten');else if(r.w===0&&r.l===1)bits.push('needing to steady after the opener');else if(r.w>=1&&r.l>=1)bits.push(`scrapping at ${r.w}–${r.l}`);
   if(t.div===2)bits.push('a tier-2 side punching up');
-  const star=starOf(t);if(star&&star.titles===0&&careerGrav(star)>=1.12)bits.push(`${star.tag} chasing a first title`);else if(t.heart)bits.push('the neutrals’ underdog');
+  if(t.bbTeam)bits.push('the founders, doing it the hard way');
+  const star=starOf(t);
+  if(star&&star.titles===0&&careerGrav(star)>=1.12)bits.push(`${star.tag} chasing a first title`);
+  else if(star&&careerGrav(star)>=1.18)bits.push(`${star.tag} carrying the load`);
+  else if(t.heart)bits.push('the neutrals’ underdog');
   return bits;}
 function swissPreLine(L,x,y){const rec=L.sw.rec,rx=rec.get(x),ry=rec.get(y);
-  const stake=swissStakes(x,y,rec)?(rx.w===2||ry.w===2?'advancement on the line':rx.l===2||ry.l===2?'win or go home':'Bo3'):'Bo1';
+  const bo3=swissStakes(x,y,rec);
+  const stake=bo3?(rx.w===2||ry.w===2?'★ advancement on the line':rx.l===2||ry.l===2?'★ win or go home':'Bo3'):'Bo1';
   const cx=pick(teamSwissCtx(x,rx)),cy=pick(teamSwissCtx(y,ry));
-  return `${x.short} (${rx.w}–${rx.l}) vs ${y.short} (${ry.w}–${ry.l}) — ${stake}.${cx?` ${x.short}: ${cx}.`:''}${cy?` ${y.short}: ${cy}.`:''}`;}
+  const gap=Math.abs(rx.seed-ry.seed),uns=gap>=6?` ${(rx.seed>ry.seed?x:y).short} are the lower seed — upset country.`:'';
+  return `${x.short} (${rx.w}–${rx.l}) vs ${y.short} (${ry.w}–${ry.l}) — ${stake}.${cx?` ${x.short}: ${cx}.`:''}${cy?` ${y.short}: ${cy}.`:''}${uns}`;}
+// Map scores from the series winner's perspective, e.g. "21–18, 18–21, 21–15".
+function swissMapScores(s){const aWin=s.wa>s.wb;return s.maps.map(m=>{const wWon=(m.aWon===aWin);return wWon?`${m.sa}–${m.sb}`:`${m.sb}–${m.sa}`;}).join(', ');}
 function swissResultLine(L,s,W,Ll){const sc=`${Math.max(s.wa,s.wb)}–${Math.min(s.wa,s.wb)}`;
+  const rec=L.sw.rec,rw=rec.get(W),rl=rec.get(Ll),upset=rw&&rl&&rw.seed>rl.seed+5;
   let topId=null,topG=-1;for(const id in s.sg){if(s.sg[id]>topG){topG=s.sg[id];topId=+id;}}
   const tp=topId?findPlayer(topId):null,onW=tp&&teamOf(tp)===W;
   const mvp=tp&&topG>=1.15?` ${tp.tag} ${onW?'led it':`(${Ll.short}) the standout in defeat`} at ${topG.toFixed(2)}.`:'';
-  return `${W.short} beat ${Ll.short} ${sc}${s.deadlift?' — a deadlift!':'.'}${mvp}`;}
+  const clutch=s.maps.reduce((n,m)=>n+(m.vigils?m.vigils.length:0),0);
+  const maps=s.maps.length>1?` (${swissMapScores(s)})`:'';
+  const head=upset?`${W.short} STUN ${Ll.short}`:`${W.short} beat ${Ll.short}`;
+  const tag=s.deadlift?' — a deadlift comeback!':(W.div===2&&Ll.div===1?' — a feeder side fells a premier club!':upset?' — bracket buster!':'.');
+  const clu=clutch&&tag==='.'?` ${clutch===1?'A vigil':'Vigils'} stood the difference.`:'';
+  return `${head} ${sc}${maps}${tag}${mvp}${clu}`;}
 function startMatch(L){
   let a,b;
   if(L.stage==='qf'){a=L.qfPairs[L.matchIdx][0];b=L.qfPairs[L.matchIdx][1];}
