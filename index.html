@@ -997,7 +997,26 @@ function recordResult(tier,name,champ,run,fin,b){
     champ:champ.short,champName:champ.name,run:run.short,runName:run.name,score:b.score,deadlift:!!fin.deadlift,premier:!!TIERS[tier].premier,
     standout:tp?{pid:tp.id,tag:tp.tag,name:`${tp.first} "${tp.tag}" ${tp.last}`,short:tt?tt.short:'—',grav:+topG.toFixed(2),role:tp.role,won:tt===champ}:null};
   (world.results=world.results||[]).push(pk);if(world.results.length>500)world.results.shift();
+  trackBuzz(pk);
   return pk;
+}
+// Rising-star arc: a player without a premier title who keeps standing out in the feeders "catches eyes",
+// then breaks out, then "arrives" if he delivers on the big stage. Resets each season.
+function trackBuzz(pk){
+  if(!pk.standout)return;const so=pk.standout;const p=anyPlayerById(so.pid);if(!p)return;
+  world.buzz=world.buzz||{};
+  if(!pk.premier&&so.grav>=1.15&&(p.titles||0)===0){
+    const b=world.buzz[p.id]=world.buzz[p.id]||{pid:p.id,tag:p.tag,name:so.name,short:so.short,role:p.role,n:0,best:0,announced:0,arrived:0};
+    b.n++;b.best=Math.max(b.best,so.grav);b.short=so.short;
+    if(b.n===2&&!b.announced){b.announced=1;
+      feedPush('note','A name to watch',`${nm(p)} is turning heads — a ${b.best.toFixed(2)} run across the feeders, the ${p.role} the desk has started following. Two big showings and counting.`);}
+    else if(b.n===3){
+      feedPush('note','The breakout',`${nm(p)} has gone from unknown to the talk of the circuit — ${b.n} standout feeder runs this season. ${(p.age||30)<22?'A phenom announcing himself.':'A grinder who finally found his level.'} One to watch when the Majors come around.`);
+      timelinePush({kind:'first',icon:'✦',short:b.short,title:`${p.tag} breaks out`,text:`${so.name} catches the circuit's eye with a run of standout feeder showings in S${world.season}.`});}
+  }
+  if(pk.premier&&so.grav>=1.2&&world.buzz[so.pid]&&!world.buzz[so.pid].arrived){
+    world.buzz[so.pid].arrived=1;
+    feedPush('note','Arrived on the big stage',`${nm(p)} backs up the hype — ${so.grav.toFixed(2)} at the ${pk.name}. The breakout name delivering when the lights came up.`);}
 }
 function runEvent(tier,name){
   const T=TIERS[tier];
@@ -1019,16 +1038,17 @@ function runEvent(tier,name){
   const fin=simSeries(sf[0].winner,sf[1].winner,T.bo==='bo5'?3:wins,cx(finalRound));
   const champ=fin.winner,run=fin.loser;const b=seriesBlurb(fin);
   detectUpsetsChokes(tier,name,qf,sf,fin);
+  const packet=recordResult(tier,name,champ,run,fin,b);
   let cairn=null;
   if(T.premier){
     const F={scoreStr:b.score,deadlift:fin.deadlift,lastZone:fin.maps[fin.maps.length-1].zone,vigilsAll:[].concat(...fin.maps.map(m=>m.vigils)),sg:fin.sg,box:fin.box};
     if(tier==='WC')commitWorlds(name,champ,run,sfL,qfL,F);else if(tier==='S')commitMasters(name,champ,run,sfL,qfL,F);else commitMajor(name,champ,run,sfL,qfL,F);
     cairn=world.cairns[world.cairns.length-1];
-  } else { // feeder: bank circuit points, a one-line wire summary
+  } else { // feeder: bank circuit points + a wire summary that names the standout
     const add=(t,p)=>t.gravl+=p;add(champ,T.pts[1]);add(run,T.pts[2]);sfL.forEach(t=>add(t,T.pts[4]));qfL.forEach(t=>add(t,T.pts[8]));
-    feedPush('small',`${champ.name} win ${name}`,`def. ${run.name} ${b.score} — ${T.name} circuit points banked.`,T.name);
+    const so=packet.standout;const story=so&&so.grav>=1.12?` <span class="tg">${esc(so.tag)}</span> the story${so.won?'':' in defeat'} (${so.grav.toFixed(2)}).`:'';
+    feedPush('small',`${champ.name} win ${name}`,`def. ${run.name} ${b.score} — ${T.name} points banked.${story}`,T.name);
   }
-  const packet=recordResult(tier,name,champ,run,fin,b);
   return {tier,name,champ,run,score:b.score,cairn,packet};
 }
 // A season is 4 stages. Feeders run every stage (T1 circuit A/B, T2 circuit C/D); premier events build toward
@@ -1046,6 +1066,7 @@ function seasonOutline(cal){const all=[].concat(...cal);const c=t=>all.filter(x=
   return {majors:c('SP'),masters:c('S'),wc:c('WC'),feeders:all.length-c('SP')-c('S')-c('WC')};}
 function startSeason(){
   world.tick=0;world.seasonCal=buildSeasonCal(world.season);world.thisSeasonEvents=[];world.pendingMajors=[];
+  world.buzz={};world._buzzSeason=world.season; // the rising-star race restarts each season
   world.teams.forEach(t=>t.players.forEach(p=>{p._gravMark=p.gravs.length;}));
   if(world.season>=2&&!world.bbReturned)bbReturn(); // the founders come home in S2
   world.teams.forEach(t=>lineup(t).forEach(p=>{p.games++;})); // a season of experience
@@ -1061,6 +1082,7 @@ function runTick(){
     else world.thisSeasonEvents.push(runEvent(tier,mkEventName(tier)));});
 }
 function stepTick(){
+  const snap=[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a));world.prevRanks={};snap.forEach((t,i)=>world.prevRanks[t.short]=i+1); // for power-ranking movement
   if(world.pendingMajors&&world.pendingMajors.length)autoResolveMajors(); // resolve any premier event left pending
   if(!world.started){world.started=true;startSeason();}
   else if(world.tick>=4){endSeasonRollover();}
@@ -1457,6 +1479,11 @@ function renderYard(){const el=$("p-yard");
   const stones=style=>{let h="",n=style==='crown'?6:style==='masters'?5:style==='loud'?5:3;for(let i=0;i<n;i++){const w=24-i*3;h+=`<i style="width:${w}px;height:${6+(style==='crown'?3:style==='masters'?2:style==='loud'?2:0)}px"></i>`;}return h;};
   el.innerHTML=`<p class="hint">Each stack is a premier title. <span style="color:var(--gravl)">♛ Crown</span> = World Championship; <span style="color:var(--good)">◈ Masters</span>; the rest are Majors.</p>
    <div class="yard">${world.cairns.map(c=>`<div class="cairn ${c.style==='crown'?'crown':c.style==='masters'?'masters':''}" title="S${c.season} · ${esc(c.event)} · ${esc(c.team)} at ${esc(c.zone)}"><div class="stones">${stones(c.style)}</div><div class="clabel">${c.style==='crown'?'<span style="color:var(--gravl)">♛</span> ':c.style==='masters'?'<span style="color:var(--good)">◈</span> ':''}${esc(c.team)}<br>${esc(c.zone)}</div><div class="cyear">S${c.season}</div></div>`).join("")}</div>`;}
+function teamNote(t){const rs=world.results||[];
+  for(let i=rs.length-1;i>=0;i--){const r=rs[i];
+    if(r.champ===t.short)return r.premier?`champions of the ${esc(r.name)}`:`took the ${esc(r.name)}`;
+    if(r.run===t.short&&r.premier)return `runners-up at the ${esc(r.name)}`;}
+  return 'grinding the circuit';}
 function renderStory(){const el=$("p-story");
   const watch=allPlayers().map(({p})=>({p,cg:careerGrav(p)})).filter(x=>x.p.games>=1&&x.cg>=1.15&&x.p.titles===0).sort((a,b)=>b.cg-a.cg);
   const teamWatch=[...world.teams].filter(t=>t.majors===0).sort((a,b)=>b.gravl-a.gravl)[0];
@@ -1464,6 +1491,19 @@ function renderStory(){const el=$("p-story");
   const counts={};world.majorChamps.forEach(c=>counts[c.team]=(counts[c.team]||0)+1);
   const marked=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
   let h="";
+  // The desk talking about itself — this season's power rankings and the names catching eyes
+  if(world.started){
+    const pr=[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a)).slice(0,10);
+    h+=`<div class="story-card"><div class="lede">Power Rankings · Season ${world.season}${world.tick?` · stage ${world.tick}`:''}</div>`;
+    h+=pr.map((t,i)=>{const prev=(world.prevRanks||{})[t.short],mv=prev?prev-(i+1):0;
+      const arrow=mv>0?`<span class="good">▲${mv}</span>`:mv<0?`<span style="color:var(--bad)">▼${-mv}</span>`:`<span class="faint">–</span>`;
+      return `<div class="row2"><span><b>${i+1}.</b> ${esc(t.name)}${t.div===2?' <span class="t2pill">T2</span>':''} <span class="faint">· ${teamNote(t)}</span></span><span class="ct">${arrow} <span class="faint">${Math.round(t.gravl)}cp</span></span></div>`;}).join('');
+    h+=`</div>`;
+    const buzz=Object.values(world.buzz||{}).filter(b=>b.n>=2).sort((a,b)=>(b.arrived-a.arrived)||(b.n-a.n)||(b.best-a.best));
+    h+=`<div class="story-card"><div class="lede">Catching Eyes · this season's risers</div>`;
+    h+=buzz.length?buzz.slice(0,6).map(b=>{const p=anyPlayerById(b.pid);return `<div class="row2"><span>${p?nm(p):esc(b.name)} <span class="faint">· ${b.role}${b.arrived?' · <span class="good">arrived</span>':b.n>=4?' · breakout':''}</span></span><span class="ct">${b.n} feeder runs · ${b.best.toFixed(2)}</span></div>`;}).join(''):`<p>No breakout names yet — the feeders haven't produced a story this season.</p>`;
+    h+=`</div>`;
+  }
   if(world.seasonChamps&&world.seasonChamps.length){const wc=reigningWorldChamp();
     const wcounts={};world.seasonChamps.forEach(c=>wcounts[c.short]=(wcounts[c.short]||0)+1);
     const wboard=Object.entries(wcounts).sort((a,b)=>b[1]-a[1]);
