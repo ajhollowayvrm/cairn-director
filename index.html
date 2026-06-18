@@ -730,6 +730,15 @@ function swissFeed(name,tier,swiss){
   const r=swiss.rec;const threeOh=swiss.advanced.filter(t=>r.get(t).l===0);
   feedPush('note',`${name} — Swiss stage`,`Sixteen teams, Swiss to eight. Into the playoffs: ${swiss.advanced.map(t=>`${esc(t.name)} <span class="faint">${r.get(t).w}–${r.get(t).l}</span>`).join(', ')}.${threeOh.length?` <b>${threeOh.map(t=>esc(t.name)).join(', ')}</b> ran the table 3–0.`:''} Out of the Swiss: ${swiss.eliminated.map(t=>esc(t.short)).join(', ')}.`);
 }
+// The Major field: every club by Circuit Points. Top 8 are seeded straight into Legends; 9–24 grind through
+// the Challengers Swiss for the other eight Legends spots, then the eight Legends survivors make the playoffs.
+function majorField(){let ranked=[...world.teams].sort((a,b)=>seedScore(b)-seedScore(a));
+  if(world.majorChamps.length===0){const seeds=['VNG','LG','HEMI'].map(s=>world.teams.find(t=>t.short===s)).filter(Boolean);ranked=seeds.concat(ranked.filter(t=>!seeds.includes(t)));}
+  return ranked;}
+function majorSplit(){const all=majorField();return {legends:all.slice(0,8),challengers:all.slice(8,24)};}
+function majorSwissFeed(name,chall,leg){const lr=leg.rec;
+  feedPush('note',`${name} — Challengers & Legends`,`<b>Challengers Stage:</b> ${chall.advanced.map(t=>esc(t.short)).join(', ')} climb into Legends; out — ${chall.eliminated.map(t=>esc(t.short)).join(', ')}. <b>Legends Stage → playoffs:</b> ${leg.advanced.map(t=>`${esc(t.name)} <span class="faint">${lr.get(t).w}–${lr.get(t).l}</span>`).join(', ')}.`);
+}
 function mkEventName(tier){
   if(tier==='WC')return `${world.year} Cairn World Championship`;
   if(tier==='SP')return `${pick(CITIES)} Major`;
@@ -1021,9 +1030,15 @@ function runEvent(tier,name){
   const T=TIERS[tier];
   const logMaps=!!T.premier;const cx=r=>logMaps?{event:name,tier,round:r}:null;
   let field;
-  if(T.swiss){ // premier events open with a 16-team Swiss that decides the eight playoff teams
+  if(tier==='SP'){ // Majors run a three-stage Swiss: Challengers -> Legends -> Champions
+    const {legends,challengers}=majorSplit();
+    const chall=runSwiss(challengers,cx('Challengers'));chall.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.25));
+    const leg=runSwiss(legends.concat(chall.advanced),cx('Legends'));leg.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.5));
+    majorSwissFeed(name,chall,leg);
+    field=leg.advanced;
+  } else if(T.swiss){ // the World Championship: a single elite 16-team Swiss
     const swiss=runSwiss(fieldFor(tier),cx('Swiss'));
-    swiss.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.5)); // Swiss participation points
+    swiss.eliminated.forEach(t=>t.gravl+=Math.round(T.pts[8]*0.5));
     swissFeed(name,tier,swiss);
     field=swiss.advanced;
   } else field=fieldFor(tier).slice(0,8).sort((x,y)=>seedScore(y)-seedScore(x));
@@ -1790,16 +1805,22 @@ function liveSetup(name,tier){
     match:null,matchVigils:[],log:[],done:false};
   world.live=L;
   const host=(world.casters||[]).find(c=>c.host);
-  pushLog(L,host?`${host.name}: Welcome to the ${name}. Sixteen teams, the Swiss to eight, then the playoffs — let's get to it.`:`The ${name} begins — the Swiss stage, sixteen teams.`,'map');
-  liveSwissInit(L);
+  if(tier==='SP'){
+    const {legends,challengers}=majorSplit();L.legendsSeed=legends;
+    pushLog(L,host?`${host.name}: Welcome to the ${name}. Twenty-four teams — eight seeded to Legends, sixteen fighting through Challengers. Here we go.`:`The ${name} begins — the Challengers stage.`,'map');
+    liveSwissInit(L,challengers,'Challengers');
+  } else {
+    pushLog(L,host?`${host.name}: Welcome to the ${name}. The best sixteen, a Swiss to eight, then the playoffs.`:`The ${name} begins — the Swiss stage.`,'map');
+    liveSwissInit(L,fieldFor(tier),'Swiss');
+  }
   render();switchTab('cast');
 }
 /* ---- live Swiss stage: play it match-by-match, round-by-round, or auto ---- */
-function liveSwissInit(L){
-  const field=fieldFor(L.tier);const rec=new Map();
-  if(L.tier==='SP'&&world.majorChamps.length===0){/* inaugural seeding already baked into fieldFor order */}
-  field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i}));
-  L.sw={field,rec,active:field.slice(),round:0,pairs:[],pairIdx:0,advanced:[],eliminated:[],ctx:{event:L.name,tier:L.tier,round:'Swiss'},done:false};
+function liveSwissInit(L,field,stageLabel){
+  const rec=new Map();field.forEach((t,i)=>rec.set(t,{w:0,l:0,seed:i}));
+  L.sw={field,rec,active:field.slice(),round:0,pairs:[],pairIdx:0,advanced:[],eliminated:[],ctx:{event:L.name,tier:L.tier,round:'Swiss'},done:false,label:stageLabel};
+  L.stage='swiss';L.swStage=stageLabel;
+  pushLog(L,`— ${stageLabel} Stage —`,'map');
   swissBeginRound(L);
 }
 function swissBeginRound(L){const sw=L.sw;
@@ -1823,9 +1844,19 @@ function swissPlayRound(L){const sw=L.sw,r0=sw.round;let guard=0;while(!sw.done&
 function swissAutoFinish(L){let guard=0;while(!L.sw.done&&guard++<300)swissStepMatch(L);}
 function swissComplete(L){const sw=L.sw;sw.done=true;
   swissSeed(sw.advanced,sw.eliminated,sw.rec);
-  sw.eliminated.forEach(t=>t.gravl+=Math.round(TIERS[L.tier].pts[8]*0.5));
-  swissFeed(L.name,L.tier,{advanced:sw.advanced,eliminated:sw.eliminated,rec:sw.rec});
-  pushLog(L,`Swiss complete — eight advance. ${sw.advanced.map(t=>`${t.short} (${sw.rec.get(t).w}–${sw.rec.get(t).l})`).join(', ')}.`,'champion');
+  if(sw.label==='Challengers'){
+    sw.eliminated.forEach(t=>t.gravl+=Math.round(TIERS[L.tier].pts[8]*0.25));
+    pushLog(L,`Challengers complete — ${sw.advanced.map(t=>`${t.short} (${sw.rec.get(t).w}–${sw.rec.get(t).l})`).join(', ')} climb into Legends.`,'champion');
+  } else {
+    sw.eliminated.forEach(t=>t.gravl+=Math.round(TIERS[L.tier].pts[8]*0.5));
+    swissFeed(L.name,L.tier,{advanced:sw.advanced,eliminated:sw.eliminated,rec:sw.rec});
+    pushLog(L,`${sw.label} complete — eight advance to the playoffs.`,'champion');
+  }
+}
+// Advance from a finished Swiss stage: Challengers → Legends, or Legends/Swiss → the playoff bracket.
+function swissNext(L){const sw=L.sw;if(!sw.done)return;
+  if(sw.label==='Challengers'){liveSwissInit(L,L.legendsSeed.concat(sw.advanced),'Legends');}
+  else swissToPlayoffs(L);
 }
 function swissToPlayoffs(L){const sw=L.sw,field=sw.advanced;
   L.field=field;L.swiss={advanced:sw.advanced,eliminated:sw.eliminated,rec:sw.rec};
@@ -1935,9 +1966,9 @@ function liveRound(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;
 function liveMap(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;let s;do{s=stepRound();}while(s==='round');renderCast();}
 function liveMatch(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;let s;do{s=stepRound();}while(s==='round'||s==='mapend');renderCast();}
 function liveAuto(){const L=world.live;if(!L||L.done)return;
-  if(L.stage==='swiss'){swissAutoFinish(L);swissToPlayoffs(L);} // finish the Swiss, then auto the playoffs
+  let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);} // finish each Swiss stage, then auto the playoffs
   let s;do{s=stepRound();}while(s!=='eventend');render();}
-function liveToFinal(){const L=world.live;if(!L||L.done)return;if(L.stage==='swiss'){swissAutoFinish(L);swissToPlayoffs(L);}let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
+function liveToFinal(){const L=world.live;if(!L||L.done)return;let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);}let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
 function endBroadcast(){world.live=null;render();switchTab('feed');}
 function buildFinalPreviewPrompt(L){
   const c=L.fPair[0],r=L.fPair[1];const sA=starOf(c),sB=starOf(r);const pn=p=>`${p.first} "${p.tag}" ${p.last}`;
@@ -1988,11 +2019,12 @@ function bracketStrip(L){
 function swissView(L){const sw=L.sw,rec=sw.rec;
   const all=sw.field.slice().sort((a,b)=>{const ra=rec.get(a),rb=rec.get(b);return rb.w-ra.w||ra.l-rb.l||ra.seed-rb.seed;});
   const status=t=>{const r=rec.get(t);return r.w>=3?'<span class="good">▲ in</span>':r.l>=3?'<span style="color:var(--bad)">✕ out</span>':`<span class="faint">${r.w}–${r.l}</span>`;};
-  let h=`<div class="cast-head"><div class="cast-title">${esc(L.name)}</div><div class="cast-stage">Swiss${sw.done?' · complete':` · Round ${sw.round}`}</div></div>`;
-  h+=`<div class="bracket"><div class="brk-row"><span class="brk-lab">SW</span> <span class="faint">16 teams · 3 wins advance, 3 losses out</span></div>`;
+  const nextLbl=sw.label==='Challengers'?'▶ To the Legends Stage':'▶ To the playoffs';
+  let h=`<div class="cast-head"><div class="cast-title">${esc(L.name)}</div><div class="cast-stage">${esc(sw.label||'Swiss')} Stage${sw.done?' · complete':` · Round ${sw.round}`}</div></div>`;
+  h+=`<div class="bracket"><div class="brk-row"><span class="brk-lab">${sw.label==='Challengers'?'CH':sw.label==='Legends'?'LG':'SW'}</span> <span class="faint">${sw.field.length} teams · 3 wins advance, 3 losses out${sw.label==='Challengers'?' (into Legends)':''}</span></div>`;
   if(!sw.done&&sw.pairs.length)h+=`<div class="brk-row"><span class="brk-lab">R${sw.round}</span> ${sw.pairs.map((p,i)=>`<span class="brk-tie ${i===sw.pairIdx?'live':''}" style="${i<sw.pairIdx?'opacity:.5':''}">${p[0].short}/${p[1].short}</span>`).join(' ')}</div>`;
   h+=`</div>`;
-  h+=`<div class="cast-ctl">${sw.done?`<button class="ctl primary" data-act="splay">▶ To the playoffs</button>`:`<button class="ctl primary" data-act="smatch">▶ Match</button><button class="ctl" data-act="sround">▶▶ Round</button><button class="ctl" data-act="sfinish">⏩ Auto-finish Swiss</button>`}<button class="ctl" data-act="auto">⏹ Auto whole event</button></div>`;
+  h+=`<div class="cast-ctl">${sw.done?`<button class="ctl primary" data-act="snext">${nextLbl}</button>`:`<button class="ctl primary" data-act="smatch">▶ Match</button><button class="ctl" data-act="sround">▶▶ Round</button><button class="ctl" data-act="sfinish">⏩ Auto-finish ${esc(sw.label||'Swiss')}</button>`}<button class="ctl" data-act="auto">⏹ Auto whole event</button></div>`;
   h+=`<div class="boxwrap" style="margin-bottom:10px"><div class="bx-cap">Swiss standings</div><table class="bx"><thead><tr><th>Team</th><th>W</th><th>L</th><th></th></tr></thead><tbody>`;
   h+=all.map(t=>{const r=rec.get(t);return `<tr><td class="bx-nm">${esc(t.name)} <span class="role">${esc(t.short)}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="bx-k">${r.w}</td><td>${r.l}</td><td>${status(t)}</td></tr>`;}).join('');
   h+=`</tbody></table></div>`;
@@ -2104,7 +2136,7 @@ document.getElementById("p-cast").addEventListener("click",e=>{const el=e.target
   if(a==='smatch'){if(world.live){swissStepMatch(world.live);renderCast();}}
   else if(a==='sround'){if(world.live){swissPlayRound(world.live);renderCast();}}
   else if(a==='sfinish'){if(world.live){swissAutoFinish(world.live);renderCast();}}
-  else if(a==='splay'){if(world.live){swissToPlayoffs(world.live);renderCast();}}
+  else if(a==='snext'){if(world.live){swissNext(world.live);renderCast();}}
   else if(a==='round')liveRound();else if(a==='map')liveMap();else if(a==='match')liveMatch();else if(a==='tofinal')liveToFinal();else if(a==='auto')liveAuto();
   else if(a==='broadcast')liveSetup(el.dataset.name,el.dataset.tier);else if(a==='autosim'){autoOneEvent(el.dataset.name,el.dataset.tier);render();}else if(a==='stage')narrateStage();
   else if(a==='recap'){const L=world.live;if(L&&L.feedId!=null)narrate(L.feedId);}else if(a==='end')endBroadcast();
