@@ -136,6 +136,7 @@
   .pbp-line.win{color:var(--ember);background:#211a10;font-family:inherit;}
   .pbp-line.champion{color:var(--cairn);background:#231d12;font-family:Georgia,serif;}
   .pbp-line.map{color:var(--faint);}
+  .pbp-line.color{color:var(--cairn);background:#1c1810;font-family:Georgia,serif;font-style:italic;}
   .champ-banner{border:1px solid var(--ember-dim);border-radius:4px;background:radial-gradient(120% 160% at 50% 0%,#2a2012,#16120c);padding:16px;text-align:center;margin-bottom:12px;}
   .champ-name{font-family:Georgia,serif;font-size:22px;color:#f6e9d6;}
   .champ-sub{color:var(--muted);font-size:13px;margin-top:5px;}
@@ -693,7 +694,7 @@ function simRound(a,b,opts){
     const impact=(e.k-e.d)+(e.clutch?2:0)+e.open*0.6+e.trade*0.3-(e.fd?0.5:0)+(won?0.3:-0.3);
     let sw=0.03*(1.25-poise(p));if(hasTrait(p,'hothead'))sw*=1.6;if(hasTrait(p,'clutch'))sw*=0.6;
     p._conf=clamp((p._conf||0)+impact*sw,-1,1);p._cl=0;});
-  return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star,buy};
+  return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star,buy,open:{w:opW.id,l:opL.id}};
 }
 function simMap(a,b,ctx,opts){
   opts=opts||{};const stage=opts.stage||0;
@@ -2157,6 +2158,62 @@ async function narrate(id){
 const CAIRN_BIBLE=`You write for "Cairn," a fictional 5v5 esport. World facts: every match is in one permanent arena, the Yard; a roaming objective, the ember, decides each round; roles are reach (star aimer), breaker (entry), read (in-game leader), anchor, set (support); "Gravity" is the per-round impact rating (1.00 average, 1.40+ historic); a "vigil" is a clutch 1vX; a "deadlift" is a 0-2 reverse sweep; only a Major win lets a team build a permanent cosmetic "cairn" at the callout where the title turned; an elite player or team with zero cairns is "unmarked," the sport's central tragedy. Voice: reverent cathedral-gravity fused with grassroots warmth; humor and grief coexist; concrete detail; never cliched or hype-y.`;
 function seedField(){return [...world.teams].sort((a,b)=>b.gravl-a.gravl).slice(0,8);}
 function pushLog(L,text,kind){L.log.unshift({text,kind});if(L.log.length>140)L.log.pop();}
+// ---- the desk notices: emergent color from the analysts, biased by the clubs they used to call home ----
+function homerFor(team){return (world.casters||[]).find(c=>c.former&&c.former===team.short);}
+function pickAnalyst(pref){if(pref)return pref;const cs=world.casters||[];const an=cs.filter(c=>!c.host);return an.length?pick(an):(cs[0]||null);}
+function deskSay(L,who,text){if(!who)return;pushLog(L,`🎙 ${who.tag||who.name}: ${text}`,'color');}
+function isLegend(p){return !!(p&&(careerGrav(p)>=1.2||(p.titles||0)>=3));}
+function isRookie(p){return !!(p&&((p.games||0)<=2||(p.age<=19&&(p.games||0)<=3)));}
+// match intro: a homer's old club, a fallen-out duo now opposed, a veteran who might be running out of finals
+function deskMatchColor(L,a,b){
+  const lines=[];
+  [a,b].forEach(t=>{const h=homerFor(t),opp=t===a?b:a;if(h)lines.push([h,pick([
+    `I'll say it — ${t.short} were my club, and I want this one for them. Against ${opp.short}? Especially.`,
+    `You can take the man off ${t.short}, but watching them walk out here still gets me. I'm meant to be neutral. I'm not.`,
+    `${t.short} were home for me once. Forgive me if the read tilts their way tonight.`])]);});
+  const sa=starOf(a),sb=starOf(b);
+  if(sa&&sb){const riv=Object.values(world.rivalries).find(x=>x.fallout&&((x.a.id===sa.id&&x.b.id===sb.id)||(x.a.id===sb.id&&x.b.id===sa.id)));
+    if(riv)lines.push([pickAnalyst(),`${sa.tag} and ${sb.tag} used to be a duo — won together, then it soured. Now they line up across from each other. This one's personal, and everyone knows it.`]);}
+  // an unmarked great in a final — the sport's central ache, and reliable color
+  if(L.stage==='f')[a,b].forEach(t=>{const s=starOf(t);if(s&&(s.titles||0)===0&&careerGrav(s)>=1.12)lines.push([pickAnalyst(),pick([
+    `${s.tag} has the numbers of a great and not one cairn to show for it. You wonder how many chances like this are left.`,
+    `Everything about ${s.tag} says champion except the one thing that counts. Maybe tonight that changes.`])]);});
+  // a veteran who may be running out of finals — credible only in a believable window, not the immortal founders
+  if(L.stage==='f'){L._vetNoted=L._vetNoted||{};[a,b].forEach(t=>{const vet=lineup(t).filter(p=>!p.bb&&!p.pinned&&p.age>=31&&p.age<=37).sort((x,y)=>y.age-x.age)[0];
+    if(vet&&!L._vetNoted[vet.id]){L._vetNoted[vet.id]=1;lines.push([pickAnalyst(),pick([
+      `${vet.tag} is ${vet.age}. How many more of these does he get? If this is the last dance, what a stage for it.`,
+      `Don't take ${vet.tag} for granted — at ${vet.age}, every final out here could be the goodbye.`])]);}});}
+  if(lines.length){const c=pick(lines);deskSay(L,c[0],c[1]);}
+}
+// in-round: a rookie taking a legend off the opening duel — the kind of moment the desk lives for
+function deskRoundColor(L,r){
+  if(!r.open)return;const killer=anyPlayerById(r.open.w),victim=anyPlayerById(r.open.l);
+  if(!killer||!victim)return;L._rkNoted=L._rkNoted||{};
+  if(isRookie(killer)&&isLegend(victim)&&!L._rkNoted[killer.id]&&rnd()<0.7){L._rkNoted[killer.id]=1;
+    deskSay(L,pickAnalyst(),pick([
+      `Did you SEE that? ${killer.tag} — a kid in his first season — just took ${victim.tag} clean off the opening. Welcome to the big stage.`,
+      `${killer.tag} opens on ${victim.tag}. The rookie, against a legend of this game — he will not forget that one.`,
+      `That's ${victim.tag}, one of the greats, and a teenager just walked through his front door. Remember the name: ${killer.tag}.`]));}
+}
+// between maps: a player who keeps being the best man on the server — a tournament heater
+function deskMapColor(L,mg){
+  let topId=null,topG=-1;for(const id in mg){if(mg[id]>topG){topG=mg[id];topId=+id;}}
+  if(topId==null||topG<1.15)return;const p=anyPlayerById(topId);if(!p)return; // best man on this map (a real game, not a weak-field crown)
+  L._heat=L._heat||{};L._heatNoted=L._heatNoted||{};L._heat[p.id]=(L._heat[p.id]||0)+1;
+  if(L._heat[p.id]>=3&&!L._heatNoted[p.id]){L._heatNoted[p.id]=1; // best player on three maps this event — a tournament heater
+    deskSay(L,pickAnalyst(),pick([
+      `${p.tag} is on a HEATER. Back-to-back maps as the best player on the server — somebody has to stop him.`,
+      `I'm running out of words for ${p.tag} this tournament. Every map, he's the difference. Unconscious right now.`,
+      `Whatever ${p.tag} had this week — bottle it. He is carrying this entire run on his back.`]));}
+}
+// after a match: the homer's joy or grief, or a veteran's last, best chance slipping away
+function deskMatchEndColor(L,champ,loser){
+  const hC=homerFor(champ),hL=homerFor(loser);
+  if(hC&&rnd()<0.8){deskSay(L,hC,pick([`${champ.short}! My club, through — I'm not even sorry.`,`There they go, ${champ.short} get it done. Forgive me, I'm allowed one.`]));return;}
+  if(hL&&rnd()<0.7){deskSay(L,hL,pick([`...${loser.short} fall. That one hurts more than I'll admit on air.`,`Tough to watch ${loser.short} go out — they were mine, once.`]));return;}
+  if(L.stage==='f'){const vet=lineup(loser).filter(p=>!p.bb&&!p.pinned&&p.age>=32&&p.age<=38&&(p.titles||0)===0).sort((x,y)=>y.age-x.age)[0];
+    if(vet&&rnd()<0.6)deskSay(L,pickAnalyst(),`And maybe that was the last, best chance for ${vet.tag}. ${vet.age} years old, still unmarked, and the clock doesn't slow down. Heartbreaking.`);}
+}
 function liveSetup(name,tier){
   transactionWindow();
   tier=tier||'SP';
@@ -2283,6 +2340,7 @@ function startMatch(L){
   initSeriesState(a,b,L.stage==='f'?1:0); // big-stage nerves on the final
   const sn=L.stage==='qf'?'Quarterfinal':L.stage==='sf'?'Semifinal':'FINAL';
   pushLog(L,`${sn}: ${a.name} vs ${b.name} — best of ${target*2-1}. ${playoffPreLine(a,b,L)}`,'map');
+  deskMatchColor(L,a,b);
   startMap(L);
 }
 // A contextual setup line for a playoff tie — Swiss form, a renewed rivalry, an unmarked star.
@@ -2326,6 +2384,7 @@ function stepRound(){
     accStat(p,e);});
   if(r.vigil){mp.mapVigils.push(r.vigil);L.matchVigils.push(r.vigil);}
   pushLog(L,roundLine(r,m,mp),'round');
+  deskRoundColor(L,r);
   if(mapDone(mp.sa,mp.sb))return mapEnd();
   return 'round';
 }
@@ -2334,8 +2393,9 @@ function mapEnd(){
   if(aWon)m.wins.a++;else m.wins.b++;
   m.maps.push({aWon,sa:mp.sa,sb:mp.sb,zone:mp.lastZone,vigils:mp.mapVigils,box:finalBoxSnapshot(m.a,m.b,mp.box)});
   {const mg={};for(const id in mp.perf){const a=mp.perf[id];mg[id]=a.reduce((s,x)=>s+x,0)/a.length;}
-   recordGamePerf(mg,mp.box,m.a,m.b,aWon?m.a:m.b,{event:L.name,tier:L.tier||'SP',round:L.stage==='f'?(L.tier==='WC'?'World final':'Major final'):L.stage==='sf'?'SF':'QF',mapNo:m.maps.length},mp.lastZone);}
-  pushLog(L,`MAP ${m.maps.length}: ${(aWon?m.a:m.b).short} ${Math.max(mp.sa,mp.sb)}–${Math.min(mp.sa,mp.sb)} on ${mp.lastZone}. Series ${m.a.short} ${m.wins.a}–${m.wins.b} ${m.b.short}.`,'mapend');
+   recordGamePerf(mg,mp.box,m.a,m.b,aWon?m.a:m.b,{event:L.name,tier:L.tier||'SP',round:L.stage==='f'?(L.tier==='WC'?'World final':'Major final'):L.stage==='sf'?'SF':'QF',mapNo:m.maps.length},mp.lastZone);
+   pushLog(L,`MAP ${m.maps.length}: ${(aWon?m.a:m.b).short} ${Math.max(mp.sa,mp.sb)}–${Math.min(mp.sa,mp.sb)} on ${mp.lastZone}. Series ${m.a.short} ${m.wins.a}–${m.wins.b} ${m.b.short}.`,'mapend');
+   deskMapColor(L,mg);}
   if(m.wins.a>=m.target||m.wins.b>=m.target)return matchEnd();
   startMap(L);return 'mapend';
 }
@@ -2351,6 +2411,7 @@ function matchEnd(){
   const scoreStr=`${Math.max(m.wins.a,m.wins.b)}–${Math.min(m.wins.a,m.wins.b)}`;
   const sn=L.stage==='qf'?'quarterfinal':L.stage==='sf'?'semifinal':'final';
   pushLog(L,`${champ.short} win the ${sn} ${scoreStr}${deadlift?' — a deadlift off the floor!':''}.`,'win');
+  deskMatchEndColor(L,champ,loser);
   if(L.stage==='qf'){L.qfWinners.push(champ);L.qfLosers.push(loser);L.matchIdx++;
     if(L.matchIdx>=4){L.stage='sf';L.matchIdx=0;L.sfPairs=[[L.qfWinners[0],L.qfWinners[1]],[L.qfWinners[2],L.qfWinners[3]]];}
     startMatch(L);return 'matchend';}
