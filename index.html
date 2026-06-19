@@ -100,6 +100,9 @@
   .intv-h{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--cold);margin-bottom:6px;}
   .intv-q{font-size:12.5px;color:var(--faint);font-style:italic;margin-bottom:4px;}
   .intv-a{font-family:Georgia,serif;color:var(--bone);font-size:14.5px;line-height:1.55;}
+  .mediaday{border-left:2px solid var(--ember-dim);background:linear-gradient(90deg,rgba(180,90,40,.06),transparent);padding:8px 10px 7px 13px;margin:0 0 12px;border-radius:0 4px 4px 0;}
+  .md-h{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);margin-bottom:5px;}
+  .md-q{font-family:Georgia,serif;color:var(--bone);font-size:14px;line-height:1.5;font-style:italic;}
   .awards{border-left:2px solid var(--gravl);padding:8px 0 4px 14px;margin-top:10px;}
   .aw-h{font-size:13px;color:var(--bone);margin-bottom:7px;}
   .aw-h[data-tpid]{cursor:pointer;}
@@ -604,7 +607,7 @@ function newWorld(){
   const d2=tier2Teams();
   const teams=d1.concat(d2);
   const freeAgents=[];for(let i=0;i<12;i++)freeAgents.push(procWeak(pick(ROLES),17+Math.floor(rnd()*4)));
-  const w={season:1,year:2016,tick:0,seasonCal:[],started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],seasonChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[],duos:[],results:[],majorMVPs:[]};
+  const w={season:1,year:2016,tick:0,seasonCal:[],started:false,teams,freeAgents,transactions:[],feed:[],cairns:[],rivalries:{},teamRivalries:{},majorChamps:[],seasonChamps:[],thisSeasonEvents:[],pendingMajors:[],live:null,defunct:[],casters:[],goatLog:{},moments:[],upsets:[],chokes:[],timeline:[],gamePerfs:[],majorPerfs:[],majorFinals:[],duos:[],bonds:{},results:[],majorMVPs:[]};
   w.teams.forEach(t=>{const seed=teamPower(t)*4*(t.div===2?0.7:1);t.gravl=0;t.lastGravl=seed;t.majors=0;t.worlds=0;t.divHistory=[{season:1,div:t.div}];t.players.forEach(p=>{p.history=[{short:t.short,name:t.name,season:1}];});});
   // Season Zero (2015) origins — the founding DreamHack LA final
   const findP=(short,tag)=>{const t=w.teams.find(x=>x.short===short);return t?t.players.find(p=>p.tag===tag):null;};
@@ -676,7 +679,8 @@ function rollForm(p){let sigma=0.09+(100-p.r.consistency)/100*0.15;
   if(hasTrait(p,'streaky')&&p._lastForm)f=0.45*p._lastForm+0.55*f; // heaters and slumps carry over
   if(p.slump>0)f*=0.93; // off his game after a partnership broke up
   f=clamp(f,0.45,1.9);p._lastForm=f;return f;}
-function initMapForm(a,b){lineup(a).concat(lineup(b)).forEach(p=>p._form=rollForm(p));}
+function initMapForm(a,b){lineup(a).concat(lineup(b)).forEach(p=>p._form=rollForm(p));
+  [a,b].forEach(t=>{t._harm=roomHarmony(t);t._cx=coachContext(t);});} // per-map team context — constant within a map, so resolve it once (both sim paths run this)
 // confidence resets each series; on the big stage the fragile start rattled and the cool start composed.
 function initSeriesState(a,b,stage){lineup(a).concat(lineup(b)).forEach(p=>{p._conf=0;p._cl=0;
   if(stage){let c=(poise(p)-0.72)*0.9;
@@ -848,17 +852,19 @@ function simRound(a,b,opts){
   const loadA=a._load||0,loadB=b._load||0; // tournament fatigue is felt per player, scaled by his stamina
   // the coach's system, resolved once per side: an overall multiplier + a phase tilt (Tempo wins the open, Methodical
   // the drawn-out round), and each player's stylistic fit — a man in a system that clashes with his game frags a touch worse.
-  const cxA=coachContext(a),cxB=coachContext(b);
+  const cxA=a._cx||coachContext(a),cxB=b._cx||coachContext(b); // cached per map by initMapForm; fall back if called standalone
   const pfit={};A.forEach(p=>pfit[p.id]=playerFit(p,a.coach));B.forEach(p=>pfit[p.id]=playerFit(p,b.coach));
   const fitMult=p=>0.975+0.05*(pfit[p.id]==null?0.7:pfit[p.id]);
   // a player's effectiveness, with the wand he's holding folded in — 'open' phase rewards the opening angle (the Staff)
   const rate=(p,ph)=>zoneSkill(p,z)*formMult(p)*confMult(p)*staminaFatigue(p,side[p.id]==='a'?loadA:loadB)*wmul(p,ph)*fitMult(p);
   const fragW=p=>Math.max(0.2,rate(p)*(0.7+0.6*rnd()));
-  const tchem=t=>(0.78+0.46*t.chem)*(t===a?cxA.mult:cxB.mult);
+  const harmA=a._harm!=null?a._harm:roomHarmony(a),harmB=b._harm!=null?b._harm:roomHarmony(b); // a tight room plays a hair above a fractured one (cached per map)
+  const tchem=t=>(0.78+0.46*t.chem)*(t===a?cxA.mult*harmA:cxB.mult*harmB);
   // opening duel — the entry/star players contest the ember first, and the Staff-holder holds the angle hardest
   const owt=p=>(p.r.entry*1.5+p.r.aim+1)*wmul(p,'open');
   const oa=pickW(A,owt),ob=pickW(B,owt);
-  const ra=rate(oa,'open')*mom.a*tchem(a)*cxA.open,rb=rate(ob,'open')*mom.b*tchem(b)*cxB.open;
+  // a grudge sharpens each opener against the man across the angle — he wants this duel personally
+  const ra=rate(oa,'open')*mom.a*tchem(a)*cxA.open*grudgeEdge(oa,ob),rb=rate(ob,'open')*mom.b*tchem(b)*cxB.open*grudgeEdge(ob,oa);
   const aOpen=rnd()<ra/(ra+rb);
   const opW=aOpen?oa:ob,opL=aOpen?ob:oa;
   box[opW.id].k++;box[opW.id].open++;box[opW.id].entry++;box[opL.id].d++;box[opL.id].fd++;
@@ -1150,6 +1156,13 @@ function relLine(p){const bits=[];
   if(p.wantsOut&&!p.retired)bits.push(`<span class="cp-l" style="color:var(--ember)">Wants out</span> <span class="faint">handed in a transfer request</span>`);
   if(p.mentorId!=null){const m=anyPlayerById(p.mentorId);if(m)bits.push(`<span class="cp-l">Mentored by</span> <span class="tg">${esc(m.tag)}</span>`);}
   if(p.proteges&&p.proteges.length){const ns=p.proteges.map(id=>anyPlayerById(id)).filter(Boolean).slice(0,3).map(x=>`<span class="tg">${esc(x.tag)}</span>`);if(ns.length)bits.push(`<span class="cp-l">Mentor to</span> ${ns.join(', ')}`);}
+  kinOf(p).forEach(k=>{const t=teamOf(k.p);bits.push(`<span class="cp-l" style="color:var(--gravl)">${k.rel==='brother'?'Brother':'Cousin'} of</span> <span class="tg">${esc(k.p.tag)}</span>${t?` <span class="faint">(${esc(t.short)})</span>`:''}`);});
+  // the player's sharpest standing feelings — a friend he's close with, a man he can't stand
+  if(!p.retired){const feels=[];for(const key in (world.bonds||{})){const b=world.bonds[key];if(b.a!==p.id&&b.b!==p.id)continue;
+      const other=anyPlayerById(b.a===p.id?b.b:b.a);if(!other||other.retired)continue;const v=sentiment(p.id,other.id),w=feelWord(v);
+      if(w&&Math.abs(v)>=0.4)feels.push({other,v,w});}
+    feels.sort((x,y)=>Math.abs(y.v)-Math.abs(x.v)).slice(0,2).forEach(f=>{const col=f.v>0?'var(--good)':'var(--bad)';
+      bits.push(`<span class="cp-l" style="color:${col}">${f.v>0?'Close with':'Bad blood with'}</span> <span class="tg">${esc(f.other.tag)}</span>`);});}
   if(p.debutEra)bits.push(`<span class="cp-l">Came up in</span> <span class="faint">${esc(p.debutEra)}</span>`);
   if(!p.retired&&world.era&&world.era.kind==='role')bits.push(world.era.key===p.role?`<span class="cp-l" style="color:var(--gravl)">The meta favors him</span>`:`<span class="cp-l faint">Out of his era</span>`);
   let arc='';
@@ -1272,6 +1285,98 @@ function endSeasonRecords(){
 }
 /* ---- living relationships: core duos, mentor lineages, grudges ---- */
 function pfull(p){return `${p.first} "${p.tag}" ${p.last}`;}
+
+// ==== KINSHIP: brothers and cousins, across the league ===========================================
+// Brothers share a surname; cousins often do. Family lines grow as younger siblings come up the ranks.
+const KINW={brother:0.55,cousin:0.30}; // a warm baseline feeling between kin, before any real friction
+function kinRel(aId,bId){const a=anyPlayerById(aId);if(!a||!a.kin)return null;const k=a.kin.find(x=>x.id===bId);return k?k.rel:null;}
+function kinOf(p){return ((p&&p.kin)||[]).map(k=>({rel:k.rel,p:anyPlayerById(k.id)})).filter(x=>x.p);}
+function kinLink(a,b,rel){ // symmetric; brothers take the elder's surname, cousins often share it too
+  if(!a||!b||a.id===b.id||kinRel(a.id,b.id))return;
+  (a.kin=a.kin||[]).push({id:b.id,rel});(b.kin=b.kin||[]).push({id:a.id,rel});
+  if(rel==='brother'||rnd()<0.6){const elder=a.age>=b.age?a:b,younger=elder===a?b:a;younger.last=elder.last;}}
+const kinNoun={brother:'brother',cousin:'cousin'};
+
+// ==== SENTIMENT: how players actually feel about one another ======================================
+// A sparse, symmetric registry (world.bonds, keyed by id-pair) of the bonds and beefs that matter —
+// seeded from kin/duos/mentor lines, then grown each season by the things that make players close or bitter.
+// Most pairs feel nothing; sentiment() folds the explicit bond together with the living kin/duo/grudge signals.
+function feelKey(a,b){return a<b?a+'-'+b:b+'-'+a;}
+function bondOf(aId,bId){return world.bonds?world.bonds[feelKey(aId,bId)]:null;}
+function setBond(aId,bId,dv,why,kind){const k=feelKey(aId,bId);const w=world.bonds||(world.bonds={});
+  const b=w[k]||(w[k]={v:0,why:'',kind:kind||'',since:world.season,a:aId,b:bId});
+  b.v=clamp(b.v+dv,-1,1);if(why)b.why=why;if(kind)b.kind=kind;b.season=world.season;return b;}
+// net feeling A holds toward B: explicit bond + kin warmth + active duo + mentor line − a soured-duo grudge
+function sentiment(aId,bId){if(aId==null||bId==null||aId===bId)return 0;let v=0;
+  const kr=kinRel(aId,bId);if(kr)v+=KINW[kr]||0;
+  const b=bondOf(aId,bId);if(b)v+=b.v;
+  if(duoPartnerId(aId)===bId)v+=0.4;
+  const a=anyPlayerById(aId);if(a&&(a.mentorId===bId||(a.proteges||[]).indexOf(bId)>=0))v+=0.35;
+  if(falloutBetween(aId,bId))v-=0.5;
+  return clamp(v,-1,1);}
+function feelWord(v){return v>=0.5?'tight':v>=0.22?'friendly':v<=-0.5?'bad blood':v<=-0.22?'no love lost':null;}
+// the strongest cross-team feeling between two rosters — the storyline a matchup is really about
+function topCrossFeeling(la,lb){let best=null,mag=0;
+  for(const x of la)for(const y of lb){const v=sentiment(x.id,y.id),m=Math.abs(v),kr=kinRel(x.id,y.id);
+    const score=m+(kr?0.25:0); // a kin clash is always a story even at a warm, low magnitude
+    if(score>mag&&(m>=0.22||kr)){mag=score;best={a:x,b:y,v,kin:kr};}}
+  return best;}
+// roster harmony: the average pairwise feeling inside a lineup → a small, honest multiplier on the team's game
+function roomHarmony(t){const L=lineup(t);if(L.length<2)return 1;let s=0,n=0;
+  for(let i=0;i<L.length;i++)for(let j=i+1;j<L.length;j++){s+=sentiment(L[i].id,L[j].id);n++;}
+  return clamp(1+(s/n)*0.05,0.965,1.04);} // a tight room plays ~3-4% above a fractured one
+// a grudge sharpens a player against the man he can't stand — felt most in the opening duel he picks on purpose
+function grudgeEdge(p,opp){const v=sentiment(p.id,opp.id);if(v>=-0.18)return 1;
+  return clamp(1+(-v-0.18)*0.16*(hasTrait(p,'hothead')?1.5:1),1,1.12);}
+
+// ---- seed the founding league with families and a few opening-day bonds/beefs ----
+function allActive(){const out=[];world.teams.forEach(t=>t.players.forEach(p=>{if(!p.retired)out.push(p);}));return out;}
+function seedRelationships(){if(world._relSeeded)return;world._relSeeded=true;
+  const pool=shuffle(allActive());
+  // a couple of brother pairs and a few cousins across the founding rosters
+  let used=new Set();
+  const grab=n=>{const out=[];for(const p of pool){if(used.has(p.id))continue;out.push(p);used.add(p.id);if(out.length===n)break;}return out;};
+  for(let i=0;i<2;i++){const[a,b]=grab(2);if(a&&b)kinLink(a,b,'brother');}
+  for(let i=0;i<3;i++){const[a,b]=grab(2);if(a&&b)kinLink(a,b,'cousin');}
+  // a hothead opens his career with someone he already can't stand — a founding-day beef
+  const hot=allActive().filter(p=>hasTrait(p,'hothead'));
+  hot.forEach(p=>{if(rnd()<0.6){const foe=pick(allActive().filter(q=>q.id!==p.id&&teamOf(q)!==teamOf(p)));
+    if(foe)setBond(p.id,foe.id,-0.5,`${p.tag} and ${foe.tag} have never gotten on`,'beef');}});
+}
+// ---- a younger sibling or cousin debuts into an existing family line (called in the offseason) ----
+function maybeFamilyDebut(){if(rnd()>=0.5)return;
+  const elders=allActive().filter(p=>p.age>=22&&careerGrav(p)>=0.95); // an established name worth carrying
+  if(!elders.length)return;const elder=pick(elders);
+  const rel=rnd()<0.5?'brother':'cousin';
+  const rook=procWeak(pick(ROLES),16+Math.floor(rnd()*3));
+  rook.first=pick(FIRST.filter(f=>f!==elder.first))||rook.first;
+  kinLink(rook,elder,rel);world.freeAgents.push(rook);
+  feedPush('small','A familiar name',`A ${kinNoun[rel]} of ${nm(elder)} enters the pool — ${nm(rook)}, ${rook.age}, carrying the family name into free agency.`);
+}
+// ---- season evolution: bonds and beefs grow from the things that draw players together or set them at odds ----
+function evolveBonds(){const w=world.bonds||(world.bonds={});
+  // decay: feelings drift toward neutral unless they keep getting fed
+  for(const k in w){const b=w[k];b.v*=0.86;if(Math.abs(b.v)<0.08)delete w[k];}
+  world.teams.forEach(t=>{const L=contracted(t);
+    for(let i=0;i<L.length;i++)for(let j=i+1;j<L.length;j++){const a=L[i],b=L[j];
+      // years in the same room build a quiet friendship (a mentor pair faster)
+      if((a.tenure||0)>=2&&(b.tenure||0)>=2&&rnd()<0.3)setBond(a.id,b.id,0.12,`years together at ${esc(t.short)}`,'friend');
+    }
+    // an unhappy, volatile room turns inward: a hothead picks a fight with a teammate
+    const hot=L.filter(p=>hasTrait(p,'hothead')&&(p.unrest||0)>0.4);
+    hot.forEach(p=>{if(rnd()<0.4){const mate=pick(L.filter(q=>q.id!==p.id));if(mate){
+      const b=setBond(p.id,mate.id,-0.4,`a locker-room blow-up at ${esc(t.short)}`,'beef');
+      if(b.v<=-0.45&&rnd()<0.5)feedPush('note','Friction in the room',`Word from inside ${esc(t.name)}: ${nm(p)} and ${nm(mate)} are at it — a rift the coach will have to manage.`);}}});
+  });
+  // a deep title rivalry between two stars curdles into something personal
+  Object.values(world.rivalries).filter(r=>r.count>=2).forEach(r=>{const a=anyPlayerById(r.a.id),b=anyPlayerById(r.b.id);
+    if(a&&b&&!a.retired&&!b.retired&&rnd()<0.5){const bd=setBond(a.id,b.id,-0.3,`${r.count} title clashes and counting`,'beef');
+      if(bd.v<=-0.5&&!bd._told){bd._told=1;feedPush('note','It has gotten personal',`${nm(a)} and ${nm(b)} have met too many times with everything on the line. This isn't just competition anymore — there's real edge to it now.`);}}});
+  // a rare spark of mutual respect between two greats who keep crossing paths
+  if(rnd()<0.4){const greats=allActive().filter(p=>careerGrav(p)>=1.15);
+    if(greats.length>=2){const a=pick(greats),b=pick(greats.filter(q=>q.id!==a.id&&teamOf(q)!==teamOf(a)));
+      if(b&&sentiment(a.id,b.id)>=-0.1)setBond(a.id,b.id,0.2,'two greats who respect the war',`friend`);}}
+}
 function duoOf(pid){return (world.duos||[]).find(d=>d.a===pid||d.b===pid);}
 function duoPartnerId(pid){const d=duoOf(pid);return d?(d.a===pid?d.b:d.a):null;}
 function duoPartnerOn(p,team){const pid=duoPartnerId(p.id);return pid!=null&&team.players.some(x=>x.id===pid);}
@@ -1388,8 +1493,20 @@ function detectUpsetsChokes(tier,name,qf,sf,fin){
   });
 }
 // Sam Herring's post-match — a short, context-aware interview with the winning MVP (or the champions' star).
+// the MVP's sharpest tie to a man on the team he just beat — kin first, then a beef or a friendship
+function interviewOppHook(mvp,runnerTeam){if(!mvp||!runnerTeam)return null;let best=null,mag=0;
+  lineup(runnerTeam).forEach(o=>{const kr=kinRel(mvp.id,o.id),v=sentiment(mvp.id,o.id),m=Math.abs(v)+(kr?1:0);
+    if(m>mag&&(kr||Math.abs(v)>=0.4)){mag=m;best={rel:kr||(v>0?'friend':'beef'),tag:o.tag};}});
+  return best;}
 function mkInterview(d){
   if(!d||!d.top)return null;const mvp=d.top;const who=mvp.won?mvp.name:(d.champStar||mvp.name);let q='Walk me through that one.',a;
+  const oh=d.oppHook;
+  if(oh&&rnd()<0.7){
+    if(oh.rel==='brother'){q=`You just beat your own brother ${oh.tag} for the title — what's that like?`;a=pick([`Beating my own brother for a Major… mixed. I'll be buzzing tonight and gutted for him at the same time. He'll get his.`,`That's blood on the other side. We'll laugh about it in twenty years. Right now I can't stop shaking.`]);return {host:'Sam Herring',who,q,a};}
+    if(oh.rel==='cousin'){q=`Taking the title off your cousin ${oh.tag} — does that make it sweeter?`;a=pick([`The whole family was split tonight. I'll never let him forget this one — that's what cousins are for.`,`Family bragging rights AND a cairn. Doesn't get better. He'll want the rematch.`]);return {host:'Sam Herring',who,q,a};}
+    if(oh.rel==='beef'){q=`You got there through ${oh.tag}, who you've had your battles with. Satisfying?`;a=pick([`I'll be honest — beating him specifically? That's most of the joy. He knows why.`,`Some wins you feel in the standings. That one I felt personally. Enough said.`]);return {host:'Sam Herring',who,q,a};}
+    if(oh.rel==='friend'){q=`You had to beat your good friend ${oh.tag} for this. Bittersweet?`;a=pick([`Hardest part of the night. Love that guy. But I came to win, and he'd never forgive me if I went soft.`,`We'll have a drink later and he'll tell me I got lucky. Maybe I did. I'll take it.`]);return {host:'Sam Herring',who,q,a};}
+  }
   if(d.deadlift){q='You were 0–2 down and gone. What changed?';a=pick(["Honestly, nothing changed — we just stopped missing. 0–2 to champions. I'll never forget this.","Dead and buried, and not one of us believed it. A reverse sweep, on this stage. Surreal."]);}
   else if(d.champStarBreakthrough&&d.champStar){q='Your first premier title, after all the near-misses — how does it feel?';a=pick(["Everyone said I couldn't win the big one. Well — I'm not unmarked anymore.","Years of falling at the last step. Tonight it's mine. I can finally breathe."]);}
   else if(mvp.vigils>0||d.vigil){q='That clutch to seal it — talk me through it.';a=pick(["Last alive, three of them on the ember. You stop thinking, trust the aim, let it go.","1vX — no time to be scared. You just play. Glad it landed."]);}
@@ -1457,6 +1574,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
     teamRivalry:triv.count>1?{a:triv.a,b:triv.b,count:triv.count,champLeads:`${triv.wins[champ.short]||0}–${triv.wins[run.short]||0}`}:null,
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former),
     standin:usedStandin?(winLine.find(p=>p.standinFor)?`${winLine.find(p=>p.standinFor).first} "${winLine.find(p=>p.standinFor).tag}" ${winLine.find(p=>p.standinFor).last}`:null):null};
+  data.oppHook=interviewOppHook((tp&&teamOf(tp)===champ)?tp:starC,run); // the interview speaks from the champion's side
   data.interview=mkInterview(data);
   attachAwards(data,name,'SP',F);
   feedPush('final',`${champ.name} win the ${name}`,`<b>Major champions.</b> def. ${run.name} ${F.scoreStr}. They raise a <b>${data.cairnStyle}</b> cairn at ${zone}.`,'Major',data);
@@ -1514,6 +1632,7 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
     vigil:vg?{name:vg.name,x:vg.x,zone:vg.zone}:null,
     champStar:starC?pname(starC):null,runnerStarUnmarked:(starR&&starR.titles===0)?pname(starR):null,
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former)};
+  data.oppHook=interviewOppHook((tp&&teamOf(tp)===champ)?tp:starC,run); // the interview speaks from the champion's side
   data.interview=mkInterview(data);
   attachAwards(data,name,'WC',F);
   feedPush('final',`${champ.name} are crowned World Champions`,`<b>World champions — Season ${world.season}.</b> def. ${run.name} ${F.scoreStr}. The season's world title, and a <b>crown</b> cairn at ${zone}.`,'World Championship',data);
@@ -1946,6 +2065,7 @@ function advanceCareers(){
   world.teams.forEach(t=>{(t.standins||[]).forEach(s=>{s.standinFor=null;world.freeAgents.push(s);});t.standins=[];
     t.players.forEach(p=>{if(p.injured){p.injured--;if(p.injured<=0){p.injured=0;txn('return',`${nm(p)} returns to ${t.short} from injury.`);}}});});
   updateMorale(); // resolve last season's locker-room state before the offseason settles
+  evolveBonds();maybeFamilyDebut(); // friendships and beefs grow, and a new family name may enter the pool
   // age + develop + retire (Circuit Points reset separately at season rollover, they don't decay here)
   world.teams.forEach(t=>{
     const mentorP=contracted(t).find(p=>hasTrait(p,'mentor'));const ment=!!mentorP; // a mentor steadies and grows the squad
@@ -1955,7 +2075,8 @@ function advanceCareers(){
       const volatile=c.some(p=>hasTrait(p,'hothead')||hasTrait(p,'headcase'));
       const friction=(volatile&&coachComp<72)?clamp((72-coachComp)/240,0,0.06):0; // a hot head + a coach who can't hold the room
       const drag=clamp((c.reduce((s,p)=>s+(p.unrest||0),0)/Math.max(1,c.length))*0.10,0,0.07);
-      const target=0.74+(ment?0.04:0)-friction-drag;
+      const bonds=(roomHarmony(t)-1)*0.8; // the relationship layer feeds chemistry: kin and friendships lift the room, beefs drag it
+      const target=0.74+(ment?0.04:0)-friction-drag+bonds;
       t.chem=clamp(target+(t.chem-target)*0.80,0.42,0.92);
     }
     t.players.forEach(p=>{if(p.retired)return;p.age++;p.tenure=(p.tenure||0)+1;if(p.slump>0)p.slump--;developPlayer(p,ment&&!hasTrait(p,'mentor'));
@@ -2704,7 +2825,15 @@ function playoffPreLine(a,b,L){const bits=[];
   if(sa&&sa.titles===0&&careerGrav(sa)>=1.15)bits.push(`${sa.tag} chasing a first title`);
   else if(sb&&sb.titles===0&&careerGrav(sb)>=1.15)bits.push(`${sb.tag} chasing a first title`);
   return bits.length?bits[0]+'.':'';}
-function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box,zone:pickZone(),buy:{a:'full',b:'full'},econ:newEcon(m.a,m.b)};}
+// media day: a pre-match soundbite when the two rosters carry a real storyline — kin across the net, a beef, or mutual respect
+function mediaDayLine(m){const cf=topCrossFeeling(lineup(m.a),lineup(m.b));if(!cf)return null;
+  const A=cf.a,B=cf.b,hot=hasTrait(A,'hothead');
+  if(cf.kin==='brother')return {who:A.tag,q:`facing your brother ${B.tag}`,a:pick([`Blood's blood, but for these three maps he's just another guy holding an angle. I'll hug him after — once we've sent them home.`,`Mum's in chat telling us both to behave. Not happening. I want this one more than any of them.`])};
+  if(cf.kin==='cousin')return {who:A.tag,q:`drawing your cousin ${B.tag}`,a:pick([`Family reunion on the big stage. He knows my game, I know his. Whoever loses is cooking at the next one.`,`Half my family's split down the middle tonight. Doesn't change a thing — I'm taking the win home.`])};
+  if(cf.v<=-0.4)return {who:A.tag,q:`up against ${B.tag}`,a:hot?pick([`${B.tag}? Never rated him. Talks a big game, folds when you put it on him. Can't wait to prove it again.`,`There's history. He knows what he did. We'll settle it on the server like always — and I'll be standing.`]):pick([`${B.tag} and I aren't sending each other birthday cards. I'll let the scoreline do the talking.`,`No love lost there. That's all I'll say. Watch the tape.`])};
+  if(cf.v>=0.45)return {who:A.tag,q:`facing your friend ${B.tag}`,a:pick([`Love the guy to bits — off the server. For these maps I want to make his life miserable. He'd say the same.`,`We came up together. Best kind of match, this. No quarter, all respect.`])};
+  return null;}
+function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box,zone:pickZone(),buy:{a:'full',b:'full'},econ:newEcon(m.a,m.b),mediaDay:(m.maps&&m.maps.length===0)?mediaDayLine(m):null};}
 function roundLine(r,m,mp){
   const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
   // mp here is post-round — flag if a side is now ON map/match point (unless the map just ended)
@@ -2793,12 +2922,22 @@ function ambientReaction(m,mp){
   if(hasTrait(p,'hothead')||poise(p)<=0.45)return pick([`🎙 ${p.tag} is jawing across the server already.`,`🎙 ${p.tag} slams the desk after that exchange.`]);
   if(hasTrait(p,'mentor'))return `🎙 ${p.tag} steadies the young ones — a quiet word between rounds.`;
   return pick([`🎙 ${p.tag} re-checks the angles, all business.`,`🎙 ${p.tag} shrugs it off and re-stacks.`]);}
+// a kill lands between two players with real history — blood, a beef, or an old friendship. The desk lives for these.
+function relReaction(p,V,ev){if(!V)return null;
+  const kr=kinRel(p.id,V.id),v=sentiment(p.id,V.id),hot=hasTrait(p,'hothead');
+  if(kr==='brother')return pick([`🎙 ${p.tag} drops his own BROTHER — and he can't bring himself to celebrate it.`,`🎙 That's ${p.tag}'s brother ${V.tag} on the floor. A look between them. Family, on opposite sides of the server.`,`🎙 ${p.tag} wins the duel over his brother — ${hot?'a roar, then a grin he tries to hide':'no celebration, just a nod. Some things run deeper than a round.'}`]);
+  if(kr==='cousin')return pick([`🎙 Family business — ${p.tag} takes down his cousin ${V.tag}. That one comes up at the reunion.`,`🎙 ${p.tag} over his cousin ${V.tag} — bragging rights in the bloodline tonight.`]);
+  if(falloutBetween(p.id,V.id))return `🎙 ${p.tag} drops ${V.tag} — and you know there's history there. They won together once. Not anymore.`;
+  if(v<=-0.4){const why=(bondOf(p.id,V.id)||{}).why;
+    if(hot)return pick([`🎙 ${p.tag} drops ${V.tag} and STANDS UP — screaming right across the server at him! The bad blood is real!`,`🎙 ${p.tag} gets ${V.tag} and lets him hear about it — out of the chair, jawing, the ref is looking over.`,`🎙 OH he RELISHED that — ${p.tag} buries ${V.tag} and points him back to spawn.`]);
+    return pick([`🎙 ${p.tag} takes ${V.tag} down — ice-cold, not a word, but you can feel the dislike from here.`,`🎙 ${p.tag} drops ${V.tag}${why?` — ${esc(why)}`:''}. He wanted that one badly.`]);}
+  if(v>=0.45)return pick([`🎙 ${p.tag} has to be the one to take out his friend ${V.tag} — a tap of the chest after, all respect.`,`🎙 ${p.tag} drops ${V.tag}, and there's nothing in it but respect. Mates off the server, enemies on it.`]);
+  return null;}
 function reactionLine(ev,m,mp){
   if(ev.t==='close')return ambientReaction(m,mp);
   const p=ev.k!=null?anyPlayerById(ev.k):null;if(!p)return null;
-  // a grudge kill on a former duo partner — history across the server
-  if((ev.t==='kill'||ev.t==='open')&&ev.v!=null&&rnd()<0.55){const fb=falloutBetween(ev.k,ev.v);
-    if(fb){const V=anyPlayerById(ev.v);return `🎙 ${p.tag} drops ${V?V.tag:'his man'} — and you know there's history there. They won together once. Not anymore.`;}}
+  // a kill with real history behind it — kin, a beef, or an old friendship
+  if((ev.t==='kill'||ev.t==='open')&&ev.v!=null&&rnd()<0.6){const rr=relReaction(p,anyPlayerById(ev.v),ev);if(rr)return rr;}
   // a star opened early — a problem the desk can't ignore
   if(ev.t==='open'){const V=anyPlayerById(ev.v);
     if(V&&isLegend(V)&&isRookie(p))return reactFlavor(p,3,false);
@@ -3024,6 +3163,7 @@ function renderCast(){
     if(!sw)h+=bracketStrip(L);
     h+=`<div class="scoreboard"><div class="sb-team">${esc(m.a.name)}</div><div class="sb-mid"><div class="sb-series">series ${m.wins.a}–${m.wins.b}</div><div class="sb-map">${mp.sa}–${mp.sb}</div><div class="sb-zone">${mp.cur?`◉ ${mp.cur.upA}v${mp.cur.upB} · ${mp.cur.r.zone}`:mp.round?`map ${m.maps.length+1} · last: ${mp.lastZone}`:`map ${m.maps.length+1} · first to 15`}</div></div><div class="sb-team">${esc(m.b.name)}</div></div>`;
     h+=loadoutHud(m,mp);
+    if(mp.mediaDay&&mp.round===0&&m.maps.length===0)h+=`<div class="mediaday"><div class="md-h">🎙 Media day · ${esc(mp.mediaDay.who)} on ${esc(mp.mediaDay.q)}</div><div class="md-q">“${esc(mp.mediaDay.a)}”</div></div>`;
     if(L.stage==='f'&&mp.round===0&&m.maps.length===0){
       if(L.stagePreview)h+=`<div class="desk"><div class="desk-label">From the desk · the stage</div>${fmtAI(L.stagePreview)}</div>`;
       else if(L.stagePreviewLoading)h+=`<div class="desk-loading">the desk is setting the stage…</div>`;
@@ -3064,7 +3204,7 @@ function doSeason(){ // play through the rest of the current season's four stage
   autoResolveMajors();render();switchTab('feed');
 }
 function doFive(){for(let n=0;n<5;n++){let guard=0;do{stepTick();}while(world.tick<4&&guard++<8);}autoResolveMajors();render();switchTab('feed');}
-function doReset(){world=newWorld();render();switchTab("feed");}
+function doReset(){world=newWorld();seedRelationships();render();switchTab("feed");}
 function switchTab(p){if(p!=='cast')stopPlay(); // leaving the broadcast halts auto-play
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.p===p));
   document.querySelectorAll(".panel").forEach(s=>s.classList.toggle("active",s.id==="p-"+p));}
@@ -3136,7 +3276,7 @@ document.getElementById("p-cast").addEventListener("click",e=>{
   else if(a==='vbox'){if(world.live){world.live.view='box';renderCast();}}else if(a==='vlog'){if(world.live){world.live.view='log';renderCast();}}
   else if(a==='boxsel'){if(world.live){world.live.boxSel=el.dataset.sel;renderCast();}}});
 
-world=newWorld();render();
+world=newWorld();seedRelationships();render();
 </script>
 </body>
 </html>
