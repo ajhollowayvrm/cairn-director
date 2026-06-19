@@ -776,7 +776,7 @@ function swissResolveMatch(x,y,rec,ctx){
   const s=simSeries(x,y,swissStakes(x,y,rec)?2:1,ctx?Object.assign({},ctx,{round:'Swiss'}):null);
   rec.get(s.winner).w++;rec.get(s.loser).l++;
   const rx=rec.get(x),ry=rec.get(y);if(rx.opp)rx.opp.push(y);if(ry.opp)ry.opp.push(x);
-  accEventPerf(s.sg,1);return s;
+  accEventPerf(s.sg,1,s.box);return s;
 }
 function swissSeed(advanced,eliminated,rec){
   advanced.sort((a,b)=>rec.get(a).l-rec.get(b).l||buchholz(b,rec)-buchholz(a,rec)||b.gravl-a.gravl); // seed by record, then strength of schedule
@@ -1257,19 +1257,36 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
 function startEventPerf(){world._eventPerf={};world.teams.forEach(t=>{t._load=0;});} // also reset tournament fatigue
 // Per-player fatigue: deep tournament runs drag, but a high-stamina (iron-lunged) player barely feels it.
 function staminaFatigue(p,load){const drain=clamp(load,0,16)*(1-(p.stamina||60)/125);return 1-clamp(drain*0.012,0,0.13);}
-function accEventPerf(sg,weight){if(!world._eventPerf||!sg)return;
+// Accumulate per-event impact: weighted Gravity (for depth) AND the actual box, weighted by stage so the
+// final's production dominates — that box is what makes the MVP reward who went off, not just who's rated highest.
+function accEventPerf(sg,weight,box){if(!world._eventPerf||!sg)return;
   for(const id in sg){const p=findPlayer(+id);if(!p)continue;const t=teamOf(p);
-    const e=world._eventPerf[id]=world._eventPerf[id]||{pid:+id,tag:p.tag,name:`${p.first} "${p.tag}" ${p.last}`,short:t?t.short:'—',role:p.role,sum:0,n:0,best:0};
-    e.sum+=sg[id]*weight;e.n+=weight;e.best=Math.max(e.best,sg[id]);if(t)e.short=t.short;}
+    const e=world._eventPerf[id]=world._eventPerf[id]||{pid:+id,tag:p.tag,name:`${p.first} "${p.tag}" ${p.last}`,short:t?t.short:'—',role:p.role,sum:0,n:0,best:0,box:blankBox()};
+    e.sum+=sg[id]*weight;e.n+=weight;e.best=Math.max(e.best,sg[id]);if(t)e.short=t.short;
+    if(box&&box[id]){const b=box[id];for(const k in b)e.box[k]=(e.box[k]||0)+(b[k]||0)*weight;}}
 }
-function eventAwards(){
+// An HLTV-1.0-style production rating from the actual box — the metric that says who *performed*, not who's rated.
+// Because the box is stage-weighted, this is dominated by what a player did in the final.
+function eventRating(e){const b=e&&e.box;if(!b||!b.rounds)return 0;
+  const r=b.rounds,kpr=b.k/r,dpr=b.d/r,apr=b.a/r,adr=b.dmg/r,kast=100*b.kast/r;
+  const impact=2.13*kpr+0.42*apr-0.41;
+  return Math.max(0,0.0073*kast+0.3591*kpr-0.5329*dpr+0.2372*impact+0.0032*adr+0.1587);}
+// MVP / All-Major score: production first, then depth (deep runs accrue weighted Gravity), a peak-game nudge,
+// and a champion tiebreak so — all else close — the trophy follows the title, the way real finals MVPs do.
+function eventScore(e,champShort){const depth=(e.sum||0)/9; // ~1.0 for a full finalist run, ~0.3 for a QF exit
+  return eventRating(e)+depth*0.7+(e.best||0)*0.10+((champShort&&e.short===champShort)?0.22:0);}
+function eventAwards(champShort,runShort){
   const arr=Object.values(world._eventPerf||{});if(!arr.length)return null;
-  const mvp=arr.slice().sort((a,b)=>b.sum-a.sum)[0];
-  const allMajor=ROLES.map(role=>{const c=arr.filter(e=>e.role===role).sort((a,b)=>b.sum-a.sum)[0];
-    return c?{role,name:c.name,tag:c.tag,short:c.short,pid:c.pid,avg:+(c.sum/Math.max(1,c.n)).toFixed(2)}:{role,name:null};});
-  return {mvp:{pid:mvp.pid,name:mvp.name,tag:mvp.tag,short:mvp.short,role:mvp.role,avg:+(mvp.sum/Math.max(1,mvp.n)).toFixed(2)},allMajor};
+  const mk=e=>({pid:e.pid,name:e.name,tag:e.tag,short:e.short,role:e.role,avg:+(e.sum/Math.max(1,e.n)).toFixed(2),rating:+eventRating(e).toFixed(2)});
+  // the MVP comes from the two finalists — a tournament MVP is decided on the biggest stage, not in a quarterfinal
+  const finalists=arr.filter(e=>e.short===champShort||e.short===runShort);
+  const pool=finalists.length?finalists:arr;
+  const mvp=pool.slice().sort((a,b)=>eventScore(b,champShort)-eventScore(a,champShort))[0];
+  const allMajor=ROLES.map(role=>{const c=arr.filter(e=>e.role===role).sort((a,b)=>eventScore(b,champShort)-eventScore(a,champShort))[0];
+    return c?Object.assign({role},mk(c)):{role,name:null};});
+  return {mvp:mk(mvp),allMajor};
 }
-function attachAwards(data,name,tier){const aw=eventAwards();if(!aw)return;
+function attachAwards(data,name,tier){const aw=eventAwards(data.champ&&data.champ.short,data.runner&&data.runner.short);if(!aw)return;
   data.mvp=aw.mvp;data.allMajor=aw.allMajor;
   (world.majorMVPs=world.majorMVPs||[]).push({season:world.season,year:world.year,event:name,tier,mvp:aw.mvp,allMajor:aw.allMajor});
   world._eventPerf=null;}
@@ -1329,7 +1346,7 @@ function runEvent(tier,name){
   const sf=[simSeries(qf[0].winner,qf[1].winner,qfWins,cx('SF')),simSeries(qf[2].winner,qf[3].winner,qfWins,cx('SF'))];
   const sfL=sf.map(s=>s.loser);
   const fin=simSeries(sf[0].winner,sf[1].winner,finalWins,cx(finalRound));
-  if(T.premier){qf.forEach(s=>accEventPerf(s.sg,2));sf.forEach(s=>accEventPerf(s.sg,3));accEventPerf(fin.sg,4);}
+  if(T.premier){qf.forEach(s=>accEventPerf(s.sg,2,s.box));sf.forEach(s=>accEventPerf(s.sg,3,s.box));accEventPerf(fin.sg,4,fin.box);}
   const champ=fin.winner,run=fin.loser;const b=seriesBlurb(fin);
   detectUpsetsChokes(tier,name,qf,sf,fin);
   const packet=recordResult(tier,name,champ,run,fin,b);
@@ -1719,7 +1736,7 @@ function renderFeed(){const el=$("p-feed");
 function interviewHtml(iv){if(!iv)return '';
   return `<div class="intv"><div class="intv-h">🎙 Post-match · ${esc(iv.host)} with <b>${esc(iv.who)}</b></div><div class="intv-q">“${esc(iv.q)}”</div><div class="intv-a">“${esc(iv.a)}”</div></div>`;}
 function awardsHtml(d){if(!d||!d.mvp)return '';
-  return `<div class="awards"><div class="aw-h">★ Tournament MVP — <b>${esc(d.mvp.name)}</b> <span class="faint">· ${d.mvp.role} · ${esc(d.mvp.short)} · ${d.mvp.avg} avg</span></div>`+
+  return `<div class="awards"><div class="aw-h">★ Tournament MVP — <b>${esc(d.mvp.name)}</b> <span class="faint">· ${d.mvp.role} · ${esc(d.mvp.short)} · ${d.mvp.rating!=null?d.mvp.rating+' rating':d.mvp.avg+' avg'}</span></div>`+
     (d.allMajor?`<div class="aw-team">${d.allMajor.filter(a=>a.name).map(a=>`<span class="aw-slot"${a.pid?` data-tpid="${a.pid}"`:''}><span class="aw-role">${a.role}</span> <span class="tg">${esc(a.tag||a.name)}</span></span>`).join('')}</div>`:'')+`</div>`;}
 function renderCal(){const el=$("p-cal");
   if(!world.thisSeasonEvents.length){el.innerHTML=`<div class="feed-empty">No calendar yet — sim a season.</div>`;return;}
@@ -2404,7 +2421,7 @@ function matchEnd(){
   clearSeriesState(m.a,m.b);
   const sg={};for(const id in m.perf){const arr=m.perf[id];sg[id]=arr.reduce((s,x)=>s+x,0)/arr.length;}
   for(const id in sg){const p=findPlayer(+id);if(p)p.gravs.push(sg[id]);}
-  accEventPerf(sg,L.stage==='qf'?2:L.stage==='sf'?3:4); // tally toward the tournament MVP / All-Major team
+  accEventPerf(sg,L.stage==='qf'?2:L.stage==='sf'?3:4,m.seriesBox); // tally toward the tournament MVP / All-Major team
   const champ=m.wins.a>m.wins.b?m.a:m.b,loser=champ===m.a?m.b:m.a;
   let ra=0,rb=0,dA=false,dB=false;for(const mm of m.maps){if(mm.aWon)ra++;else rb++;if(ra===0&&rb===2)dA=true;if(rb===0&&ra===2)dB=true;}
   const deadlift=(champ===m.a&&dA)||(champ===m.b&&dB);
