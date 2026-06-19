@@ -103,6 +103,14 @@
   .mediaday{border-left:2px solid var(--ember-dim);background:linear-gradient(90deg,rgba(180,90,40,.06),transparent);padding:8px 10px 7px 13px;margin:0 0 12px;border-radius:0 4px 4px 0;}
   .md-h{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);margin-bottom:5px;}
   .md-q{font-family:Georgia,serif;color:var(--bone);font-size:14px;line-height:1.5;font-style:italic;}
+  .vetoboard{border:1px solid var(--line);border-radius:4px;background:var(--stone-1);padding:8px 10px;margin:0 0 12px;}
+  .vb-h{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:7px;}
+  .vb-rows{display:flex;flex-wrap:wrap;gap:6px;}
+  .vb{font-size:11.5px;font-family:ui-monospace,monospace;padding:3px 8px;border-radius:3px;border:1px solid var(--line);display:inline-flex;align-items:baseline;gap:5px;}
+  .vb-t{font-size:9.5px;color:var(--faint);letter-spacing:.04em;}
+  .vb-ban{color:var(--faint);opacity:.6;text-decoration:line-through;text-decoration-color:var(--bad);}
+  .vb-pick{border-color:var(--ember-dim);color:var(--ember);}
+  .vb-dec{border-color:var(--gravl);color:var(--gravl);background:#241f10;}
   .awards{border-left:2px solid var(--gravl);padding:8px 0 4px 14px;margin-top:10px;}
   .aw-h{font-size:13px;color:var(--bone);margin-bottom:7px;}
   .aw-h[data-tpid]{cursor:pointer;}
@@ -215,6 +223,20 @@
   .cp-arr{color:var(--ember-dim);margin:0 3px;}
   .teamcard .tc-sec{border-top:1px solid var(--line);margin-top:12px;padding-top:10px;}
   .teamcard .tc-sec .lede{margin-bottom:6px;}
+  .mp-row{display:flex;align-items:center;gap:9px;margin:3px 0;font-size:12px;}
+  .mp-nm{flex:0 0 42%;font-family:ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mp-bar{flex:1;height:7px;background:var(--stone-1);border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .mp-fill{display:block;height:100%;background:linear-gradient(90deg,var(--ember-dim),var(--ember));}
+  .mp-rec{flex:0 0 74px;text-align:right;font-family:ui-monospace,monospace;color:var(--muted);}
+  .mp-best{color:var(--gravl);}
+  .grounds-board{margin-top:20px;border:1px solid var(--line);border-radius:5px;background:var(--stone-1);padding:12px 14px;}
+  .gb-h{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ember);margin-bottom:10px;}
+  .gb-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-top:1px solid #211b13;cursor:pointer;}
+  .gb-row:hover{background:#1c1812;}
+  .gb-row:first-of-type{border-top:none;}
+  .gb-nm{font-size:13px;min-width:0;}
+  .gb-best{font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap;}
+  .gb-crown{color:var(--gravl);}
   .trow{display:flex;align-items:center;gap:8px;padding:7px 6px;border-radius:4px;cursor:pointer;border:1px solid transparent;}
   .trow:hover{background:var(--stone-1);border-color:var(--ember-dim);}
   .trow .trole{font-family:ui-monospace,monospace;font-size:10px;color:var(--faint);text-transform:uppercase;width:30px;flex:0 0 auto;}
@@ -350,63 +372,149 @@ function adrOf(s){return s.rounds?Math.round(s.dmg/s.rounds):0;}
 function kastOf(s){return s.rounds?Math.round(100*s.kast/s.rounds):0;}
 function multiK(s){return (s.mk2||0)+(s.mk3||0)+(s.mk4||0)+(s.aces||0);}
 
-// ---- the map pool: CS2 Active Duty. Each map roams between its own callouts (areas), and each map
-// has a distinct character — Dust2 is long-range aim, Nuke/Train reward utility and anchors, Mirage is
-// mid-control reads, Anubis is open and aggressive. A series is contested across these maps via veto. ----
+// ---- the Grounds of the Yard: the sport's seven battlegrounds, drafted by veto before every series. Each is a
+// distinct map with its own character and its own callouts (areas) — calibrated to CS2 Active Duty under the hood
+// (The Reach = Dust2 long-range aim, The Vault/Ironway = Nuke/Train utility holds, Hollowmere = Mirage mid-control,
+// Sandmother = Anubis open aggression) but reskinned into the Yard's own stone geography. A championship cairn is
+// raised on one of the Grounds played in a final — the champion's choice, and a dynasty's stones cluster on a home. ----
 const MAPS=[
-  {name:"Mirage",short:"MRG",areas:[
-    {name:"Palace",  w:{aim:1.4,read:.7,entry:1.0,util:.6}},
-    {name:"Mid",     w:{aim:1.1,read:1.4,entry:.8,util:.9}},
-    {name:"A Site",  w:{aim:1.0,read:1.0,entry:1.1,util:1.0}},
-    {name:"B Apps",  w:{aim:.9,read:.8,entry:1.4,util:1.1}},
-    {name:"Connector",w:{aim:.95,read:1.3,entry:.8,util:1.0}},
+  {name:"Hollowmere",short:"HLM",blurb:"mid-control and the read — the old proving ground",areas:[
+    {name:"the Highstone",w:{aim:1.4,read:.7,entry:1.0,util:.6}},
+    {name:"the Mere",     w:{aim:1.1,read:1.4,entry:.8,util:.9}},
+    {name:"the Altar",    w:{aim:1.0,read:1.0,entry:1.1,util:1.0}},
+    {name:"the Approach", w:{aim:.9,read:.8,entry:1.4,util:1.1}},
+    {name:"the Throat",   w:{aim:.95,read:1.3,entry:.8,util:1.0}},
   ]},
-  {name:"Inferno",short:"INF",areas:[
-    {name:"Banana",  w:{aim:.85,read:.9,entry:1.3,util:1.3}},
-    {name:"Apartments",w:{aim:1.0,read:.9,entry:1.3,util:1.0}},
-    {name:"Pit",     w:{aim:1.3,read:.8,entry:.8,util:.8}},
-    {name:"Arch",    w:{aim:1.0,read:1.2,entry:.9,util:1.1}},
-    {name:"B Site",  w:{aim:.9,read:1.0,entry:1.0,util:1.3}},
+  {name:"Emberfall",short:"EMB",blurb:"tight chokes — entries and utility, a brawler's ground",areas:[
+    {name:"the Narrows",  w:{aim:.85,read:.9,entry:1.3,util:1.3}},
+    {name:"the Tenements",w:{aim:1.0,read:.9,entry:1.3,util:1.0}},
+    {name:"the Pit",      w:{aim:1.3,read:.8,entry:.8,util:.8}},
+    {name:"the Arch",     w:{aim:1.0,read:1.2,entry:.9,util:1.1}},
+    {name:"the Pyre",     w:{aim:.9,read:1.0,entry:1.0,util:1.3}},
   ]},
-  {name:"Nuke",short:"NUK",areas:[
-    {name:"Outside", w:{aim:1.3,read:.9,entry:1.0,util:.8}},
-    {name:"Ramp",    w:{aim:.9,read:.9,entry:1.3,util:1.1}},
-    {name:"Lobby",   w:{aim:1.1,read:1.0,entry:1.0,util:.9}},
-    {name:"Vents",   w:{aim:.85,read:1.3,entry:.9,util:1.1}},
-    {name:"Heaven",  w:{aim:1.0,read:1.0,entry:.8,util:1.4}},
+  {name:"The Vault",short:"VLT",blurb:"vertical and layered — utility and the anchor's hold",areas:[
+    {name:"the Outworks",  w:{aim:1.3,read:.9,entry:1.0,util:.8}},
+    {name:"the Ramp",      w:{aim:.9,read:.9,entry:1.3,util:1.1}},
+    {name:"the Atrium",    w:{aim:1.1,read:1.0,entry:1.0,util:.9}},
+    {name:"the Vents",     w:{aim:.85,read:1.3,entry:.9,util:1.1}},
+    {name:"the Heavenstone",w:{aim:1.0,read:1.0,entry:.8,util:1.4}},
   ]},
-  {name:"Ancient",short:"ANC",areas:[
-    {name:"Mid",     w:{aim:1.0,read:1.4,entry:.8,util:1.0}},
-    {name:"Donut",   w:{aim:.9,read:1.2,entry:.9,util:1.2}},
-    {name:"A Main",  w:{aim:1.2,read:.9,entry:1.1,util:.8}},
-    {name:"Cave",    w:{aim:.9,read:1.0,entry:1.2,util:1.1}},
-    {name:"B Ramp",  w:{aim:1.0,read:1.0,entry:1.0,util:1.2}},
+  {name:"Old Cairn",short:"OCN",blurb:"the ancient stone — reads and slow control decide it",areas:[
+    {name:"the Henge",   w:{aim:1.0,read:1.4,entry:.8,util:1.0}},
+    {name:"the Ring",    w:{aim:.9,read:1.2,entry:.9,util:1.2}},
+    {name:"the Causeway",w:{aim:1.2,read:.9,entry:1.1,util:.8}},
+    {name:"the Hollow",  w:{aim:.9,read:1.0,entry:1.2,util:1.1}},
+    {name:"the Underway",w:{aim:1.0,read:1.0,entry:1.0,util:1.2}},
   ]},
-  {name:"Anubis",short:"ANB",areas:[
-    {name:"Mid",     w:{aim:1.3,read:1.0,entry:1.0,util:.8}},
-    {name:"Water",   w:{aim:1.0,read:1.1,entry:1.2,util:.9}},
-    {name:"Palace",  w:{aim:1.2,read:.8,entry:1.3,util:.8}},
-    {name:"Canal",   w:{aim:.95,read:1.0,entry:1.2,util:1.0}},
-    {name:"B Site",  w:{aim:1.0,read:.9,entry:1.1,util:1.1}},
+  {name:"Sandmother",short:"SND",blurb:"open and aggressive, water everywhere — duels in the wash",areas:[
+    {name:"the Spillway",   w:{aim:1.3,read:1.0,entry:1.0,util:.8}},
+    {name:"the Wash",       w:{aim:1.0,read:1.1,entry:1.2,util:.9}},
+    {name:"the Sand Palace",w:{aim:1.2,read:.8,entry:1.3,util:.8}},
+    {name:"the Canal",      w:{aim:.95,read:1.0,entry:1.2,util:1.0}},
+    {name:"the Drownings",  w:{aim:1.0,read:.9,entry:1.1,util:1.1}},
   ]},
-  {name:"Dust2",short:"D2",areas:[
-    {name:"Long",    w:{aim:1.6,read:.7,entry:.9,util:.5}},
-    {name:"Mid",     w:{aim:1.4,read:1.0,entry:.7,util:.7}},
-    {name:"Catwalk", w:{aim:1.3,read:.9,entry:.9,util:.8}},
-    {name:"Tunnels", w:{aim:.9,read:.9,entry:1.4,util:1.0}},
-    {name:"B Site",  w:{aim:1.1,read:.9,entry:1.1,util:1.0}},
+  {name:"The Reach",short:"RCH",blurb:"long sightlines — pure aim, the marksman's paradise",areas:[
+    {name:"the Long Sight",w:{aim:1.6,read:.7,entry:.9,util:.5}},
+    {name:"the Cross",     w:{aim:1.4,read:1.0,entry:.7,util:.7}},
+    {name:"the Ledge",     w:{aim:1.3,read:.9,entry:.9,util:.8}},
+    {name:"the Burrows",   w:{aim:.9,read:.9,entry:1.4,util:1.0}},
+    {name:"the Far Stone", w:{aim:1.1,read:.9,entry:1.1,util:1.0}},
   ]},
-  {name:"Train",short:"TRN",areas:[
-    {name:"Ivy",     w:{aim:1.0,read:1.0,entry:1.2,util:1.0}},
-    {name:"A Main",  w:{aim:1.2,read:.9,entry:1.0,util:.9}},
-    {name:"Ladder",  w:{aim:1.1,read:1.1,entry:.8,util:1.0}},
-    {name:"Lower",   w:{aim:.85,read:1.2,entry:.9,util:1.3}},
-    {name:"B Site",  w:{aim:.9,read:1.0,entry:1.0,util:1.4}},
+  {name:"Ironway",short:"IRN",blurb:"the rail yard — utility, crossfires, and patient holds",areas:[
+    {name:"the Ivy",     w:{aim:1.0,read:1.0,entry:1.2,util:1.0}},
+    {name:"the Mainline",w:{aim:1.2,read:.9,entry:1.0,util:.9}},
+    {name:"the Ladders", w:{aim:1.1,read:1.1,entry:.8,util:1.0}},
+    {name:"the Lowyard", w:{aim:.85,read:1.2,entry:.9,util:1.3}},
+    {name:"the Ironstone",w:{aim:.9,read:1.0,entry:1.0,util:1.4}},
   ]},
 ];
 const MAP_BY_NAME={};MAPS.forEach(m=>MAP_BY_NAME[m.name]=m);
 function mapByName(n){return MAP_BY_NAME[n]||MAPS[0];}
 function defaultMap(){return MAPS[0];}
+
+// ==== map proficiency: a team's EARNED comfort on each Ground — practice, prep and reps, not just raw fit. A side
+// that keeps drawing Old Cairn becomes THE Old Cairn team in the league; the pool fades with rust and a roster
+// shake-up. This is what makes the best-Mirage-team identity real here. =========================================
+const MAP_PRACTICE=15; // reps on a Ground to reach near-full comfort
+function mapXpOf(t){return t.mapXp||(t.mapXp={});}
+function mapRecOf(t){return t.mapRec||(t.mapRec={});}
+function mapComfort(t,g){const xp=mapXpOf(t)[g.name||g]||0;return clamp(xp/MAP_PRACTICE,0,1);} // 0 raw .. 1 mastered
+function mapProfMult(t,g){return 1+mapComfort(t,g)*0.06;} // a mastered Ground is worth ~+6% — a real home edge
+// log a played map: practice accrues (a win teaches a little more) and the head-to-head record is kept for the rankings
+function recordMapResult(a,b,g,aWon){const name=g.name||g;
+  [[a,aWon],[b,!aWon]].forEach(([t,won])=>{const xp=mapXpOf(t);xp[name]=(xp[name]||0)+(won?1.0:0.7);
+    const r=mapRecOf(t),rr=r[name]||(r[name]={w:0,l:0});if(won)rr.w++;else rr.l++;});}
+// season upkeep: comfort fades slowly on Grounds left unplayed (sticky on-server skill), while the head-to-head
+// record decays faster into a ROLLING read of recent form — so "best on this Ground" means best *lately*, not a
+// dynasty coasting on an old sample. A side that stops playing a Ground drops off the board within a few seasons.
+function rustMaps(){world.teams.forEach(t=>{const xp=mapXpOf(t);for(const k in xp){xp[k]*=0.9;if(xp[k]<0.12)delete xp[k];}
+  const rec=t.mapRec;if(rec)for(const k in rec){rec[k].w*=0.82;rec[k].l*=0.82;if(rec[k].w+rec[k].l<0.6)delete rec[k];}});}
+// a roster change dents the practiced pool — new legs have to relearn the calls
+function shakeMapPool(t){const xp=t&&t.mapXp;if(xp)for(const k in xp)xp[k]*=0.7;}
+function recStr(r){return `${Math.round(r.w)}–${Math.round(r.l)}`;}
+// teams ranked on a Ground by recent win-rate, among those with enough current reps to qualify
+function rankedOnGround(name,minGames){minGames=minGames||6;
+  return world.teams.map(t=>{const r=(t.mapRec||{})[name];if(!r||r.w+r.l<minGames)return null;return {t,rec:r,wr:r.w/(r.w+r.l)};})
+    .filter(Boolean).sort((a,b)=>b.wr-a.wr||(b.rec.w-b.rec.l)-(a.rec.w-a.rec.l));}
+function bestOnGround(name,minGames){return rankedOnGround(name,minGames)[0]||null;}
+// a team's fortress — its strongest Ground by comfort, with the record to show for it
+function fortressOf(t){let best=null,bv=-1;MAPS.forEach(m=>{const c=mapComfort(t,m);if(c>bv){bv=c;best=m;}});
+  if(!best||bv<0.3)return null;return {ground:best,comfort:bv,rec:(t.mapRec||{})[best.name]||{w:0,l:0}};}
+
+// ==== the veto: a series is drafted before it's played ============================================
+// How well a team's five suit a Ground's character (its callouts' weights vs their ratings) — the heart of
+// the veto: a team bans the Grounds that favour the enemy and picks the ones that favour itself.
+function mapFit(t,m){const L=lineup(t);if(!L.length||!m)return 50;
+  const dem={aim:0,read:0,entry:0,util:0};m.areas.forEach(z=>{for(const k in dem)dem[k]+=z.w[k];}); // the Ground's demand profile
+  const tot=dem.aim+dem.read+dem.entry+dem.util;
+  const r={aim:0,read:0,entry:0,util:0,clutch:0};L.forEach(p=>{for(const k in r)r[k]+=p.r[k];});for(const k in r)r[k]/=L.length;
+  // a demand-weighted read of the five: aim Grounds reward aim teams, utility Grounds reward the utility sides
+  return (dem.aim*r.aim+dem.read*r.read+dem.entry*r.entry+dem.util*r.util)/tot+r.clutch*0.06;}
+// ban/pick scripts keyed by wins-to-clinch (target): BO1=1, BO3=2, BO5=3. The rest of the 7-Ground pool is the
+// decider. Sides alternate, A first; picks become the played Grounds in order, decider last.
+const VETO_PLAN={1:['ban','ban','ban','ban','ban','ban'],2:['ban','ban','pick','pick','ban','ban'],3:['ban','ban','pick','pick','pick','pick']};
+function vetoSeries(a,b,target){
+  const plan=VETO_PLAN[target]||VETO_PLAN[3];
+  const pool=MAPS.slice(),picks=[],log=[],sideObj={a,b};
+  // fit = raw stylistic suitability + earned comfort (a mastered Ground is a fortress you pick and protect)
+  const fit={a:{},b:{}};MAPS.forEach(m=>{fit.a[m.name]=mapFit(a,m)+mapComfort(a,m)*9;fit.b[m.name]=mapFit(b,m)+mapComfort(b,m)*9;});
+  plan.forEach((act,i)=>{const me=i%2===0?'a':'b',opp=me==='a'?'b':'a';
+    let best=pool[0],bv=-1e9;
+    pool.forEach(m=>{const em=eraMapMult(m.name); // the era's Ground is left in (banned less, picked a touch more)
+      let v=act==='ban'?(fit[opp][m.name]-fit[me][m.name])/em:(fit[me][m.name]-fit[opp][m.name])*(em>1?1.15:1);
+      v+=gauss()*1.5; if(v>bv){bv=v;best=m;}});
+    pool.splice(pool.indexOf(best),1);
+    if(act==='pick')picks.push(best);
+    log.push({side:me,short:sideObj[me].short,act,map:best.name,mshort:best.short});});
+  const decider=pool[0]||MAPS[0];
+  log.push({side:null,act:'decider',map:decider.name,mshort:decider.short});
+  return {order:picks.concat([decider]),decider:decider.name,log}; // order = played Grounds, decider last
+}
+function vetoLogLine(v){return v.log.map(e=>e.act==='decider'?`decider <b>${esc(e.map)}</b>`:`${esc(e.short)} ${e.act} ${esc(e.map)}`).join(' · ');}
+// the Ground a champion raises its cairn on — chosen from those played in the final. The pull toward a Ground
+// they've ALREADY built on is strong, so a dynasty's stones cluster into a home Ground over the seasons.
+function chooseCairnGround(champ,grounds,clinch){
+  const uniq=[...new Set((grounds||[]).filter(Boolean))];if(!uniq.length)return clinch||MAPS[0].name;
+  const prior={};(world.cairns||[]).forEach(c=>{if(c.short===champ.short&&c.ground)prior[c.ground]=(prior[c.ground]||0)+1;});
+  let best=uniq[0],bv=-1e9;
+  uniq.forEach(g=>{let v=mapFit(champ,mapByName(g))*0.02; // a little for their strength there
+    v+=(prior[g]||0)*1.2;          // a STRONG pull home — they build where they've built before
+    v+=mapComfort(champ,mapByName(g))*0.8; // and toward the Ground they've truly mastered
+    if(g===clinch)v+=0.5;          // the Ground they clinched on, the natural default
+    v+=rnd()*0.4;
+    if(v>bv){bv=v;best=g;}});
+  return best;}
+function ord(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);}
+// raise the championship cairn on a chosen Ground from the final, and narrate the home a dynasty builds
+function raiseCairn(champ,F,style,name){
+  const ground=chooseCairnGround(champ,F.grounds,F.clinchGround);
+  const prior=(world.cairns||[]).filter(c=>c.short===champ.short&&c.ground===ground).length;
+  world.cairns.push({season:world.season,team:champ.name,short:champ.short,ground,zone:F.lastZone,style,event:name});
+  const where=prior>=2?`on <b>${esc(ground)}</b> once more — their ${ord(prior+1)} stone on that Ground. ${esc(champ.short)} have made it a home.`
+    :prior===1?`on <b>${esc(ground)}</b> again — a second stone on that Ground. A home is forming.`
+    :`on <b>${esc(ground)}</b>${F.clinchGround===ground?', the Ground they clinched it on':''}.`;
+  feedPush('small','A cairn is raised',`${esc(champ.name)} raise their ${style==='crown'?'crown':style} cairn ${where}`);
+  return ground;}
 // Circuit ladder (ascending prestige): feeder tournaments (D/C tier-2 circuit, B/A tier-1 circuit) <
 // Majors < the World Championship. Premier tiers run a Swiss stage and can be broadcast live.
 const TIERS={
@@ -664,9 +772,8 @@ const ROLE_ERA={
   anchor:{name:"The Anchor Era",blurb:"defense and the last stand decide it — anchors are everything"},
   set:{name:"The Setters' Age",blurb:"utility and setup win the map — the set player pulls the strings"}};
 function eraRoleMult(role){const e=world&&world.era;if(!e||e.kind!=='role')return 1;return e.key===role?1.07:0.982;} // featured role's Gravity rises; the rest dip slightly
-function eraMapMult(name){const e=world&&world.era;if(!e||e.kind!=='map')return 1;return e.key===name?2.4:1;}   // the era's map is picked far more often in veto
+function eraMapMult(name){const e=world&&world.era;if(!e||e.kind!=='ground')return 1;return e.key===name?2.4:1;}   // the era's Ground survives veto far more often
 function pickZone(map){map=map||defaultMap();return pick(map.areas);}                                          // opening area of a fresh map
-function zoneTrait(z){const w=z.w,m=Math.max(w.aim,w.read,w.entry,w.util);return w.aim===m?"pure aim wins here":w.read===m?"it rewards the sharpest read":w.entry===m?"it's all aggression and entries":"utility and setup decide it";}
 /* ---- cinematic variance: form, confidence, momentum ---- */
 function formMult(p){return p._form||1;}
 function confMult(p){return 1+clamp(p._conf||0,-1,1)*0.12;}
@@ -859,7 +966,8 @@ function simRound(a,b,opts){
   const rate=(p,ph)=>zoneSkill(p,z)*formMult(p)*confMult(p)*staminaFatigue(p,side[p.id]==='a'?loadA:loadB)*wmul(p,ph)*fitMult(p);
   const fragW=p=>Math.max(0.2,rate(p)*(0.7+0.6*rnd()));
   const harmA=a._harm!=null?a._harm:roomHarmony(a),harmB=b._harm!=null?b._harm:roomHarmony(b); // a tight room plays a hair above a fractured one (cached per map)
-  const tchem=t=>(0.78+0.46*t.chem)*(t===a?cxA.mult*harmA:cxB.mult*harmB);
+  const profA=a._mapprof||1,profB=b._mapprof||1; // earned comfort on the Ground being played — set per map
+  const tchem=t=>(0.78+0.46*t.chem)*(t===a?cxA.mult*harmA*profA:cxB.mult*harmB*profB);
   // opening duel — the entry/star players contest the ember first, and the Staff-holder holds the angle hardest
   const owt=p=>(p.r.entry*1.5+p.r.aim+1)*wmul(p,'open');
   const oa=pickW(A,owt),ob=pickW(B,owt);
@@ -929,10 +1037,10 @@ function simRound(a,b,opts){
   return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star,buy,open:{w:opW.id,l:opL.id},events:evs};
 }
 function simMap(a,b,ctx,opts){
-  opts=opts||{};const stage=opts.stage||0;
-  initMapForm(a,b);
-  let sa=0,sb=0,stA=0,stB=0;const perf={},mbox={};const vigils=[];let lastZone="the Aisle";
-  let zone=pickZone();const buy={a:'full',b:'full'};const E=newEcon(a,b);
+  opts=opts||{};const stage=opts.stage||0;const G=opts.ground||defaultMap(); // the Ground this map is played on
+  initMapForm(a,b);a._mapprof=mapProfMult(a,G);b._mapprof=mapProfMult(b,G); // each side's earned comfort on this Ground
+  let sa=0,sb=0,stA=0,stB=0;const perf={},mbox={};const vigils=[];let lastZone=G.areas[0].name;
+  let zone=pickZone(G);const buy={a:'full',b:'full'};const E=newEcon(a,b);
   const roster=lineup(a).concat(lineup(b));
   roster.forEach(p=>mbox[p.id]=blankBox());
   while(!mapDone(sa,sb)){
@@ -940,14 +1048,15 @@ function simMap(a,b,ctx,opts){
     const r=simRound(a,b,{stage,mom:momFromStreak(stA,stB,sa,sb),zone,buy});lastZone=r.zone;
     if(r.winA){sa++;stA++;stB=0;}else{sb++;stB++;stA=0;}
     econSettle(E,r,a,b); // bank the payouts, drop the fallen's wands
-    zone=nextZone(zone,r.winA?a:b,r.winA?b:a);
+    zone=nextZone(zone,r.winA?a:b,r.winA?b:a,G);
     for(const id in r.grav)(perf[id]=perf[id]||[]).push(r.grav[id]);
     roster.forEach(p=>{const e=r.box[p.id];if(e){addBox(mbox[p.id],e);accStat(p,e);}});
     if(r.vigil)vigils.push(r.vigil);
   }
   const grav={};for(const id in perf){const arr=perf[id];grav[id]=arr.length?arr.reduce((s,x)=>s+x,0)/arr.length:1.0;}
   if(ctx)recordGamePerf(grav,mbox,a,b,sa>sb?a:b,ctx,lastZone);
-  return {winner:sa>sb?a:b,sa,sb,grav,vigils,zone:lastZone,box:mbox};
+  recordMapResult(a,b,G,sa>sb); // bank the reps and the head-to-head record on this Ground
+  return {winner:sa>sb?a:b,sa,sb,grav,vigils,zone:lastZone,ground:G.name,gshort:G.short,box:mbox};
 }
 function mapMVP(a,b,grav){let best=null,bg=-1;[a,b].forEach(t=>t.players.forEach(p=>{if(!p.retired&&grav[p.id]>bg){bg=grav[p.id];best={p,g:grav[p.id]};}}));return best;}
 function findPlayer(id){for(const t of world.teams){const p=t.players.find(x=>x.id===id);if(p)return p;}return null;}
@@ -960,10 +1069,12 @@ function simSeries(a,b,wins,ctx){
   if(world._eventPerf){a._load=(a._load||0)+1;b._load=(b._load||0)+1;} // a series of wear, during a premier event
   const stage=ctx&&/final/i.test(ctx.round||'')?1:0;
   initSeriesState(a,b,stage);
+  const veto=vetoSeries(a,b,wins); // the Grounds are drafted before the series is played
   const acc=g=>{for(const id in g){(sgA[id]=sgA[id]||[]).push(g[id]);}};
-  while(wa<wins&&wb<wins){const m=simMap(a,b,ctx?Object.assign({},ctx,{mapNo:maps.length+1}):null,{stage});const aWon=m.winner===a;if(aWon)wa++;else wb++;acc(m.grav);
+  while(wa<wins&&wb<wins){const G=veto.order[maps.length]||veto.order[veto.order.length-1];
+    const m=simMap(a,b,ctx?Object.assign({},ctx,{mapNo:maps.length+1}):null,{stage,ground:G});const aWon=m.winner===a;if(aWon)wa++;else wb++;acc(m.grav);
     for(const id in m.box){const e=m.box[id];sbox[id]=sbox[id]||blankBox();mergeBox(sbox[id],e);}
-    maps.push({aWon,sa:aWon?m.sa:m.sb,sb:aWon?m.sb:m.sa,vigils:m.vigils,zone:m.zone});}
+    maps.push({aWon,sa:aWon?m.sa:m.sb,sb:aWon?m.sb:m.sa,vigils:m.vigils,zone:m.zone,ground:m.ground,gshort:m.gshort});}
   let ra=0,rb=0,downA=false,downB=false;
   for(const m of maps){if(m.aWon)ra++;else rb++;if(ra===0&&rb===2)downA=true;if(rb===0&&ra===2)downB=true;}
   const winner=wa>wb?a:b;
@@ -971,7 +1082,7 @@ function simSeries(a,b,wins,ctx){
   const sg={};for(const id in sgA){const arr=sgA[id];sg[id]=arr.reduce((s,x)=>s+x,0)/arr.length;}
   for(const id in sg){const p=findPlayer(+id);if(p)p.gravs.push(sg[id]);}
   clearSeriesState(a,b);
-  return {winner,loser:winner===a?b:a,wa,wb,maps,sg,deadlift,box:sbox};
+  return {winner,loser:winner===a?b:a,wa,wb,maps,veto,sg,deadlift,box:sbox};
 }
 
 /* events & season */
@@ -1342,6 +1453,10 @@ function seedRelationships(){if(world._relSeeded)return;world._relSeeded=true;
   const hot=allActive().filter(p=>hasTrait(p,'hothead'));
   hot.forEach(p=>{if(rnd()<0.6){const foe=pick(allActive().filter(q=>q.id!==p.id&&teamOf(q)!==teamOf(p)));
     if(foe)setBond(p.id,foe.id,-0.5,`${p.tag} and ${foe.tag} have never gotten on`,'beef');}});
+  // founding map identities: each club enters the league already strong on a Ground or two, with a record to match
+  world.teams.forEach(t=>{const favs=shuffle(MAPS.slice()).slice(0,1+Math.floor(rnd()*2));
+    favs.forEach((m,i)=>{mapXpOf(t)[m.name]=(i===0?10:6)+rnd()*4;
+      const r=mapRecOf(t),rr=r[m.name]||(r[m.name]={w:0,l:0});rr.w+=4+Math.floor(rnd()*7);rr.l+=Math.floor(rnd()*4);});});
 }
 // ---- a younger sibling or cousin debuts into an existing family line (called in the offseason) ----
 function maybeFamilyDebut(){if(rnd()>=0.5)return;
@@ -1558,13 +1673,13 @@ function commitMajor(name,champ,run,sfL,qfL,F){
   formDuo(champ,winLine);grudgeBeat(name,champ,run);
   if(!champ.bbTeam&&rnd()<0.05)champ._disbandSoon=true;
   const loud=!champ.heart,zone=F.lastZone;
-  const cairn={season:world.season,team:champ.name,short:champ.short,zone,style:loud?'loud':'quiet',event:name};
-  world.cairns.push(cairn);world.majorChamps.push({season:world.season,team:champ.short});
+  const ground=raiseCairn(champ,F,loud?'loud':'quiet',name); // the cairn rises on a Ground chosen from the final
+  world.majorChamps.push({season:world.season,team:champ.short});
   let topId=null,topG=-1;for(const id in F.sg){if(F.sg[id]>topG){topG=F.sg[id];topId=+id;}}
   const tp=topId?findPlayer(topId):null;const pname=p=>`${p.first} "${p.tag}" ${p.last}`;
   const tb=tp&&F.box?F.box[tp.id]:null;
   const vg=F.vigilsAll&&F.vigilsAll.length?pick(F.vigilsAll):null;
-  const data={type:'major',season:world.season,year:world.year,eventName:name,zone,cairnStyle:loud?'loud':'quiet',
+  const data={type:'major',season:world.season,year:world.year,eventName:name,zone,ground,cairnStyle:loud?'loud':'quiet',
     champ:{name:champ.name,short:champ.short,heart:champ.heart},runner:{name:run.name,short:run.short},
     score:F.scoreStr,deadlift:F.deadlift,
     top:tp?{name:pname(tp),g:topG.toFixed(2),won:teamOf(tp)===champ,kd:tb?kd(tb).toFixed(2):null,k:tb?tb.k:null,d:tb?tb.d:null,vigils:tb?tb.vigils:0}:null,
@@ -1577,7 +1692,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
   data.oppHook=interviewOppHook((tp&&teamOf(tp)===champ)?tp:starC,run); // the interview speaks from the champion's side
   data.interview=mkInterview(data);
   attachAwards(data,name,'SP',F);
-  feedPush('final',`${champ.name} win the ${name}`,`<b>Major champions.</b> def. ${run.name} ${F.scoreStr}. They raise a <b>${data.cairnStyle}</b> cairn at ${zone}.`,'Major',data);
+  feedPush('final',`${champ.name} win the ${name}`,`<b>Major champions.</b> def. ${run.name} ${F.scoreStr}. They raise a <b>${data.cairnStyle}</b> cairn on <b>${esc(ground)}</b>.`,'Major',data);
   if(usedStandin){const s=winLine.find(p=>p.standinFor);if(s)feedPush('note','A cairn for a borrowed name',`${nm(s)} came in as a stand-in and leaves with a Major. The rarest line in the sport — a cairn raised by someone who wasn't even on the wall a month ago.`);}
   // significant-moment + individual-choke detection
   const priorStreak=champ.finalLossStreak||0;champ.finalLossStreak=0;
@@ -1618,14 +1733,14 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
   const winLine=lineup(champ);winLine.forEach(p=>{p.titles++;p.worlds=(p.worlds||0)+1;});
   formDuo(champ,winLine);grudgeBeat(name,champ,run);
   const zone=F.lastZone,pname=p=>`${p.first} "${p.tag}" ${p.last}`;
-  world.cairns.push({season:world.season,team:champ.name,short:champ.short,zone,style:'crown',event:name});
+  const ground=raiseCairn(champ,F,'crown',name); // the crown cairn rises on a Ground chosen from the final
   const sc={season:world.season,year:world.year,short:champ.short,name:champ.name,runShort:run.short,runName:run.name,event:name,score:F.scoreStr,deadlift:!!F.deadlift};
   world.seasonChamps.push(sc);
   const starC=starOf(champ),starR=starOf(run);
   let topId=null,topG=-1;for(const id in F.sg){if(F.sg[id]>topG){topG=F.sg[id];topId=+id;}}
   const tp=topId?findPlayer(topId):null;const tb=tp&&F.box?F.box[tp.id]:null;
   const vg=F.vigilsAll&&F.vigilsAll.length?pick(F.vigilsAll):null;
-  const data={type:'worlds',season:world.season,year:world.year,eventName:name,zone,cairnStyle:'crown',
+  const data={type:'worlds',season:world.season,year:world.year,eventName:name,zone,ground,cairnStyle:'crown',
     champ:{name:champ.name,short:champ.short,heart:champ.heart},runner:{name:run.name,short:run.short},
     score:F.scoreStr,deadlift:F.deadlift,
     top:tp?{name:pname(tp),g:topG.toFixed(2),won:teamOf(tp)===champ,kd:tb?kd(tb).toFixed(2):null,k:tb?tb.k:null,d:tb?tb.d:null,vigils:tb?tb.vigils:0}:null,
@@ -1635,7 +1750,7 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
   data.oppHook=interviewOppHook((tp&&teamOf(tp)===champ)?tp:starC,run); // the interview speaks from the champion's side
   data.interview=mkInterview(data);
   attachAwards(data,name,'WC',F);
-  feedPush('final',`${champ.name} are crowned World Champions`,`<b>World champions — Season ${world.season}.</b> def. ${run.name} ${F.scoreStr}. The season's world title, and a <b>crown</b> cairn at ${zone}.`,'World Championship',data);
+  feedPush('final',`${champ.name} are crowned World Champions`,`<b>World champions — Season ${world.season}.</b> def. ${run.name} ${F.scoreStr}. The season's world title, and a <b>crown</b> cairn on <b>${esc(ground)}</b>.`,'World Championship',data);
   timelinePush({kind:'worlds',icon:'♛',short:champ.short,title:`${champ.name} are crowned World Champions`,
     text:`${champ.name} win the ${name}, def. ${run.name} ${F.scoreStr} — the season's world title and the highest honor on the Yard.`});
   recordMajorPerfs(name,champ,run,F);
@@ -1757,7 +1872,7 @@ function runEvent(tier,name){
   const packet=recordResult(tier,name,champ,run,fin,b);
   let cairn=null;
   if(T.premier){
-    const F={scoreStr:b.score,deadlift:fin.deadlift,lastZone:fin.maps[fin.maps.length-1].zone,vigilsAll:[].concat(...fin.maps.map(m=>m.vigils)),sg:fin.sg,box:fin.box};
+    const F={scoreStr:b.score,deadlift:fin.deadlift,lastZone:fin.maps[fin.maps.length-1].zone,grounds:fin.maps.map(m=>m.ground),clinchGround:fin.maps[fin.maps.length-1].ground,veto:fin.veto,vigilsAll:[].concat(...fin.maps.map(m=>m.vigils)),sg:fin.sg,box:fin.box};
     if(tier==='WC')commitWorlds(name,champ,run,sfL,qfL,F);else commitMajor(name,champ,run,sfL,qfL,F);
     cairn=world.cairns[world.cairns.length-1];
   } else { // feeder: bank circuit points + a wire summary that names the standout
@@ -1785,9 +1900,9 @@ function maybeRollEra(){const e=world.era;if(world.season<4)return;if(e&&world.s
 function rollEra(){
   const prev=world.era;
   if(prev)(world.eraLog=world.eraLog||[]).push({name:prev.name,kind:prev.kind,key:prev.key,from:prev.since,to:world.season});
-  const kind=rnd()<0.6?'role':'zone';let key,name,blurb;
+  const kind=rnd()<0.6?'role':'ground';let key,name,blurb;
   if(kind==='role'){const opt=ROLES.filter(r=>!(prev&&prev.kind==='role'&&prev.key===r));key=pick(opt);name=ROLE_ERA[key].name;blurb=ROLE_ERA[key].blurb;}
-  else{const opt=ZONES.filter(z=>!(prev&&prev.kind==='zone'&&prev.key===z.name));const z=pick(opt);key=z.name;name=`The ${z.name.replace(/^the /i,'')} Era`;blurb=`more and more the ember is decided in ${z.name} — ${zoneTrait(z)}`;}
+  else{const opt=MAPS.filter(m=>!(prev&&prev.kind==='ground'&&prev.key===m.name));const m=pick(opt);key=m.name;name=`The Age of ${m.name}`;blurb=`${esc(m.name)} is the Ground of the age — left in by veto far more than it's banned (${esc(m.blurb)})`;}
   world.era={kind,key,name,blurb,since:world.season,length:5+Math.floor(rnd()*4)};
   const cap=blurb.charAt(0).toUpperCase()+blurb.slice(1);
   feedPush('note','The meta shifts',`A new era on the Yard: <b>${esc(name)}</b>. ${cap}.`);
@@ -1891,7 +2006,8 @@ function joinTeam(p,t){const had=t.players.includes(p);if(!had)t.players.push(p)
   const moved=!h.length||h[h.length-1].short!==t.short;if(moved){h.push({short:t.short,name:t.name,season:world.season});p.tenure=0;p.unrest=0;p.wantsOut=null;} // a fresh start clears the air
   // A new face costs cohesion — bringing in a star costs more. It rebuilds slowly (regresses toward the mean each
   // season), so a club that buys its way to a super-team pays for it in chemistry and can't simply hoard its way to a dynasty.
-  if(!had&&t.chem!=null)t.chem=clamp(t.chem-(skillIndex(p)>=72?0.07:0.035),0.42,0.92);}
+  if(!had&&t.chem!=null)t.chem=clamp(t.chem-(skillIndex(p)>=72?0.07:0.035),0.42,0.92);
+  if(!had&&moved)shakeMapPool(t);} // new legs dent the practiced map pool — the calls have to be relearned
 function transfer(p,from,to){from.players=from.players.filter(x=>x!==p);p.formerTeams=p.formerTeams||[];if(from.short!==to.short)p.formerTeams.push(from.short);joinTeam(p,to);}
 function uniqueShort(base){let s=base,n=2;const used=new Set([...world.teams.map(t=>t.short),...world.defunct.map(d=>d.short)]);while(used.has(s)){s=base.slice(0,3)+n;n++;}return s;}
 // Names are unique across all active AND defunct clubs — a fresh expansion never reuses a name; only a
@@ -2066,6 +2182,7 @@ function advanceCareers(){
     t.players.forEach(p=>{if(p.injured){p.injured--;if(p.injured<=0){p.injured=0;txn('return',`${nm(p)} returns to ${t.short} from injury.`);}}});});
   updateMorale(); // resolve last season's locker-room state before the offseason settles
   evolveBonds();maybeFamilyDebut(); // friendships and beefs grow, and a new family name may enter the pool
+  rustMaps(); // comfort on un-played Grounds fades over the offseason — the map pools keep shifting
   // age + develop + retire (Circuit Points reset separately at season rollover, they don't decay here)
   world.teams.forEach(t=>{
     const mentorP=contracted(t).find(p=>hasTrait(p,'mentor'));const ment=!!mentorP; // a mentor steadies and grows the squad
@@ -2272,7 +2389,14 @@ function renderYard(){const el=$("p-yard");
   if(!world.cairns.length){el.innerHTML=`<p class="hint">Only Majors and World Championships leave a mark here. None yet.</p><div class="yard"><span class="yard-empty">Clean stone.</span></div>`;return;}
   const stones=style=>{let h="",n=style==='crown'?6:style==='loud'?5:3;for(let i=0;i<n;i++){const w=24-i*3;h+=`<i style="width:${w}px;height:${6+(style==='crown'?3:style==='loud'?2:0)}px"></i>`;}return h;};
   el.innerHTML=`<p class="hint">Each stack is a premier title. <span style="color:var(--gravl)">♛ Crown cairns</span> are World Championships; the rest are Majors.</p>
-   <div class="yard">${world.cairns.map(c=>`<div class="cairn ${c.style==='crown'?'crown':''}" title="S${c.season} · ${esc(c.event)} · ${esc(c.team)} at ${esc(c.zone)}"><div class="stones">${stones(c.style)}</div><div class="clabel">${c.style==='crown'?'<span style="color:var(--gravl)">♛</span> ':''}${esc(c.team)}<br>${esc(c.zone)}</div><div class="cyear">S${c.season}</div></div>`).join("")}</div>`;}
+   <div class="yard">${world.cairns.map(c=>`<div class="cairn ${c.style==='crown'?'crown':''}" title="S${c.season} · ${esc(c.event)} · ${esc(c.team)} on ${esc(c.ground||c.zone)}"><div class="stones">${stones(c.style)}</div><div class="clabel">${c.style==='crown'?'<span style="color:var(--gravl)">♛</span> ':''}${esc(c.team)}<br>${esc(c.ground||c.zone)}</div><div class="cyear">S${c.season}</div></div>`).join("")}</div>
+   ${groundsBoardHtml()}`;}
+// the league's map specialists — the best win-rate on each Ground, the answer to "who's the best on X"
+function groundsBoardHtml(){
+  return `<div class="grounds-board"><div class="gb-h">⛰ Masters of the Grounds <span class="faint">· the league's best on each</span></div>
+  ${MAPS.map(m=>{const rk=rankedOnGround(m.name,6),b=rk[0],second=rk[1];
+    return `<div class="gb-row" data-tid="${b?esc(b.t.short):''}"><span class="gb-nm"><b>${esc(m.name)}</b> <span class="faint">${esc(m.blurb)}</span></span><span class="gb-best">${b?`<span class="gb-crown">★</span> <span class="tg">${esc(b.t.short)}</span> <span class="faint">${recStr(b.rec)} · ${Math.round(b.wr*100)}%</span>${second?` <span class="faint">· then ${esc(second.t.short)} ${Math.round(second.wr*100)}%</span>`:''}`:`<span class="faint">unclaimed — not enough reps yet</span>`}</span></div>`;}).join('')}
+  </div>`;}
 function teamNote(t){const rs=world.results||[];
   for(let i=rs.length-1;i>=0;i--){const r=rs[i];
     if(r.champ===t.short)return r.premier?`champions of the ${esc(r.name)}`:`took the ${esc(r.name)}`;
@@ -2354,6 +2478,16 @@ function renderStory(){const el=$("p-story");
   h+=`</div>`;
   el.innerHTML=h;}
 
+// a team's Ground proficiency — comfort bars, the head-to-head record, and a ★ where they're the league's best
+function mapPoolHtml(t){
+  const rows=MAPS.map(m=>{const c=mapComfort(t,m),rec=(t.mapRec||{})[m.name]||{w:0,l:0},best=bestOnGround(m.name,8);
+    return {m,c,rec,isBest:!!(best&&best.t===t&&best.wr>=0.55)};}).sort((x,y)=>y.c-x.c||(y.rec.w-y.rec.l)-(x.rec.w-x.rec.l));
+  const fort=fortressOf(t);
+  return `<div class="tc-sec"><div class="lede">Grounds · the map pool${fort?` <span class="faint">· fortress <b style="color:var(--ember)">${esc(fort.ground.name)}</b>`:''}</span></div>
+    ${rows.map(r=>{const pct=Math.round(r.c*100),g=r.rec.w+r.rec.l,wr=g?Math.round(100*r.rec.w/g):null;
+      const lab=r.c>=0.66?'mastered':r.c>=0.4?'comfortable':r.c>=0.18?'practised':'cold';
+      return `<div class="mp-row"><span class="mp-nm">${esc(r.m.short)} <span class="faint">${esc(r.m.name)}</span>${r.isBest?' <span class="mp-best" title="the best win-rate in the league on this Ground">★</span>':''}</span><span class="mp-bar"><span class="mp-fill" style="width:${Math.max(3,pct)}%"></span></span><span class="mp-rec" title="${lab}">${g?recStr(r.rec):'—'}${wr!=null?` <span class="faint">${wr}%</span>`:''}</span></div>`;}).join('')}
+  </div>`;}
 function teamCard(t,rankAll){
   const rk=rankAll.indexOf(t)+1;
   const lu=lineup(t);const rating=lu.length?Math.round(lu.reduce((s,p)=>s+skillIndex(p),0)/lu.length):0;
@@ -2381,10 +2515,11 @@ function teamCard(t,rankAll){
       const fit=playerFit(p,t.coach);
       return `<div class="trow" data-tpid="${p.id}"><span class="trole">${p.role.slice(0,3)}</span><span class="tnm">${nm(p)} <span class="wm-${arch(p).wand}" title="${esc(arch(p).name)}">${wand(arch(p).wand).gl}</span>${p===star?' <span class="t2pill">★</span>':''}${p.standinFor?' <span class="t2pill">sub</span>':''}${p.injured?' <span class="t2pill" style="color:var(--unmarked);border-color:var(--unmarked)">inj</span>':''}${fit<0.5?` <span style="color:var(--bad)" title="clashes with the ${esc(philOf(t.coach).name)} system — wants to ${esc(aggroVerb(p))}">✗ clash</span>`:''}${unmp?' <span class="unmarked">●</span>':p.titles?` <span class="good">▲${p.titles}</span>`:''}</span><span class="tstat grav">${cg!==null?cg.toFixed(2):'—'}</span><span class="tstat grav">${p.stat.rounds?kd(p.stat).toFixed(2):'—'}</span></div>`;}).join("")}
     <div class="hint" style="margin-top:4px">Gravity · K/D · ${esc(philOf(t.coach).name)} system. Tap a player for the full scouting card.</div></div>
+    ${mapPoolHtml(t)}
     ${worldCairns.length?`<div class="tc-sec"><div class="lede">♛ World Championships</div>
-    ${worldCairns.map(c=>`<div class="row2"><span><span class="unmarked">♛</span> ${esc(c.event)} <span class="faint">· ${esc(c.zone)}</span></span><span class="ct" style="color:var(--ember)">S${c.season}</span></div>`).join("")}</div>`:''}
+    ${worldCairns.map(c=>`<div class="row2"><span><span class="unmarked">♛</span> ${esc(c.event)} <span class="faint">· ${esc(c.ground||c.zone)}</span></span><span class="ct" style="color:var(--ember)">S${c.season}</span></div>`).join("")}</div>`:''}
     <div class="tc-sec"><div class="lede">Majors won</div>
-    ${majorCairns.length?majorCairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — no Major won yet.</p>`}</div>
+    ${majorCairns.length?majorCairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.ground||c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — no Major won yet.</p>`}</div>
     <div class="tc-sec"><div class="lede">Rivalries · head-to-head</div>
     ${trivs.length?trivs.map(r=>{const opp=r.a===t.short?r.b:r.a;const oppName=oppNameFor(opp);const mine=r.wins[t.short]||0,his=r.wins[opp]||0;return `<div class="row2"><span>vs ${esc(oppName)} <span class="faint">(${mine}–${his})</span></span><span class="ct">met ${roman(r.count)}</span></div>`;}).join(""):`<p class="faint">No title rivalries yet.</p>`}</div>
     ${dh.length>1?`<div class="tc-sec"><div class="lede">Division history</div><div class="career-path">${dh.map((e,i)=>`${i?'<span class="cp-arr">→</span>':''}<span class="cp-tm">Div ${e.div}</span><span class="cp-s">S${e.season}</span>`).join(' ')}</div></div>`:''}
@@ -2408,7 +2543,7 @@ function defunctCard(d){
     <div class="scout-actions"><button class="mact" data-act="revive" data-tid="${esc(d.short)}">↺ Bring back ${esc(d.name)}</button></div>`;
   if(d.note)h+=`<p class="df-note">${esc(d.note)}</p>`;
   h+=`<div class="tc-sec"><div class="lede">Majors</div>`;
-  h+=cairns.length?cairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — never won a Major.</p>`;
+  h+=cairns.length?cairns.map(c=>`<div class="row2"><span><span class="${c.style==='loud'?'good':'faint'}">▲</span> ${esc(c.ground||c.zone)} <span class="faint">· ${esc(c.event)}</span></span><span class="ct">S${c.season} · ${c.style}</span></div>`).join(""):`<p class="faint">Unmarked — never won a Major.</p>`;
   h+=`</div>`;
   if(d.alumni&&d.alumni.length){h+=`<div class="tc-sec"><div class="lede">The diaspora · where they are now</div>`;
     h+=d.alumni.map(a=>{const loc=locate(a.tag);return `<div class="trow${loc.pid?'':' nolink'}"${loc.pid?` data-tpid="${loc.pid}"`:''}><span class="trole">${(a.role||'').slice(0,3)}</span><span class="tnm">${esc(a.name||a.tag)}</span><span class="tstat" style="width:auto;color:var(--muted);font-size:11.5px">${esc(loc.where)}</span></div>`;}).join("");
@@ -2566,7 +2701,7 @@ function buildMajorPrompt(d){
   f.push(isW?`Event: ${d.eventName} — Season ${d.season} (${d.year}). The World Championship: the season finale and the highest title in the sport, ranked above every Major. Its winner is crowned the season's World Champion.`:`Event: ${d.eventName} — Season ${d.season} (${d.year}). A Major: the only tier that builds a cairn.`);
   f.push(`Result: ${d.champ.name} defeated ${d.runner.name} ${d.score}.`);
   if(d.deadlift)f.push(`It was a DEADLIFT — ${d.champ.short} came back from 0–2 down to win.`);
-  f.push(`Champions placed a ${d.cairnStyle} cairn at ${d.zone}${d.champ.heart?" — a heart team, humble in the founders' tradition":" — a marquee side, a louder mark"}.`);
+  f.push(`Champions raised a ${d.cairnStyle} cairn on ${d.ground||d.zone}${d.champ.heart?" — a heart team, humble in the founders' tradition":" — a marquee side, a louder mark"}.`);
   if(d.top){const box=d.top.kd?` (${d.top.k}-${d.top.d}, ${d.top.kd} K/D${d.top.vigils?`, ${d.top.vigils} vigil${d.top.vigils>1?'s':''}`:''})`:'';f.push(d.top.won?`Top performer: ${d.top.name} led the winners at ${d.top.g} Gravity${box}.`:`Top performer was ${d.top.name} at ${d.top.g} Gravity${box} — for the LOSING side. Great and unlucky: the math loved him, the scoreboard didn't.`);}
   if(d.vigil)f.push(`${d.vigil.name} kept a vigil — a 1v${d.vigil.x} clutch at ${d.vigil.zone}.`);
   if(d.rivalry)f.push(`This was ${d.rivalry.name} ${roman(d.rivalry.chapter)} — a recurring star rivalry between ${d.rivalry.a} and ${d.rivalry.b}.`);
@@ -2741,7 +2876,7 @@ function swissWatch(L,idx){const sw=L.sw;if(sw.done||L.match)return;
   const pair=sw.pairs[idx];if(!pair||pair.done)return;
   const[x,y]=pair;const target=swissStakes(x,y,sw.rec)?2:1; // 2–2/2-loss ties are Bo3, the rest Bo1
   L.swMatch={x,y,pair};
-  L.match={a:x,b:y,wins:{a:0,b:0},target,maps:[],perf:{},seriesBox:{},map:null};L.matchVigils=[];
+  L.match={a:x,b:y,wins:{a:0,b:0},target,maps:[],perf:{},seriesBox:{},map:null,veto:vetoSeries(x,y,target)};L.matchVigils=[];
   if(world._eventPerf){x._load=(x._load||0)+1;y._load=(y._load||0)+1;}
   initSeriesState(x,y,0);
   pushLog(L,`${sw.label||'Swiss'}: ${x.name} vs ${y.name} — best of ${target*2-1}. ${swissPreLine(L,x,y)}`,'map');
@@ -2802,7 +2937,7 @@ function startMatch(L){
   else if(L.stage==='sf'){a=L.sfPairs[L.matchIdx][0];b=L.sfPairs[L.matchIdx][1];}
   else{a=L.fPair[0];b=L.fPair[1];}
   const target=L.stage==='f'?3:2; // final is Bo5, QF/SF Bo3
-  L.match={a,b,wins:{a:0,b:0},target,maps:[],perf:{},seriesBox:{},map:null};L.matchVigils=[];
+  L.match={a,b,wins:{a:0,b:0},target,maps:[],perf:{},seriesBox:{},map:null,veto:vetoSeries(a,b,target)};L.matchVigils=[];
   initSeriesState(a,b,L.stage==='f'?1:0); // big-stage nerves on the final
   const sn=L.stage==='qf'?'Quarterfinal':L.stage==='sf'?'Semifinal':'FINAL';
   pushLog(L,`${sn}: ${a.name} vs ${b.name} — best of ${target*2-1}. ${playoffPreLine(a,b,L)}`,'map');
@@ -2817,6 +2952,13 @@ function playoffPreLine(a,b,L){const bits=[];
     bits.push(`${tired.short} running on fumes after the Challengers grind${fade&&(fade.stamina||60)<48?` — watch ${fade.tag}'s legs go`:''}, ${fresh.short} far fresher`);}
   if(L.swiss&&L.swiss.rec){const ra=L.swiss.rec.get(a),rb=L.swiss.rec.get(b);
     if(ra&&rb&&ra.l!==rb.l){const cleaner=ra.l<rb.l?a:b,cr=ra.l<rb.l?ra:rb;bits.push(`${cleaner.short} came through the Swiss cleaner (${cr.w}–${cr.l})`);}}
+  // a map storyline from the veto — a league-best Ground in the series, or a fortress decider
+  if(L.match&&L.match.veto){const order=L.match.veto.order;
+    for(const G of order){const best=bestOnGround(G.name,8);
+      if(best&&(best.t===a||best.t===b)&&best.wr>=0.62){const opp=best.t===a?b:a;bits.push(`${best.t.short} bring the league's best ${G.name} (${recStr(best.rec)}) into the series — ${opp.short} have to break it`);break;}}
+    const dec=order[order.length-1],fa=fortressOf(a),fb=fortressOf(b);
+    if(dec&&fa&&fa.ground.name===dec.name)bits.push(`go the distance and the decider is ${a.short}'s fortress ${dec.name}`);
+    else if(dec&&fb&&fb.ground.name===dec.name)bits.push(`go the distance and the decider is ${b.short}'s fortress ${dec.name}`);}
   const sa=starOf(a),sb=starOf(b);
   if(sa&&sb){const riv=Object.values(world.rivalries).find(x=>(x.a.id===sa.id&&x.b.id===sb.id)||(x.a.id===sb.id&&x.b.id===sa.id));if(riv&&riv.count>=1)bits.push(`${sa.tag} v ${sb.tag} renewed`);}
   // a star at war with his own coach's system is a story the desk loves
@@ -2833,7 +2975,18 @@ function mediaDayLine(m){const cf=topCrossFeeling(lineup(m.a),lineup(m.b));if(!c
   if(cf.v<=-0.4)return {who:A.tag,q:`up against ${B.tag}`,a:hot?pick([`${B.tag}? Never rated him. Talks a big game, folds when you put it on him. Can't wait to prove it again.`,`There's history. He knows what he did. We'll settle it on the server like always — and I'll be standing.`]):pick([`${B.tag} and I aren't sending each other birthday cards. I'll let the scoreline do the talking.`,`No love lost there. That's all I'll say. Watch the tape.`])};
   if(cf.v>=0.45)return {who:A.tag,q:`facing your friend ${B.tag}`,a:pick([`Love the guy to bits — off the server. For these maps I want to make his life miserable. He'd say the same.`,`We came up together. Best kind of match, this. No quarter, all respect.`])};
   return null;}
-function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box,zone:pickZone(),buy:{a:'full',b:'full'},econ:newEcon(m.a,m.b),mediaDay:(m.maps&&m.maps.length===0)?mediaDayLine(m):null};}
+function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());
+  const G=m.veto?(m.veto.order[m.maps.length]||m.veto.order[m.veto.order.length-1]):defaultMap(); // the drafted Ground for this game
+  if(m.maps.length===0&&m.veto)pushLog(L,`🗺 Veto — ${vetoLogLine(m.veto)}`,'map'); // call the draft as the series opens
+  m.a._mapprof=mapProfMult(m.a,G);m.b._mapprof=mapProfMult(m.b,G); // earned comfort on this Ground
+  m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:G.areas[0].name,mapVigils:[],perf:{},box,zone:pickZone(G),groundMap:G,ground:G.name,gshort:G.short,buy:{a:'full',b:'full'},econ:newEcon(m.a,m.b),mediaDay:(m.maps&&m.maps.length===0)?mediaDayLine(m):null};
+  pushLog(L,`▶ Game ${m.maps.length+1} on <b>${esc(G.name)}</b> — ${esc(G.blurb)}${groundComfortNote(m,G)}.`,'map');}
+// a one-line read on who owns the Ground being played — the league's master, or whose fortress it is
+function groundComfortNote(m,G){const best=bestOnGround(G.name,8);
+  if(best&&(best.t===m.a||best.t===m.b)&&best.wr>=0.6)return ` — <b>${esc(best.t.short)}</b> own this Ground (${recStr(best.rec)}, the league's best on it)`;
+  const ca=mapComfort(m.a,G),cb=mapComfort(m.b,G);
+  if(Math.max(ca,cb)>=0.55&&Math.abs(ca-cb)>=0.22){const t=ca>cb?m.a:m.b;return ` — <b>${esc(t.short)}</b>'s fortress`;}
+  return '';}
 function roundLine(r,m,mp){
   const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
   // mp here is post-round — flag if a side is now ON map/match point (unless the map just ended)
@@ -2958,7 +3111,7 @@ function commitRound(L,r,summary){
   const m=L.match,mp=m.map;
   mp.lastZone=r.zone;if(r.winA){mp.sa++;mp.stA=(mp.stA||0)+1;mp.stB=0;}else{mp.sb++;mp.stB=(mp.stB||0)+1;mp.stA=0;}mp.round++;
   econSettle(mp.econ,r,m.a,m.b); // bank the round's payouts and drop the fallen's wands
-  mp.zone=nextZone(mp.zone,r.winA?m.a:m.b,r.winA?m.b:m.a);
+  mp.zone=nextZone(mp.zone,r.winA?m.a:m.b,r.winA?m.b:m.a,mp.groundMap);
   for(const id in r.grav)(m.perf[id]=m.perf[id]||[]).push(r.grav[id]);
   for(const id in r.grav)(mp.perf[id]=mp.perf[id]||[]).push(r.grav[id]);
   lineup(m.a).concat(lineup(m.b)).forEach(p=>{const e=r.box[p.id];if(!e)return;
@@ -2999,10 +3152,11 @@ function stepKill(){const L=world.live,mp=L.match.map;
 function mapEnd(){
   const L=world.live,m=L.match,mp=m.map,aWon=mp.sa>mp.sb;
   if(aWon)m.wins.a++;else m.wins.b++;
-  m.maps.push({aWon,sa:mp.sa,sb:mp.sb,zone:mp.lastZone,vigils:mp.mapVigils,box:finalBoxSnapshot(m.a,m.b,mp.box)});
+  m.maps.push({aWon,sa:mp.sa,sb:mp.sb,zone:mp.lastZone,ground:mp.ground,gshort:mp.gshort,vigils:mp.mapVigils,box:finalBoxSnapshot(m.a,m.b,mp.box)});
+  if(mp.groundMap)recordMapResult(m.a,m.b,mp.groundMap,aWon); // bank the reps and head-to-head on this Ground
   {const mg={};for(const id in mp.perf){const a=mp.perf[id];mg[id]=a.reduce((s,x)=>s+x,0)/a.length;}
    recordGamePerf(mg,mp.box,m.a,m.b,aWon?m.a:m.b,{event:L.name,tier:L.tier||'SP',round:L.swMatch?'Swiss':L.stage==='f'?(L.tier==='WC'?'World final':'Major final'):L.stage==='sf'?'SF':'QF',mapNo:m.maps.length},mp.lastZone);
-   pushLog(L,`MAP ${m.maps.length}: ${(aWon?m.a:m.b).short} ${Math.max(mp.sa,mp.sb)}–${Math.min(mp.sa,mp.sb)} on ${mp.lastZone}. Series ${m.a.short} ${m.wins.a}–${m.wins.b} ${m.b.short}.`,'mapend');
+   pushLog(L,`MAP ${m.maps.length}: ${(aWon?m.a:m.b).short} ${Math.max(mp.sa,mp.sb)}–${Math.min(mp.sa,mp.sb)} on ${mp.ground||mp.lastZone}. Series ${m.a.short} ${m.wins.a}–${m.wins.b} ${m.b.short}.`,'mapend');
    deskMapColor(L,mg);}
   if(m.wins.a>=m.target||m.wins.b>=m.target)return matchEnd();
   startMap(L);return 'mapend';
@@ -3033,7 +3187,7 @@ function matchEnd(){
     if(L.matchIdx>=2){L.stage='f';L.matchIdx=0;L.fPair=[L.sfWinners[0],L.sfWinners[1]];}
     startMatch(L);return 'matchend';}
   L.finalChamp=champ;L.finalRun=loser;
-  L.finalSummary={scoreStr,deadlift,lastZone:m.maps[m.maps.length-1].zone,vigilsAll:L.matchVigils,sg,box:m.seriesBox};
+  L.finalSummary={scoreStr,deadlift,lastZone:m.maps[m.maps.length-1].zone,grounds:m.maps.map(mm=>mm.ground),clinchGround:m.maps[m.maps.length-1].ground,veto:m.veto,vigilsAll:L.matchVigils,sg,box:m.seriesBox};
   eventEnd();return 'eventend';
 }
 function eventEnd(){
@@ -3041,7 +3195,7 @@ function eventEnd(){
   const data=L.tier==='WC'?commitWorlds(L.name,L.finalChamp,L.finalRun,L.sfLosers,L.qfLosers,L.finalSummary):commitMajor(L.name,L.finalChamp,L.finalRun,L.sfLosers,L.qfLosers,L.finalSummary);
   L.championData=data;L.feedId=world.feed[0].id;L.done=true;
   world.pendingMajors=(world.pendingMajors||[]).filter(e=>pendName(e)!==L.name);
-  pushLog(L,L.tier==='WC'?`${L.finalChamp.name} are crowned World Champions of Season ${world.season}. A crown cairn rises at ${data.zone}.`:`${L.finalChamp.name} are champions of the ${L.name}. A ${data.cairnStyle} cairn rises at ${data.zone}.`,'champion');
+  pushLog(L,L.tier==='WC'?`${L.finalChamp.name} are crowned World Champions of Season ${world.season}. A crown cairn rises on ${data.ground||data.zone}.`:`${L.finalChamp.name} are champions of the ${L.name}. A ${data.cairnStyle} cairn rises on ${data.ground||data.zone}.`,'champion');
 }
 function liveRound(){const L=world.live;if(!L||L.done||!L.match)return;stepRound();renderCast();}
 function liveMap(){const L=world.live;if(!L||L.done||!L.match)return;let s;do{s=stepRound();}while(s==='round');renderCast();}
@@ -3097,7 +3251,7 @@ function boxTable(m,mp,L){
   if(m.maps.length>=1)tabs+=btn('series','Series');
   let snap,cap;
   if(sel==='series'){snap=finalBoxSnapshot(m.a,m.b,m.seriesBox);cap=`Series box · ${esc(m.a.name)} ${m.wins.a}–${m.wins.b} ${esc(m.b.name)}`;}
-  else if(sel!=='cur'&&m.maps[+sel]){const mm=m.maps[+sel];snap=mm.box;cap=`Map ${+sel+1} · ${esc((mm.aWon?m.a:m.b).name)} ${Math.max(mm.sa,mm.sb)}–${Math.min(mm.sa,mm.sb)} on ${esc(mm.zone)}`;}
+  else if(sel!=='cur'&&m.maps[+sel]){const mm=m.maps[+sel];snap=mm.box;cap=`Game ${+sel+1} · ${esc((mm.aWon?m.a:m.b).name)} ${Math.max(mm.sa,mm.sb)}–${Math.min(mm.sa,mm.sb)} on ${esc(mm.ground||mm.zone)}`;}
   else{snap=finalBoxSnapshot(m.a,m.b,mp.box);cap=`Map ${m.maps.length+1} · live · ${mp.sa}–${mp.sb} · round ${mp.round}`;}
   const hint=m.maps.length?`<div class="bx-cap" style="text-transform:none;letter-spacing:0;color:var(--muted)">Tap a map to review its box — e.g. game 1's stats while game 2 plays.</div>`:'';
   return `<div class="cast-tabs" style="flex-wrap:wrap;margin-bottom:8px">${tabs}</div>${hint}<div class="boxwrap"><div class="bx-cap">${cap}</div>${snap?snap.teams.map(boxSideHtml).join(''):'<p class="faint">No stats yet.</p>'}</div>`;
@@ -3151,6 +3305,14 @@ function loadoutHud(m,mp){const E=mp.econ;if(!E)return '';
       return `<span class="ld ld-${wk}" title="${esc(w.name)}${mine?' · his main':''}">${w.gl} ${esc(p.tag)}${mine?'<span class="ld-m">◦</span>':''}</span>`;}).join('');
     return `<div class="hud-side"><div class="hud-gold">⛁ ${(E.gold[key]||0).toLocaleString()}</div><div class="hud-load">${chips}</div></div>`;};
   return `<div class="hud">${sideHtml(m.a,'a')}<div class="hud-div">vs</div>${sideHtml(m.b,'b')}</div>`;}
+// the veto board — the drafted Grounds, bans struck through, the order they'll be played
+function vetoBoardHtml(m){if(!m.veto)return '';
+  const order=m.veto.order.map(g=>g.name),playedIdx=g=>order.indexOf(g);
+  const items=m.veto.log.map(e=>{
+    if(e.act==='decider')return `<span class="vb vb-dec" title="decider">◆ ${esc(e.map)} <span class="vb-t">decider</span></span>`;
+    if(e.act==='ban')return `<span class="vb vb-ban" title="${esc(e.short)} banned">✕ ${esc(e.map)} <span class="vb-t">${esc(e.short)} ban</span></span>`;
+    const n=playedIdx(e.map);return `<span class="vb vb-pick" title="${esc(e.short)} picked"><b>${esc(e.map)}</b> <span class="vb-t">${esc(e.short)} pick · G${n+1}</span></span>`;});
+  return `<div class="vetoboard"><div class="vb-h">🗺 The veto · best of ${m.target*2-1}</div><div class="vb-rows">${items.join('')}</div></div>`;}
 function renderCast(){
   const el=$("p-cast");const L=world.live;
   if(L&&!L.done&&L.stage==='preview'){el.innerHTML=previewView(L);return;}
@@ -3161,8 +3323,9 @@ function renderCast(){
     const matchNo=sw?` · best of ${m.target*2-1}`:L.stage==='f'?'':` · Match ${L.matchIdx+1} of ${L.stage==='qf'?4:2}`;
     let h=`<div class="cast-head"><div class="cast-title">${L.name}</div><div class="cast-stage">${stageName}${matchNo}</div></div>`;
     if(!sw)h+=bracketStrip(L);
-    h+=`<div class="scoreboard"><div class="sb-team">${esc(m.a.name)}</div><div class="sb-mid"><div class="sb-series">series ${m.wins.a}–${m.wins.b}</div><div class="sb-map">${mp.sa}–${mp.sb}</div><div class="sb-zone">${mp.cur?`◉ ${mp.cur.upA}v${mp.cur.upB} · ${mp.cur.r.zone}`:mp.round?`map ${m.maps.length+1} · last: ${mp.lastZone}`:`map ${m.maps.length+1} · first to 15`}</div></div><div class="sb-team">${esc(m.b.name)}</div></div>`;
+    h+=`<div class="scoreboard"><div class="sb-team">${esc(m.a.name)}</div><div class="sb-mid"><div class="sb-series">series ${m.wins.a}–${m.wins.b}</div><div class="sb-map">${mp.sa}–${mp.sb}</div><div class="sb-zone">${mp.ground?`<b style="color:var(--ember)">${esc(mp.ground)}</b> · `:''}${mp.cur?`◉ ${mp.cur.upA}v${mp.cur.upB} · ${mp.cur.r.zone}`:mp.round?`G${m.maps.length+1} · ${mp.lastZone}`:`G${m.maps.length+1} · first to 15`}</div></div><div class="sb-team">${esc(m.b.name)}</div></div>`;
     h+=loadoutHud(m,mp);
+    h+=vetoBoardHtml(m);
     if(mp.mediaDay&&mp.round===0&&m.maps.length===0)h+=`<div class="mediaday"><div class="md-h">🎙 Media day · ${esc(mp.mediaDay.who)} on ${esc(mp.mediaDay.q)}</div><div class="md-q">“${esc(mp.mediaDay.a)}”</div></div>`;
     if(L.stage==='f'&&mp.round===0&&m.maps.length===0){
       if(L.stagePreview)h+=`<div class="desk"><div class="desk-label">From the desk · the stage</div>${fmtAI(L.stagePreview)}</div>`;
@@ -3177,7 +3340,7 @@ function renderCast(){
   }
   if(L&&L.done){
     const d=L.championData,fi=world.feed.find(f=>f.id===L.feedId);
-    let h=`<div class="cast-head"><div class="cast-title">${L.name}</div><div class="cast-stage">Champions</div></div><div class="champ-banner"><div class="champ-name">${L.finalChamp.name}</div><div class="champ-sub">def. ${L.finalRun.name} ${d.score} — a ${d.cairnStyle} cairn at ${d.zone}</div></div>`;
+    let h=`<div class="cast-head"><div class="cast-title">${L.name}</div><div class="cast-stage">Champions</div></div><div class="champ-banner"><div class="champ-name">${L.finalChamp.name}</div><div class="champ-sub">def. ${L.finalRun.name} ${d.score} — a ${d.cairnStyle} cairn on ${d.ground||d.zone}</div></div>`;
     if(fi){
       if(fi.narrated)h+=`<div class="desk"><div class="desk-label">From the desk</div>${fmtAI(fi.narrated)}</div>`;
       else if(fi.narrating)h+=`<div class="desk-loading">the desk is calling it…</div>`;
@@ -3249,6 +3412,8 @@ document.getElementById("p-teams").addEventListener("click",e=>{
     playerFilter=(p&&p.retired)?'retired':(p&&world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');return;}
   const row=e.target.closest("[data-tid]");if(row){selectedTid=selectedTid===row.dataset.tid?null:row.dataset.tid;renderTeams();}
 });
+document.getElementById("p-yard").addEventListener("click",e=>{
+  const row=e.target.closest("[data-tid]");if(row&&row.dataset.tid){selectedTid=row.dataset.tid;teamFilter='all';render();switchTab('teams');}});
 document.getElementById("p-annals").addEventListener("click",e=>{
   const bx=e.target.closest("[data-box]");if(bx){const k=bx.dataset.box;expandedBoxKey=expandedBoxKey===k?null:k;renderAnnals();return;}
   const av=e.target.closest("[data-av]");if(av){annalsView=av.dataset.av;expandedBoxKey=null;renderAnnals();return;}
