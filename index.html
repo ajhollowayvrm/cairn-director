@@ -137,6 +137,7 @@
   .pbp-line.win{color:var(--ember);background:#211a10;font-family:inherit;}
   .pbp-line.champion{color:var(--cairn);background:#231d12;font-family:Georgia,serif;}
   .pbp-line.map{color:var(--faint);}
+  .pbp-line.kill{color:var(--bone);}
   .pbp-line.color{color:var(--cairn);background:#1c1810;font-family:Georgia,serif;font-style:italic;}
   .champ-banner{border:1px solid var(--ember-dim);border-radius:4px;background:radial-gradient(120% 160% at 50% 0%,#2a2012,#16120c);padding:16px;text-align:center;margin-bottom:12px;}
   .champ-name{font-family:Georgia,serif;font-size:22px;color:#f6e9d6;}
@@ -329,14 +330,63 @@ function adrOf(s){return s.rounds?Math.round(s.dmg/s.rounds):0;}
 function kastOf(s){return s.rounds?Math.round(100*s.kast/s.rounds):0;}
 function multiK(s){return (s.mk2||0)+(s.mk3||0)+(s.mk4||0)+(s.aces||0);}
 
-const ZONES=[
-  {name:"the Gallery",w:{aim:1.5,read:.6,entry:.8,util:.5}},
-  {name:"the Warren", w:{aim:.8,read:.9,entry:1.3,util:1.1}},
-  {name:"the Stack",  w:{aim:.9,read:1.4,entry:.8,util:1.0}},
-  {name:"the Aisle",  w:{aim:1.0,read:1.0,entry:1.0,util:1.0}},
-  {name:"the Mouth",  w:{aim:.9,read:.8,entry:1.4,util:.9}},
-  {name:"B-Side River",w:{aim:1.1,read:1.0,entry:.9,util:.9}},
+// ---- the map pool: CS2 Active Duty. Each map roams between its own callouts (areas), and each map
+// has a distinct character — Dust2 is long-range aim, Nuke/Train reward utility and anchors, Mirage is
+// mid-control reads, Anubis is open and aggressive. A series is contested across these maps via veto. ----
+const MAPS=[
+  {name:"Mirage",short:"MRG",areas:[
+    {name:"Palace",  w:{aim:1.4,read:.7,entry:1.0,util:.6}},
+    {name:"Mid",     w:{aim:1.1,read:1.4,entry:.8,util:.9}},
+    {name:"A Site",  w:{aim:1.0,read:1.0,entry:1.1,util:1.0}},
+    {name:"B Apps",  w:{aim:.9,read:.8,entry:1.4,util:1.1}},
+    {name:"Connector",w:{aim:.95,read:1.3,entry:.8,util:1.0}},
+  ]},
+  {name:"Inferno",short:"INF",areas:[
+    {name:"Banana",  w:{aim:.85,read:.9,entry:1.3,util:1.3}},
+    {name:"Apartments",w:{aim:1.0,read:.9,entry:1.3,util:1.0}},
+    {name:"Pit",     w:{aim:1.3,read:.8,entry:.8,util:.8}},
+    {name:"Arch",    w:{aim:1.0,read:1.2,entry:.9,util:1.1}},
+    {name:"B Site",  w:{aim:.9,read:1.0,entry:1.0,util:1.3}},
+  ]},
+  {name:"Nuke",short:"NUK",areas:[
+    {name:"Outside", w:{aim:1.3,read:.9,entry:1.0,util:.8}},
+    {name:"Ramp",    w:{aim:.9,read:.9,entry:1.3,util:1.1}},
+    {name:"Lobby",   w:{aim:1.1,read:1.0,entry:1.0,util:.9}},
+    {name:"Vents",   w:{aim:.85,read:1.3,entry:.9,util:1.1}},
+    {name:"Heaven",  w:{aim:1.0,read:1.0,entry:.8,util:1.4}},
+  ]},
+  {name:"Ancient",short:"ANC",areas:[
+    {name:"Mid",     w:{aim:1.0,read:1.4,entry:.8,util:1.0}},
+    {name:"Donut",   w:{aim:.9,read:1.2,entry:.9,util:1.2}},
+    {name:"A Main",  w:{aim:1.2,read:.9,entry:1.1,util:.8}},
+    {name:"Cave",    w:{aim:.9,read:1.0,entry:1.2,util:1.1}},
+    {name:"B Ramp",  w:{aim:1.0,read:1.0,entry:1.0,util:1.2}},
+  ]},
+  {name:"Anubis",short:"ANB",areas:[
+    {name:"Mid",     w:{aim:1.3,read:1.0,entry:1.0,util:.8}},
+    {name:"Water",   w:{aim:1.0,read:1.1,entry:1.2,util:.9}},
+    {name:"Palace",  w:{aim:1.2,read:.8,entry:1.3,util:.8}},
+    {name:"Canal",   w:{aim:.95,read:1.0,entry:1.2,util:1.0}},
+    {name:"B Site",  w:{aim:1.0,read:.9,entry:1.1,util:1.1}},
+  ]},
+  {name:"Dust2",short:"D2",areas:[
+    {name:"Long",    w:{aim:1.6,read:.7,entry:.9,util:.5}},
+    {name:"Mid",     w:{aim:1.4,read:1.0,entry:.7,util:.7}},
+    {name:"Catwalk", w:{aim:1.3,read:.9,entry:.9,util:.8}},
+    {name:"Tunnels", w:{aim:.9,read:.9,entry:1.4,util:1.0}},
+    {name:"B Site",  w:{aim:1.1,read:.9,entry:1.1,util:1.0}},
+  ]},
+  {name:"Train",short:"TRN",areas:[
+    {name:"Ivy",     w:{aim:1.0,read:1.0,entry:1.2,util:1.0}},
+    {name:"A Main",  w:{aim:1.2,read:.9,entry:1.0,util:.9}},
+    {name:"Ladder",  w:{aim:1.1,read:1.1,entry:.8,util:1.0}},
+    {name:"Lower",   w:{aim:.85,read:1.2,entry:.9,util:1.3}},
+    {name:"B Site",  w:{aim:.9,read:1.0,entry:1.0,util:1.4}},
+  ]},
 ];
+const MAP_BY_NAME={};MAPS.forEach(m=>MAP_BY_NAME[m.name]=m);
+function mapByName(n){return MAP_BY_NAME[n]||MAPS[0];}
+function defaultMap(){return MAPS[0];}
 // Circuit ladder (ascending prestige): feeder tournaments (D/C tier-2 circuit, B/A tier-1 circuit) <
 // Majors < the World Championship. Premier tiers run a Swiss stage and can be broadcast live.
 const TIERS={
@@ -582,8 +632,8 @@ const ROLE_ERA={
   anchor:{name:"The Anchor Era",blurb:"defense and the last stand decide it — anchors are everything"},
   set:{name:"The Setters' Age",blurb:"utility and setup win the map — the set player pulls the strings"}};
 function eraRoleMult(role){const e=world&&world.era;if(!e||e.kind!=='role')return 1;return e.key===role?1.07:0.982;} // featured role's Gravity rises; the rest dip slightly
-function eraZoneMult(name){const e=world&&world.era;if(!e||e.kind!=='zone')return 1;return e.key===name?2.4:1;}   // the era's zone hosts the ember far more often
-function pickZone(){return pickW(ZONES,z=>eraZoneMult(z.name));}
+function eraMapMult(name){const e=world&&world.era;if(!e||e.kind!=='map')return 1;return e.key===name?2.4:1;}   // the era's map is picked far more often in veto
+function pickZone(map){map=map||defaultMap();return pick(map.areas);}                                          // opening area of a fresh map
 function zoneTrait(z){const w=z.w,m=Math.max(w.aim,w.read,w.entry,w.util);return w.aim===m?"pure aim wins here":w.read===m?"it rewards the sharpest read":w.entry===m?"it's all aggression and entries":"utility and setup decide it";}
 /* ---- cinematic variance: form, confidence, momentum ---- */
 function formMult(p){return p._form||1;}
@@ -624,13 +674,14 @@ function nextBuy(prev,won,pressure){
   if(prev==='reload'||prev==='force')return 'eco'; // the strong buy / force didn't land — save again
   return (pressure&&rnd()<0.4)?'force':'eco'; // broken off a full buy: usually save, but may force under the gun
 }
-// ---- territory: the ember no longer roams at random — it's steered toward a team's comfort zones ----
-function nextZone(prevZone,winT,loseT){
-  if(rnd()<0.18)return prevZone;                 // a contested chokepoint: the ember stays put
+// ---- territory: play doesn't roam at random — it's steered toward a team's comfort callouts on this map ----
+function nextZone(prevZone,winT,loseT,map){
+  map=map||defaultMap();const areas=map.areas;
+  if(rnd()<0.18)return prevZone;                 // a contested chokepoint: the fight stays put
   const steer=rnd()<0.55?winT:loseT;             // the winner presses map control, else the loser counter-picks
-  const L=lineup(steer),rates=ZONES.map(z=>{let s=0;for(const p of L)s+=zoneSkill(p,z);return s/L.length;});
+  const L=lineup(steer),rates=areas.map(z=>{let s=0;for(const p of L)s+=zoneSkill(p,z);return s/L.length;});
   const mean=rates.reduce((s,x)=>s+x,0)/rates.length||1;
-  let i=0;return pickW(ZONES,()=>Math.pow(rates[i]/mean,6)*eraZoneMult(ZONES[i++].name)); // lean toward the steerer's strong ground, tilted by the era's zone
+  let i=0;return pickW(areas,()=>Math.pow(rates[i++]/mean,6)); // lean toward the steerer's strong ground
 }
 
 // A round, played as duels: an opening pick, then man-advantage trades, then an objective close or a clutch hold.
@@ -651,6 +702,9 @@ function simRound(a,b,opts){
   const aOpen=rnd()<ra/(ra+rb);
   const opW=aOpen?oa:ob,opL=aOpen?ob:oa;
   box[opW.id].k++;box[opW.id].open++;box[opW.id].entry++;box[opL.id].d++;box[opL.id].fd++;
+  // kill-by-kill event log — only built when the live desk wants to call it (off the season-sim path)
+  const evs=opts.events?[]:null;const runK={};
+  if(evs){runK[opW.id]=1;evs.push({t:'open',k:opW.id,v:opL.id,zone:z.name});}
   let aliveA=A.slice(),aliveB=B.slice();
   const drop=(arr,p)=>{const i=arr.indexOf(p);if(i>=0)arr.splice(i,1);};
   drop(side[opL.id]==='a'?aliveA:aliveB,opL);
@@ -668,10 +722,13 @@ function simRound(a,b,opts){
     const killer=aKills?x:y,victim=aKills?y:x;
     box[killer.id].k++;box[victim.id].d++;
     const kmates=(aKills?aliveA:aliveB).filter(p=>p!==killer);
-    if(kmates.length&&rnd()<0.32){const mt=pickW(kmates,p=>p.r.util+p.r.read);box[mt.id].a++;}
+    let assistId=null;
+    if(kmates.length&&rnd()<0.32){const mt=pickW(kmates,p=>p.r.util+p.r.read);box[mt.id].a++;assistId=mt.id;}
     drop(aKills?aliveB:aliveA,victim);
+    if(evs){runK[killer.id]=(runK[killer.id]||0)+1;evs.push({t:'kill',k:killer.id,v:victim.id,a:assistId,n:runK[killer.id],adv:aKills?adv:-adv});}
     const tmates=(aKills?aliveB:aliveA).filter(p=>p!==victim);
-    if(tmates.length&&rnd()<0.30){const tr=pickW(tmates,p=>p.r.read*0.7+p.r.aim*0.6);box[tr.id].k++;box[tr.id].trade++;box[killer.id].d++;box[killer.id].traded=1;drop(aKills?aliveA:aliveB,killer);}
+    if(tmates.length&&rnd()<0.30){const tr=pickW(tmates,p=>p.r.read*0.7+p.r.aim*0.6);box[tr.id].k++;box[tr.id].trade++;box[killer.id].d++;box[killer.id].traded=1;drop(aKills?aliveA:aliveB,killer);
+      if(evs){runK[tr.id]=(runK[tr.id]||0)+1;evs.push({t:'trade',k:tr.id,v:killer.id,n:runK[tr.id]});}}
     if(aliveA.length===1&&aliveB.length>=2)mark(aliveA[0],aliveB.length);
     if(aliveB.length===1&&aliveA.length>=2)mark(aliveB[0],aliveA.length);
   }
@@ -679,7 +736,8 @@ function simRound(a,b,opts){
   const winT=winA?a:b,win=winA?A:B,lose=winA?B:A;
   const aliveWin=winA?aliveA:aliveB;
   let vigil=null,closer=null;
-  if(aliveWin.length===1&&(aliveWin[0]._cl||0)>=2){closer=aliveWin[0];const x=clamp(closer._cl,2,4);box[closer.id].clutch=x;vigil={pid:closer.id,x,name:closer.tag,zone:z.name};}
+  if(aliveWin.length===1&&(aliveWin[0]._cl||0)>=2){closer=aliveWin[0];const x=clamp(closer._cl,2,4);box[closer.id].clutch=x;vigil={pid:closer.id,x,name:closer.tag,zone:z.name};if(evs)evs.push({t:'clutch',k:closer.id,x});}
+  if(evs)evs.push({t:'close',winA,zone:z.name,buy});
   // finish the line: survival, multikills, KAST, damage
   A.concat(B).forEach(p=>{const e=box[p.id];
     if(e.d===0)e.surv=1;
@@ -700,7 +758,7 @@ function simRound(a,b,opts){
     const impact=(e.k-e.d)+(e.clutch?2:0)+e.open*0.6+e.trade*0.3-(e.fd?0.5:0)+(won?0.3:-0.3);
     let sw=0.03*(1.25-poise(p));if(hasTrait(p,'hothead'))sw*=1.6;if(hasTrait(p,'clutch'))sw*=0.6;
     p._conf=clamp((p._conf||0)+impact*sw,-1,1);p._cl=0;});
-  return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star,buy,open:{w:opW.id,l:opL.id}};
+  return {winA,zone:z.name,winnerTeam:winT,box,grav,vigil,star,buy,open:{w:opW.id,l:opL.id},events:evs};
 }
 function simMap(a,b,ctx,opts){
   opts=opts||{};const stage=opts.stage||0;
@@ -2342,18 +2400,25 @@ function swissRoundColor(L){const sw=L.sw,r=sw.rec;
   if(und.length)bits.push(`${und.length} still perfect${und.length<=3?` (${und.map(t=>t.short).join(', ')})`:''}`);
   return bits.length?`${lead} Round ${sw.round} — ${bits.join('; ')}.`:`${lead} Round ${sw.round} is set.`;
 }
-function swissStepMatch(L){const sw=L.sw;if(sw.done)return;
-  if(sw.pairIdx>=sw.pairs.length){swissBeginRound(L);if(sw.done)return;}
-  const pair=sw.pairs[sw.pairIdx];sw.pairIdx++;const[x,y]=pair;
-  pushLog(L,swissPreLine(L,x,y),'round');
-  const s=swissResolveMatch(x,y,sw.rec,sw.ctx);
+// pairs carry a `done` flag so a director can call them in any order (e.g. watch a 2–2 v 2–2 first).
+function nextSwissPair(sw){for(let i=0;i<sw.pairs.length;i++){if(sw.pairs[i]&&!sw.pairs[i].done)return i;}return -1;}
+// shared post-result: the result line + any advance/elimination, for both instant and live-watched matches.
+function swissAdvanceCheck(L,s){const sw=L.sw;
   pushLog(L,swissResultLine(L,s,s.winner,s.loser),'mapend');
   [s.winner,s.loser].forEach(t=>{const r=sw.rec.get(t);
     if(r.w>=3&&sw.advanced.indexOf(t)<0){sw.advanced.push(t);pushLog(L,`✦ ${t.name} are THROUGH to the playoffs — ${r.w}–${r.l}.`,'win');}
     else if(r.l>=3&&sw.eliminated.indexOf(t)<0){sw.eliminated.push(t);pushLog(L,`${t.name} are out, ${r.w}–${r.l}. The run ends here.`,'win');}});
-  if(sw.pairIdx>=sw.pairs.length)swissBeginRound(L);
 }
-function swissPlayRound(L){const sw=L.sw,r0=sw.round;let guard=0;while(!sw.done&&sw.round===r0&&sw.pairIdx<sw.pairs.length&&guard++<20)swissStepMatch(L);}
+function swissStepMatch(L){const sw=L.sw;if(sw.done)return;
+  const i=nextSwissPair(sw);
+  if(i<0){swissBeginRound(L);return;}
+  const pair=sw.pairs[i];const[x,y]=pair;
+  pushLog(L,swissPreLine(L,x,y),'round');
+  const s=swissResolveMatch(x,y,sw.rec,sw.ctx);pair.done=true;
+  swissAdvanceCheck(L,s);
+  if(nextSwissPair(sw)<0)swissBeginRound(L);
+}
+function swissPlayRound(L){const sw=L.sw,r0=sw.round;let guard=0;while(!sw.done&&sw.round===r0&&nextSwissPair(sw)>=0&&guard++<20)swissStepMatch(L);}
 function swissAutoFinish(L){let guard=0;while(!L.sw.done&&guard++<300)swissStepMatch(L);}
 function swissComplete(L){const sw=L.sw;sw.done=true;
   swissSeed(sw.advanced,sw.eliminated,sw.rec);
@@ -2366,6 +2431,23 @@ function swissComplete(L){const sw=L.sw;sw.done=true;
     const tough=sw.advanced.slice().sort((a,b)=>buchholz(b,sw.rec)-buchholz(a,sw.rec))[0];
     pushLog(L,`${sw.label} complete — eight advance to the playoffs. Toughest road: ${tough.short} (Buchholz ${buchholz(tough,sw.rec)}).`,'champion');
   }
+}
+// ---- call a single Swiss tie round-by-round, then drop back to the bracket ----
+function swissWatch(L,idx){const sw=L.sw;if(sw.done||L.match)return;
+  const pair=sw.pairs[idx];if(!pair||pair.done)return;
+  const[x,y]=pair;const target=swissStakes(x,y,sw.rec)?2:1; // 2–2/2-loss ties are Bo3, the rest Bo1
+  L.swMatch={x,y,pair};
+  L.match={a:x,b:y,wins:{a:0,b:0},target,maps:[],perf:{},seriesBox:{},map:null};L.matchVigils=[];
+  if(world._eventPerf){x._load=(x._load||0)+1;y._load=(y._load||0)+1;}
+  initSeriesState(x,y,0);
+  pushLog(L,`${sw.label||'Swiss'}: ${x.name} vs ${y.name} — best of ${target*2-1}. ${swissPreLine(L,x,y)}`,'map');
+  startMap(L);renderCast();
+}
+// the live-watched tie finished — fold the result back into the Swiss record (mirrors swissResolveMatch's rec update)
+function recordSwissResult(L,x,y,s){const sw=L.sw,rec=sw.rec;
+  rec.get(s.winner).w++;rec.get(s.loser).l++;
+  const rx=rec.get(x),ry=rec.get(y);if(rx.opp)rx.opp.push(y);if(ry.opp)ry.opp.push(x);
+  swissAdvanceCheck(L,s);
 }
 // Advance from a finished Swiss stage: Challengers → Legends, or Legends/Swiss → the playoff bracket.
 function swissNext(L){const sw=L.sw;if(!sw.done)return;
@@ -2439,20 +2521,110 @@ function playoffPreLine(a,b,L){const bits=[];
 function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box,zone:pickZone(),buy:{a:'full',b:'full'}};}
 function roundLine(r,m,mp){
   const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
+  // mp here is post-round — flag if a side is now ON map/match point (unless the map just ended)
+  const brink=mapDone(mp.sa,mp.sb)?'':brinkNote(m,mp);
   const wb=r.buy?r.buy[r.winA?'a':'b']:'full',lb=r.buy?r.buy[r.winA?'b':'a']:'full';
   const wsc=r.winA?mp.sa:mp.sb,lsc=r.winA?mp.sb:mp.sa,behind=wsc<=lsc; // winner trailing/tied before this round
   // only surface economy when it's dramatic: a trailing side stealing on a save, a reload answering, or a force that died
   const econ=(wb==='eco'&&behind)?` — ${w.short} steal one on the save, and from behind!`
     :(wb==='reload'&&behind)?` — ${w.short} reload, and answer.`
     :(lb==='force')?` — ${(r.winA?m.b:m.a).short}'s force comes up empty.`:'';
-  if(r.vigil)return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ${r.vigil.name} stands alone, 1v${r.vigil.x} at ${r.vigil.zone}, and it's theirs.${econ}`;
+  if(r.vigil)return `R${mp.round} · ${m.a.short} ${score} ${m.b.short}${brink} — ${r.vigil.name} stands alone, 1v${r.vigil.x} at ${r.vigil.zone}, and it's theirs.${econ}`;
   const s=r.star,e=s?r.box[s.id]:null;const tail=e&&e.k>=2?`${s.tag} ${e.k}-for`:(s?`${s.tag} on point`:'');
   const v=r.winA?pick(["break the hold","crack it open","take the contest","force the ember"]):pick(["hold the line","deny the break","smother the push","win the stand"]);
-  return `R${mp.round} · ${m.a.short} ${score} ${m.b.short} — ember in ${r.zone}; ${w.short} ${v}${tail?`, ${tail}`:''}.${econ}`;
+  return `R${mp.round} · ${m.a.short} ${score} ${m.b.short}${brink} — ember in ${r.zone}; ${w.short} ${v}${tail?`, ${tail}`:''}.${econ}`;
 }
-function stepRound(){
-  const L=world.live,m=L.match,mp=m.map;
-  const r=simRound(m.a,m.b,{stage:L.stage==='f'?1:0,mom:momFromStreak(mp.stA||0,mp.stB||0,mp.sa,mp.sb),zone:mp.zone,buy:mp.buy});
+// ---- kill-by-kill: render one round event as a play-by-play beat ----
+function sideShortOf(m,id){return lineup(m.a).some(p=>p.id===id)?m.a.short:m.b.short;}
+function sideOf(m,id){return lineup(m.a).some(p=>p.id===id)?'a':'b';}
+// would winning the NEXT round end the map for a side on this score? (first to 15, win by 2, hard cap 24)
+function isMapPoint(s,o){return (s+1>=15&&s+1-o>=2)||s+1>=24;}
+// the stakes hanging over the upcoming round: overtime, map point, match point.
+function brinkNote(m,mp){const bits=[];
+  if(mp.sa>=15&&mp.sb>=15)bits.push('overtime');
+  ['a','b'].forEach(t=>{const s=t==='a'?mp.sa:mp.sb,o=t==='a'?mp.sb:mp.sa,team=t==='a'?m.a:m.b;
+    if(isMapPoint(s,o))bits.push(`${m.wins&&m.wins[t]===m.target-1?'MATCH POINT':'map point'} ${team.short}`);});
+  return bits.length?` — ${bits.join(' · ')}`:'';}
+// two players with a soured-duo history meeting across the server — reliable grudge color
+function falloutBetween(i,j){return Object.values(world.rivalries).find(x=>x.fallout&&((x.a.id===i&&x.b.id===j)||(x.a.id===j&&x.b.id===i)));}
+function eventKind(ev){
+  if(ev.t==='clutch')return 'win';
+  if(ev.t==='kill'&&ev.n>=3)return 'win';
+  if(ev.t==='kill'&&ev.n===2)return 'kill';
+  if(ev.t==='open')return 'kill';
+  return 'round';}
+function eventLine(ev,m,mp){
+  const K=ev.k!=null?anyPlayerById(ev.k):null,V=ev.v!=null?anyPlayerById(ev.v):null;
+  const kt=K?K.tag:'?',vt=V?V.tag:'?',ksh=K?sideShortOf(m,ev.k):'';
+  if(ev.t==='open')return `▸ ${ksh} draw first blood — ${pick([`${kt} catches ${vt} stepping into ${ev.zone}`,`${kt} wins the opening duel over ${vt} at ${ev.zone}`,`${kt} snaps ${vt} off the entry into ${ev.zone}`])}.`;
+  if(ev.t==='trade')return `↺ ${kt} trades it straight back — ${vt} doesn't get to live with it.`;
+  if(ev.t==='clutch')return `◆ ${kt} the last man standing, 1v${ev.x} at ${ev.zone}… and he STANDS it. The vigil holds.`;
+  if(ev.t==='close'){const wsh=ev.winA?m.a.short:m.b.short,lsh=ev.winA?m.b.short:m.a.short,wa=ev.winA?mp.sa+1:mp.sa,wb=ev.winA?mp.sb:mp.sb+1;
+    const v=ev.winA?pick(['crack it open','take the contest','break the hold','force the ember']):pick(['win the stand','hold the line','deny the break','smother it']);
+    // surface the economy only when it's dramatic — a save stolen, or a force that died
+    const wb2=ev.buy?ev.buy[ev.winA?'a':'b']:'full',lb2=ev.buy?ev.buy[ev.winA?'b':'a']:'full',behind=(ev.winA?mp.sa:mp.sb)<=(ev.winA?mp.sb:mp.sa);
+    const econ=(wb2==='eco'&&behind)?` ${wsh} steal it on the save!`:(lb2==='force')?` ${lsh}'s force comes up empty.`:'';
+    return `▪ ${wsh} ${v} — round to ${wsh}. ${m.a.short} ${wa}–${wb} ${m.b.short}.${econ}`;}
+  // a standard duel kill, escalating with the killer's running count this round
+  const flank=ev.adv<0&&ev.n>=2?pick(['Swinging wide off the flank, ','Re-peeking from the back, ','Off a sneaky flank, ']):'';
+  if(ev.n>=5)return `${flank}${kt} — an ACE! Five for ${kt}, the entire server cleared single-handed!`;
+  if(ev.n>=4)return `${flank}${kt} — FOUR. Is anyone going to stop him?! ${vt} the latest.`;
+  if(ev.n===3)return `${flank}${kt} THREE on the round — ${vt} down, he is unconscious right now!`;
+  if(ev.n===2)return `${flank}${kt} again — that's TWO, ${vt} drops.`;
+  return `${flank}${pick([`${kt} tags ${vt}`,`${kt} drops ${vt}`,`${kt} wins the duel over ${vt}`])}.`;
+}
+// ---- reactions: a player's temperament shows in the moment (Ice stays cold, Volatile erupts) ----
+function reactFlavor(p,big,behind){
+  const tag=p.tag,ice=hasTrait(p,'clutch')||poise(p)>=0.78,hot=hasTrait(p,'hothead')||poise(p)<=0.45;
+  if(hasTrait(p,'headcase')&&behind&&big>=2&&big<5)return `🎙 ${tag} has the kills, but the shoulders are dropping — the head's going.`;
+  if(big>=5){ // an ace — the loudest moment in the game
+    if(hot)return `🎙 ${tag} ACE — he TEARS the headset off and roars, the building is shaking!`;
+    if(ice)return `🎙 ${tag} aces it and barely reacts. Glacial. Who IS this man?`;
+    if(hasTrait(p,'bigGame'))return `🎙 An ACE on the biggest stage — ${tag} was built for this.`;
+    return `🎙 ${tag} aces the round — his teammates mob him!`;}
+  if(big>=4){
+    if(hot)return `🎙 ${tag} ERUPTS — up out of the chair, the building comes down!`;
+    if(ice)return `🎙 ${tag} — pure ice. Sets it down and walks back like it was nothing.`;
+    if(hasTrait(p,'bigGame'))return `🎙 ${tag} owns this stage — and he knows it.`;
+    return `🎙 ${tag} lets it all out. What a moment for him.`;}
+  if(big===3){
+    if(hot)return `🎙 ${tag} FISTS THE AIR and screams to his bench!`;
+    if(ice)return `🎙 ${tag} barely blinks. Cold as you like.`;
+    if(hasTrait(p,'bigGame'))return `🎙 ${tag} feeds off the noise — this is his stage.`;
+    return `🎙 ${tag} pumps the fist.`;}
+  // big===2
+  if(hot)return `🎙 ${tag} barks at his side, fired right up.`;
+  if(ice)return `🎙 ${tag} stays level — onto the next.`;
+  if(hasTrait(p,'bigGame'))return `🎙 ${tag} rising to it.`;
+  return null;}
+function ambientReaction(m,mp){
+  if(rnd()>=0.12)return null;
+  const p=pick(lineup(m.a).concat(lineup(m.b)));if(!p)return null;
+  if(hasTrait(p,'clutch')||poise(p)>=0.78)return pick([`🎙 ${p.tag} calmly calls the reload — unhurried.`,`🎙 ${p.tag} resets his crew with a flat hand. No panic.`]);
+  if(hasTrait(p,'hothead')||poise(p)<=0.45)return pick([`🎙 ${p.tag} is jawing across the server already.`,`🎙 ${p.tag} slams the desk after that exchange.`]);
+  if(hasTrait(p,'mentor'))return `🎙 ${p.tag} steadies the young ones — a quiet word between rounds.`;
+  return pick([`🎙 ${p.tag} re-checks the angles, all business.`,`🎙 ${p.tag} shrugs it off and re-stacks.`]);}
+function reactionLine(ev,m,mp){
+  if(ev.t==='close')return ambientReaction(m,mp);
+  const p=ev.k!=null?anyPlayerById(ev.k):null;if(!p)return null;
+  // a grudge kill on a former duo partner — history across the server
+  if((ev.t==='kill'||ev.t==='open')&&ev.v!=null&&rnd()<0.55){const fb=falloutBetween(ev.k,ev.v);
+    if(fb){const V=anyPlayerById(ev.v);return `🎙 ${p.tag} drops ${V?V.tag:'his man'} — and you know there's history there. They won together once. Not anymore.`;}}
+  // a star opened early — a problem the desk can't ignore
+  if(ev.t==='open'){const V=anyPlayerById(ev.v);
+    if(V&&isLegend(V)&&isRookie(p))return reactFlavor(p,3,false);
+    if(V&&(isLegend(V)||careerGrav(V)>=1.18)&&rnd()<0.4)return `🎙 ${V.tag} caught out first — ${sideShortOf(m,ev.v)} can't afford to lose him on the open like that.`;
+    return null;}
+  let big=0;
+  if(ev.t==='clutch')big=4;
+  else if(ev.t==='kill')big=ev.n>=5?5:ev.n>=4?4:ev.n===3?3:ev.n===2?2:0;
+  if(big<2)return null;
+  const sideA=lineup(m.a).some(q=>q.id===p.id),behind=sideA?mp.sa<mp.sb:mp.sb<mp.sa;
+  return reactFlavor(p,big,behind);}
+// ---- the round, committed: shared bookkeeping for both the fast path and the kill-by-kill reveal ----
+function roundOpts(L,mp,ev){return {stage:L.stage==='f'?1:0,mom:momFromStreak(mp.stA||0,mp.stB||0,mp.sa,mp.sb),zone:mp.zone,buy:mp.buy,events:!!ev};}
+function commitRound(L,r,summary){
+  const m=L.match,mp=m.map;
   mp.lastZone=r.zone;if(r.winA){mp.sa++;mp.stA=(mp.stA||0)+1;mp.stB=0;}else{mp.sb++;mp.stB=(mp.stB||0)+1;mp.stA=0;}mp.round++;
   mp.buy.a=nextBuy(mp.buy.a,r.winA,mp.sb>=13||mp.stB>=3);mp.buy.b=nextBuy(mp.buy.b,!r.winA,mp.sa>=13||mp.stA>=3);
   mp.zone=nextZone(mp.zone,r.winA?m.a:m.b,r.winA?m.b:m.a);
@@ -2463,17 +2635,42 @@ function stepRound(){
     if(!m.seriesBox[p.id])m.seriesBox[p.id]=blankBox();addBox(m.seriesBox[p.id],e);
     accStat(p,e);});
   if(r.vigil){mp.mapVigils.push(r.vigil);L.matchVigils.push(r.vigil);}
-  pushLog(L,roundLine(r,m,mp),'round');
+  if(summary)pushLog(L,roundLine(r,m,mp),'round');
   deskRoundColor(L,r);
   if(mapDone(mp.sa,mp.sb))return mapEnd();
   return 'round';
 }
+// fast path: simulate a whole round and post one summary line (▶ Round / ▶▶ Map / ⏭ Match / auto-finish)
+function stepRound(){
+  const L=world.live,m=L.match,mp=m.map;
+  if(mp.cur){const r=mp.cur.r;mp.cur=null;return commitRound(L,r,true);} // flush a half-revealed kill-by-kill round
+  const r=simRound(m.a,m.b,roundOpts(L,mp,false));
+  return commitRound(L,r,true);
+}
+// kill-by-kill: begin a round, then reveal it one beat at a time (auto-play)
+function beginRound(L){const m=L.match,mp=m.map;
+  const r=simRound(m.a,m.b,roundOpts(L,mp,true));
+  mp.cur={r,ev:r.events||[],ei:0,upA:lineup(m.a).length,upB:lineup(m.b).length};
+  pushLog(L,`R${mp.round+1} · ${m.a.short} ${mp.sa}–${mp.sb} ${m.b.short}${brinkNote(m,mp)} — ember contested at ${r.zone}.`,'map');
+  return 'event';}
+function revealEvent(L){const m=L.match,mp=m.map,cur=mp.cur;if(!cur)return 'round';
+  if(cur.ei>=cur.ev.length)return finishRound(L);
+  const ev=cur.ev[cur.ei++];
+  if(ev.v!=null&&(ev.t==='open'||ev.t==='kill'||ev.t==='trade')){if(sideOf(m,ev.v)==='a')cur.upA--;else cur.upB--;} // live man-count
+  pushLog(L,eventLine(ev,m,mp),eventKind(ev));
+  const rx=reactionLine(ev,m,mp);if(rx)pushLog(L,rx,'color');
+  if(cur.ei>=cur.ev.length)return finishRound(L);
+  return 'event';}
+function finishRound(L){const mp=L.match.map,r=mp.cur.r;mp.cur=null;return commitRound(L,r,false);}
+function stepKill(){const L=world.live,mp=L.match.map;
+  if(!mp.cur)return beginRound(L);
+  return revealEvent(L);}
 function mapEnd(){
   const L=world.live,m=L.match,mp=m.map,aWon=mp.sa>mp.sb;
   if(aWon)m.wins.a++;else m.wins.b++;
   m.maps.push({aWon,sa:mp.sa,sb:mp.sb,zone:mp.lastZone,vigils:mp.mapVigils,box:finalBoxSnapshot(m.a,m.b,mp.box)});
   {const mg={};for(const id in mp.perf){const a=mp.perf[id];mg[id]=a.reduce((s,x)=>s+x,0)/a.length;}
-   recordGamePerf(mg,mp.box,m.a,m.b,aWon?m.a:m.b,{event:L.name,tier:L.tier||'SP',round:L.stage==='f'?(L.tier==='WC'?'World final':'Major final'):L.stage==='sf'?'SF':'QF',mapNo:m.maps.length},mp.lastZone);
+   recordGamePerf(mg,mp.box,m.a,m.b,aWon?m.a:m.b,{event:L.name,tier:L.tier||'SP',round:L.swMatch?'Swiss':L.stage==='f'?(L.tier==='WC'?'World final':'Major final'):L.stage==='sf'?'SF':'QF',mapNo:m.maps.length},mp.lastZone);
    pushLog(L,`MAP ${m.maps.length}: ${(aWon?m.a:m.b).short} ${Math.max(mp.sa,mp.sb)}–${Math.min(mp.sa,mp.sb)} on ${mp.lastZone}. Series ${m.a.short} ${m.wins.a}–${m.wins.b} ${m.b.short}.`,'mapend');
    deskMapColor(L,mg);}
   if(m.wins.a>=m.target||m.wins.b>=m.target)return matchEnd();
@@ -2484,10 +2681,16 @@ function matchEnd(){
   clearSeriesState(m.a,m.b);
   const sg={};for(const id in m.perf){const arr=m.perf[id];sg[id]=arr.reduce((s,x)=>s+x,0)/arr.length;}
   for(const id in sg){const p=findPlayer(+id);if(p)p.gravs.push(sg[id]);}
-  accEventPerf(sg,L.stage==='qf'?2:L.stage==='sf'?3:4,m.seriesBox); // tally toward the tournament MVP / All-Major team
+  accEventPerf(sg,L.swMatch?1:L.stage==='qf'?2:L.stage==='sf'?3:4,m.seriesBox); // tally toward the tournament MVP / All-Major team
   const champ=m.wins.a>m.wins.b?m.a:m.b,loser=champ===m.a?m.b:m.a;
   let ra=0,rb=0,dA=false,dB=false;for(const mm of m.maps){if(mm.aWon)ra++;else rb++;if(ra===0&&rb===2)dA=true;if(rb===0&&ra===2)dB=true;}
   const deadlift=(champ===m.a&&dA)||(champ===m.b&&dB);
+  if(L.swMatch){const x=L.swMatch.x,y=L.swMatch.y,pair=L.swMatch.pair; // a live-called Swiss tie: record it and drop back to the bracket
+    const s={wa:m.wins.a,wb:m.wins.b,maps:m.maps,sg,deadlift,winner:champ,loser};
+    pair.done=true;L.match=null;L.swMatch=null;
+    recordSwissResult(L,x,y,s);
+    if(!L.sw.done&&nextSwissPair(L.sw)<0)swissBeginRound(L);
+    return 'matchend';}
   const scoreStr=`${Math.max(m.wins.a,m.wins.b)}–${Math.min(m.wins.a,m.wins.b)}`;
   const sn=L.stage==='qf'?'quarterfinal':L.stage==='sf'?'semifinal':'final';
   pushLog(L,`${champ.short} win the ${sn} ${scoreStr}${deadlift?' — a deadlift off the floor!':''}.`,'win');
@@ -2509,9 +2712,9 @@ function eventEnd(){
   world.pendingMajors=(world.pendingMajors||[]).filter(e=>pendName(e)!==L.name);
   pushLog(L,L.tier==='WC'?`${L.finalChamp.name} are crowned World Champions of Season ${world.season}. A crown cairn rises at ${data.zone}.`:`${L.finalChamp.name} are champions of the ${L.name}. A ${data.cairnStyle} cairn rises at ${data.zone}.`,'champion');
 }
-function liveRound(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;stepRound();renderCast();}
-function liveMap(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;let s;do{s=stepRound();}while(s==='round');renderCast();}
-function liveMatch(){const L=world.live;if(!L||L.done||L.stage==='swiss')return;let s;do{s=stepRound();}while(s==='round'||s==='mapend');renderCast();}
+function liveRound(){const L=world.live;if(!L||L.done||!L.match)return;stepRound();renderCast();}
+function liveMap(){const L=world.live;if(!L||L.done||!L.match)return;let s;do{s=stepRound();}while(s==='round');renderCast();}
+function liveMatch(){const L=world.live;if(!L||L.done||!L.match)return;let s;do{s=stepRound();}while(s==='round'||s==='mapend');renderCast();}
 function liveAuto(){const L=world.live;if(!L||L.done)return;
   if(L.stage==='preview')startSwissStage(L);
   let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);} // finish each Swiss stage, then auto the playoffs
@@ -2519,15 +2722,15 @@ function liveAuto(){const L=world.live;if(!L||L.done)return;
 function liveToFinal(){const L=world.live;if(!L||L.done)return;if(L.stage==='preview')startSwissStage(L);let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);}let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
 // ---- auto-play: tick the live match one round at a time at a chosen speed ----
 let castTimer=null;
-const CAST_SPEEDS=[{ms:1500,lab:'1×'},{ms:750,lab:'2×'},{ms:300,lab:'4×'}];
+const CAST_SPEEDS=[{ms:1100,lab:'1×'},{ms:550,lab:'2×'},{ms:260,lab:'4×'},{ms:120,lab:'8×'}];
 function castSpeed(L){return CAST_SPEEDS[(L&&L.speedIdx)||0];}
 function castTick(){const L=world.live;
-  if(!L||L.done||L.stage==='swiss'||L.stage==='preview'||!L.match){stopPlay();renderCast();return;}
-  const s=stepRound();renderCast();
+  if(!L||L.done||L.stage==='preview'||!L.match){stopPlay();renderCast();return;}
+  const s=stepKill();renderCast();
   if(s==='eventend'||L.done)stopPlay();
 }
 function armPlay(){if(castTimer){clearInterval(castTimer);castTimer=null;}const L=world.live;if(L&&L.playing&&!L.done)castTimer=setInterval(castTick,castSpeed(L).ms);}
-function startPlay(){const L=world.live;if(!L||L.done||L.stage==='swiss'||L.stage==='preview'||!L.match)return;L.playing=true;armPlay();}
+function startPlay(){const L=world.live;if(!L||L.done||L.stage==='preview'||!L.match)return;L.playing=true;armPlay();}
 function stopPlay(){const L=world.live;if(L)L.playing=false;if(castTimer){clearInterval(castTimer);castTimer=null;}}
 function togglePlay(){const L=world.live;if(!L)return;if(L.playing)stopPlay();else startPlay();renderCast();}
 function cycleSpeed(){const L=world.live;if(!L)return;L.speedIdx=((L.speedIdx||0)+1)%CAST_SPEEDS.length;if(L.playing)armPlay();renderCast();}
@@ -2584,9 +2787,23 @@ function swissView(L){const sw=L.sw,rec=sw.rec;
   const nextLbl=sw.label==='Challengers'?'▶ To the Legends Stage':'▶ To the playoffs';
   let h=`<div class="cast-head"><div class="cast-title">${esc(L.name)}</div><div class="cast-stage">${esc(sw.label||'Swiss')} Stage${sw.done?' · complete':` · Round ${sw.round}`}</div></div>`;
   h+=`<div class="bracket"><div class="brk-row"><span class="brk-lab">${sw.label==='Challengers'?'CH':sw.label==='Legends'?'LG':'SW'}</span> <span class="faint">${sw.field.length} teams · 3 wins advance, 3 losses out${sw.label==='Challengers'?' (into Legends)':''}</span></div>`;
-  if(!sw.done&&sw.pairs.length)h+=`<div class="brk-row"><span class="brk-lab">R${sw.round}</span> ${sw.pairs.map((p,i)=>`<span class="brk-tie ${i===sw.pairIdx?'live':''}" style="${i<sw.pairIdx?'opacity:.5':''}">${p[0].short}/${p[1].short}</span>`).join(' ')}</div>`;
+  if(!sw.done&&sw.pairs.length)h+=`<div class="brk-row"><span class="brk-lab">R${sw.round}</span> ${sw.pairs.map(p=>`<span class="brk-tie" style="${p.done?'opacity:.45':''}">${p[0].short}/${p[1].short}</span>`).join(' ')}</div>`;
   h+=`</div>`;
-  h+=`<div class="cast-ctl">${sw.done?`<button class="ctl primary" data-act="snext">${nextLbl}</button>`:`<button class="ctl primary" data-act="smatch">▶ Match</button><button class="ctl" data-act="sround">▶▶ Round</button><button class="ctl" data-act="sfinish">⏩ Auto-finish ${esc(sw.label||'Swiss')}</button>`}<button class="ctl" data-act="auto">⏹ Auto whole event</button></div>`;
+  h+=`<div class="cast-ctl">${sw.done?`<button class="ctl primary" data-act="snext">${nextLbl}</button>`:`<button class="ctl primary" data-act="smatch">▶ Next match</button><button class="ctl" data-act="sround">▶▶ Round</button><button class="ctl" data-act="sfinish">⏩ Auto-finish ${esc(sw.label||'Swiss')}</button>`}<button class="ctl" data-act="auto">⏹ Auto whole event</button></div>`;
+  // call any tie of the live round round-by-round — cherry-pick the 2–2 v 2–2 that matters
+  if(!sw.done&&sw.pairs.length){
+    // rank the live round's ties by stakes and flag the single biggest as the feature match
+    const stakeScore=p=>{const rx=rec.get(p[0]),ry=rec.get(p[1]);let s=Math.abs(rx.seed-ry.seed);
+      if(rx.w===2&&rx.l===2)s+=60;if(ry.w===2&&ry.l===2)s+=60; // a 2–2 side: win-and-in or lose-and-out
+      s+=(rx.w===2?22:0)+(ry.w===2?22:0)+(rx.l===2?18:0)+(ry.l===2?18:0);
+      if(swissStakes(p[0],p[1],rec))s+=8;if(p[0].div!==p[1].div)s+=6;return s;};
+    let featIdx=-1,featBest=-1;sw.pairs.forEach((p,i)=>{if(p.done)return;const sc=stakeScore(p);if(sc>featBest){featBest=sc;featIdx=i;}});
+    h+=`<div class="boxwrap" style="margin-bottom:10px"><div class="bx-cap">Round ${sw.round} — call a match live</div>`;
+    h+=sw.pairs.map((p,i)=>{const[x,y]=p,rx=rec.get(x),ry=rec.get(y),bo3=swissStakes(x,y,rec),feat=i===featIdx;
+      const tag=bo3?(rx.w===2||ry.w===2?'★ advance':rx.l===2||ry.l===2?'★ elimination':'Bo3'):'Bo1';
+      const fb=feat?' <span class="tag-pill" style="color:var(--ember);border-color:var(--ember)">◈ feature</span>':'';
+      return `<div class="match"><span class="side">${esc(x.short)} <span class="faint">${rx.w}–${rx.l}</span> v ${esc(y.short)} <span class="faint">${ry.w}–${ry.l}</span> <span class="tag-pill">${tag}</span>${fb}</span><span class="side">${p.done?'<span class="faint">played</span>':`<button class="ctl ${feat?'primary':''}" data-act="swatch" data-idx="${i}">◉ Watch</button>`}</span></div>`;}).join('');
+    h+=`</div>`;}
   h+=`<div class="boxwrap" style="margin-bottom:10px"><div class="bx-cap">Swiss standings · Buch = strength of schedule</div><table class="bx"><thead><tr><th>Team</th><th>W</th><th>L</th><th title="Buchholz">Buch</th><th></th></tr></thead><tbody>`;
   h+=all.map(t=>{const r=rec.get(t);return `<tr><td class="bx-nm">${esc(t.name)} <span class="role">${esc(t.short)}</span>${t.div===2?' <span class="t2pill">T2</span>':''}</td><td class="bx-k">${r.w}</td><td>${r.l}</td><td class="faint">${buchholz(t,rec)}</td><td>${status(t)}</td></tr>`;}).join('');
   h+=`</tbody></table></div>`;
@@ -2600,20 +2817,20 @@ function previewView(L){const host=(world.casters||[]).find(c=>c.host);
 function renderCast(){
   const el=$("p-cast");const L=world.live;
   if(L&&!L.done&&L.stage==='preview'){el.innerHTML=previewView(L);return;}
-  if(L&&!L.done&&L.stage==='swiss'){el.innerHTML=swissView(L);return;}
+  if(L&&!L.done&&L.stage==='swiss'&&!L.swMatch){el.innerHTML=swissView(L);return;}
   if(L&&!L.done){
-    const m=L.match,mp=m.map;
-    const stageName=L.stage==='qf'?'Quarterfinals':L.stage==='sf'?'Semifinals':'Final';
-    const matchNo=L.stage==='f'?'':` · Match ${L.matchIdx+1} of ${L.stage==='qf'?4:2}`;
+    const m=L.match,mp=m.map,sw=L.swMatch;
+    const stageName=sw?`${L.swStage||'Swiss'} Stage · live`:L.stage==='qf'?'Quarterfinals':L.stage==='sf'?'Semifinals':'Final';
+    const matchNo=sw?` · best of ${m.target*2-1}`:L.stage==='f'?'':` · Match ${L.matchIdx+1} of ${L.stage==='qf'?4:2}`;
     let h=`<div class="cast-head"><div class="cast-title">${L.name}</div><div class="cast-stage">${stageName}${matchNo}</div></div>`;
-    h+=bracketStrip(L);
-    h+=`<div class="scoreboard"><div class="sb-team">${esc(m.a.name)}</div><div class="sb-mid"><div class="sb-series">series ${m.wins.a}–${m.wins.b}</div><div class="sb-map">${mp.sa}–${mp.sb}</div><div class="sb-zone">${mp.round?`map ${m.maps.length+1} · last: ${mp.lastZone}`:`map ${m.maps.length+1} · first to 15`}</div></div><div class="sb-team">${esc(m.b.name)}</div></div>`;
+    if(!sw)h+=bracketStrip(L);
+    h+=`<div class="scoreboard"><div class="sb-team">${esc(m.a.name)}</div><div class="sb-mid"><div class="sb-series">series ${m.wins.a}–${m.wins.b}</div><div class="sb-map">${mp.sa}–${mp.sb}</div><div class="sb-zone">${mp.cur?`◉ ${mp.cur.upA}v${mp.cur.upB} · ${mp.cur.r.zone}`:mp.round?`map ${m.maps.length+1} · last: ${mp.lastZone}`:`map ${m.maps.length+1} · first to 15`}</div></div><div class="sb-team">${esc(m.b.name)}</div></div>`;
     if(L.stage==='f'&&mp.round===0&&m.maps.length===0){
       if(L.stagePreview)h+=`<div class="desk"><div class="desk-label">From the desk · the stage</div>${fmtAI(L.stagePreview)}</div>`;
       else if(L.stagePreviewLoading)h+=`<div class="desk-loading">the desk is setting the stage…</div>`;
       else h+=`<button class="ctl narrate" data-act="stage">✦ Desk: set the stage</button>${L.stagePreviewErr?`<div class="desk-err">${esc(L.stagePreviewErr)}</div>`:''}`;
     }
-    h+=`<div class="cast-ctl"><button class="ctl ${L.playing?'':'primary'}" data-act="play">${L.playing?'⏸ Pause':'▶ Auto-play'}</button><button class="ctl" data-act="speed" title="playback speed">${castSpeed(L).lab}</button><button class="ctl" data-act="round">▶ Round</button><button class="ctl" data-act="map">▶▶ Map</button><button class="ctl" data-act="match">⏭ Match</button>${L.stage!=='f'?'<button class="ctl" data-act="tofinal">⏩ To the Final</button>':''}<button class="ctl" data-act="auto">⏹ Auto-finish</button></div>`;
+    h+=`<div class="cast-ctl"><button class="ctl ${L.playing?'':'primary'}" data-act="play">${L.playing?'⏸ Pause':'▶ Auto-play'}</button><button class="ctl" data-act="speed" title="playback speed">${castSpeed(L).lab}</button><button class="ctl" data-act="round">▶ Round</button><button class="ctl" data-act="map">▶▶ Map</button><button class="ctl" data-act="match">⏭ Match</button>${(!sw&&L.stage!=='f')?'<button class="ctl" data-act="tofinal">⏩ To the Final</button>':''}<button class="ctl" data-act="auto">⏹ Auto-finish</button></div>`;
     h+=`<div class="cast-tabs"><button class="ctab ${L.view!=='box'?'on':''}" data-act="vlog">Play-by-play</button><button class="ctab ${L.view==='box'?'on':''}" data-act="vbox">Box score</button></div>`;
     if(L.view==='box')h+=boxTable(m,mp,L);
     else h+=`<div class="pbp">${L.log.map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
@@ -2712,6 +2929,7 @@ document.getElementById("p-cast").addEventListener("click",e=>{
   else if(a==='sround'){if(world.live){swissPlayRound(world.live);renderCast();}}
   else if(a==='sfinish'){if(world.live){swissAutoFinish(world.live);renderCast();}}
   else if(a==='snext'){if(world.live){swissNext(world.live);renderCast();}}
+  else if(a==='swatch'){if(world.live)swissWatch(world.live,+el.dataset.idx);}
   else if(a==='play')togglePlay();else if(a==='speed')cycleSpeed();
   else if(a==='round'){stopPlay();liveRound();}else if(a==='map'){stopPlay();liveMap();}else if(a==='match'){stopPlay();liveMatch();}else if(a==='tofinal'){stopPlay();liveToFinal();}else if(a==='auto'){stopPlay();liveAuto();}
   else if(a==='broadcast')liveSetup(el.dataset.name,el.dataset.tier);else if(a==='autosim'){autoOneEvent(el.dataset.name,el.dataset.tier);render();}else if(a==='stage')narrateStage();
