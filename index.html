@@ -2437,7 +2437,21 @@ function liveAuto(){const L=world.live;if(!L||L.done)return;
   let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);} // finish each Swiss stage, then auto the playoffs
   let s;do{s=stepRound();}while(s!=='eventend');render();}
 function liveToFinal(){const L=world.live;if(!L||L.done)return;if(L.stage==='preview')startSwissStage(L);let g=0;while(L.stage==='swiss'&&g++<6){swissAutoFinish(L);swissNext(L);}let s;do{s=stepRound();}while(s!=='eventend'&&!(L.stage==='f'&&L.match.map.round===0));renderCast();}
-function endBroadcast(){world.live=null;render();switchTab('feed');}
+// ---- auto-play: tick the live match one round at a time at a chosen speed ----
+let castTimer=null;
+const CAST_SPEEDS=[{ms:1500,lab:'1×'},{ms:750,lab:'2×'},{ms:300,lab:'4×'}];
+function castSpeed(L){return CAST_SPEEDS[(L&&L.speedIdx)||0];}
+function castTick(){const L=world.live;
+  if(!L||L.done||L.stage==='swiss'||L.stage==='preview'||!L.match){stopPlay();renderCast();return;}
+  const s=stepRound();renderCast();
+  if(s==='eventend'||L.done)stopPlay();
+}
+function armPlay(){if(castTimer){clearInterval(castTimer);castTimer=null;}const L=world.live;if(L&&L.playing&&!L.done)castTimer=setInterval(castTick,castSpeed(L).ms);}
+function startPlay(){const L=world.live;if(!L||L.done||L.stage==='swiss'||L.stage==='preview'||!L.match)return;L.playing=true;armPlay();}
+function stopPlay(){const L=world.live;if(L)L.playing=false;if(castTimer){clearInterval(castTimer);castTimer=null;}}
+function togglePlay(){const L=world.live;if(!L)return;if(L.playing)stopPlay();else startPlay();renderCast();}
+function cycleSpeed(){const L=world.live;if(!L)return;L.speedIdx=((L.speedIdx||0)+1)%CAST_SPEEDS.length;if(L.playing)armPlay();renderCast();}
+function endBroadcast(){stopPlay();world.live=null;render();switchTab('feed');}
 function buildFinalPreviewPrompt(L){
   const c=L.fPair[0],r=L.fPair[1];const sA=starOf(c),sB=starOf(r);const pn=p=>`${p.first} "${p.tag}" ${p.last}`;
   const f=[];
@@ -2519,7 +2533,7 @@ function renderCast(){
       else if(L.stagePreviewLoading)h+=`<div class="desk-loading">the desk is setting the stage…</div>`;
       else h+=`<button class="ctl narrate" data-act="stage">✦ Desk: set the stage</button>${L.stagePreviewErr?`<div class="desk-err">${esc(L.stagePreviewErr)}</div>`:''}`;
     }
-    h+=`<div class="cast-ctl"><button class="ctl primary" data-act="round">▶ Round</button><button class="ctl" data-act="map">▶▶ Map</button><button class="ctl" data-act="match">⏭ Match</button>${L.stage!=='f'?'<button class="ctl" data-act="tofinal">⏩ To the Final</button>':''}<button class="ctl" data-act="auto">⏹ Auto-finish</button></div>`;
+    h+=`<div class="cast-ctl"><button class="ctl ${L.playing?'':'primary'}" data-act="play">${L.playing?'⏸ Pause':'▶ Auto-play'}</button><button class="ctl" data-act="speed" title="playback speed">${castSpeed(L).lab}</button><button class="ctl" data-act="round">▶ Round</button><button class="ctl" data-act="map">▶▶ Map</button><button class="ctl" data-act="match">⏭ Match</button>${L.stage!=='f'?'<button class="ctl" data-act="tofinal">⏩ To the Final</button>':''}<button class="ctl" data-act="auto">⏹ Auto-finish</button></div>`;
     h+=`<div class="cast-tabs"><button class="ctab ${L.view!=='box'?'on':''}" data-act="vlog">Play-by-play</button><button class="ctab ${L.view==='box'?'on':''}" data-act="vbox">Box score</button></div>`;
     if(L.view==='box')h+=boxTable(m,mp,L);
     else h+=`<div class="pbp">${L.log.map(l=>`<div class="pbp-line ${l.kind}">${esc(l.text)}</div>`).join("")}</div>`;
@@ -2555,7 +2569,8 @@ function doSeason(){ // play through the rest of the current season's four stage
 }
 function doFive(){for(let n=0;n<5;n++){let guard=0;do{stepTick();}while(world.tick<4&&guard++<8);}autoResolveMajors();render();switchTab('feed');}
 function doReset(){world=newWorld();render();switchTab("feed");}
-function switchTab(p){document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.p===p));
+function switchTab(p){if(p!=='cast')stopPlay(); // leaving the broadcast halts auto-play
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",t.dataset.p===p));
   document.querySelectorAll(".panel").forEach(s=>s.classList.toggle("active",s.id==="p-"+p));}
 document.getElementById("tabs").addEventListener("click",e=>{const t=e.target.closest(".tab");if(t)switchTab(t.dataset.p);});
 $("btnStage").addEventListener("click",doStage);
@@ -2613,7 +2628,8 @@ document.getElementById("p-cast").addEventListener("click",e=>{const el=e.target
   else if(a==='sround'){if(world.live){swissPlayRound(world.live);renderCast();}}
   else if(a==='sfinish'){if(world.live){swissAutoFinish(world.live);renderCast();}}
   else if(a==='snext'){if(world.live){swissNext(world.live);renderCast();}}
-  else if(a==='round')liveRound();else if(a==='map')liveMap();else if(a==='match')liveMatch();else if(a==='tofinal')liveToFinal();else if(a==='auto')liveAuto();
+  else if(a==='play')togglePlay();else if(a==='speed')cycleSpeed();
+  else if(a==='round'){stopPlay();liveRound();}else if(a==='map'){stopPlay();liveMap();}else if(a==='match'){stopPlay();liveMatch();}else if(a==='tofinal'){stopPlay();liveToFinal();}else if(a==='auto'){stopPlay();liveAuto();}
   else if(a==='broadcast')liveSetup(el.dataset.name,el.dataset.tier);else if(a==='autosim'){autoOneEvent(el.dataset.name,el.dataset.tier);render();}else if(a==='stage')narrateStage();
   else if(a==='recap'){const L=world.live;if(L&&L.feedId!=null)narrate(L.feedId);}else if(a==='end')endBroadcast();
   else if(a==='vbox'){if(world.live){world.live.view='box';renderCast();}}else if(a==='vlog'){if(world.live){world.live.view='log';renderCast();}}
