@@ -215,6 +215,10 @@
   .goat-seasons .gs .cp-s{margin-right:1px;}
   .traits{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0 2px;}
   .trait{font-size:10px;letter-spacing:.05em;border:1px solid var(--line);border-radius:9px;padding:1px 8px;background:#1a1610;cursor:help;}
+  .honours{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 2px;}
+  .hon{font-size:10.5px;letter-spacing:.03em;color:var(--cairn);border:1px solid var(--cairn);border-radius:9px;padding:1px 8px;background:#1b1709;cursor:help;}
+  .hon-w{color:var(--ember);border-color:var(--ember);}
+  .hon-mvp{color:#1a140a;background:var(--ember);border-color:var(--ember);font-weight:600;}
   .t2pill{font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);border:1px solid var(--line);border-radius:6px;padding:0 4px;margin-left:3px;vertical-align:middle;}
   .txn{font-size:12.5px;color:var(--muted);padding:5px 0;border-bottom:1px solid #211b13;line-height:1.4;}
   .txn-s{color:var(--faint);font-family:ui-monospace,monospace;font-size:11px;margin-right:4px;}
@@ -237,6 +241,7 @@
   .tl-first .tl-ic,.tl-marked .tl-ic{color:var(--cairn);}
   .tl-deadlift .tl-ic,.tl-streak .tl-ic{color:var(--ember);}
   .tl-era .tl-ic{color:var(--gravl);}
+  .tl-mvp .tl-ic{color:var(--ember);}
   .tl-era .tl-t{letter-spacing:.04em;}
   table.perf{width:100%;border-collapse:collapse;font-size:13px;}
   table.perf th{text-align:left;color:var(--faint);font-weight:600;font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);}
@@ -988,6 +993,20 @@ function goatScore(p){
 // Position-independent: the most important player of all time, any role. Trophies (Worlds above Majors),
 // sustained impact (career Gravity), peer recognition (All-Star #1s across every role), and longevity.
 function allStarCount(p){return ROLES.reduce((n,r)=>n+(((world.goatLog&&world.goatLog[r])||[]).filter(e=>e.id===p.id).length),0);}
+// The full trophy cabinet for a player: premier MVPs (Major vs World), All-Major team selections, season All-Stars.
+function playerAwards(p){let majorMvp=0,worldMvp=0,majorAllStar=0,worldAllStar=0;
+  (world.majorMVPs||[]).forEach(e=>{const wc=e.tier==='WC';
+    if(e.mvp&&e.mvp.pid===p.id){if(wc)worldMvp++;else majorMvp++;}
+    if(e.allMajor&&e.allMajor.some(a=>a&&a.pid===p.id)){if(wc)worldAllStar++;else majorAllStar++;}});
+  const seasonMvp=(world.seasonMVPs||[]).filter(e=>e.id===p.id).length;
+  return {majorMvp,worldMvp,majorAllStar,worldAllStar,allStar:majorAllStar+worldAllStar,seasonAllStar:allStarCount(p),seasonMvp};}
+function honoursLine(p){const a=playerAwards(p);const bits=[];
+  if(a.seasonMvp)bits.push(`<span class="hon hon-mvp" title="Season MVP — the season's single most valuable player">✪ ${a.seasonMvp}× Season MVP</span>`);
+  if(a.worldMvp)bits.push(`<span class="hon hon-w" title="World Championship MVP">♛ ${a.worldMvp}× World MVP</span>`);
+  if(a.majorMvp)bits.push(`<span class="hon" title="Major MVP">★ ${a.majorMvp}× Major MVP</span>`);
+  if(a.allStar)bits.push(`<span class="hon" title="All-Major team selections (incl. ${a.worldAllStar} at Worlds)">▲ ${a.allStar}× All-Major</span>`);
+  if(a.seasonAllStar)bits.push(`<span class="hon" title="Season All-Star — best at his role that season">◆ ${a.seasonAllStar}× Season All-Star</span>`);
+  return bits.length?`<div class="honours">${bits.join('')}</div>`:'';}
 function legendScore(p){
   const cg=p.games?careerGrav(p):0;
   const worlds=p.worlds||0,majors=Math.max(0,(p.titles||0)-worlds);
@@ -1002,6 +1021,20 @@ function endSeasonRecords(){
     if(best){world.goatLog[role]=world.goatLog[role]||[];const tm=teamOf(best);
       world.goatLog[role].push({season:s,year:world.year,id:best.id,tag:best.tag,name:`${best.first} "${best.tag}" ${best.last}`,short:tm?tm.short:'—',teamName:tm?tm.name:'—',grav:+bestG.toFixed(2),titles:best.titles});}
   });
+  // Season MVP — the single most valuable player across the whole circuit: quality x volume of deep runs, plus
+  // the season's hardware (premier MVPs and All-Major nods). One name, the way a real league crowns its MVP.
+  const sm=(world.majorMVPs||[]).filter(e=>e.season===s);
+  let mvpP=null,mvpSc=-1,mvpAvg=0,mvpHw=null;
+  world.teams.forEach(t=>contracted(t).forEach(p=>{const arr=p.gravs.slice(p._gravMark||0);
+    if(arr.length<4)return;const avg=arr.reduce((x,y)=>x+y,0)/arr.length,vol=Math.min(arr.length,40);
+    let smvp=0,wmvp=0,as=0;sm.forEach(e=>{if(e.mvp&&e.mvp.pid===p.id){if(e.tier==='WC')wmvp++;else smvp++;}if(e.allMajor&&e.allMajor.some(a=>a&&a.pid===p.id))as++;});
+    const sc=(avg-0.92)*vol*4+wmvp*8+smvp*4+as*1.5;
+    if(sc>mvpSc){mvpSc=sc;mvpP=p;mvpAvg=avg;mvpHw={smvp,wmvp,as};}}));
+  if(mvpP){const tm=teamOf(mvpP);
+    (world.seasonMVPs=world.seasonMVPs||[]).push({season:s,year:world.year,id:mvpP.id,tag:mvpP.tag,name:pfull(mvpP),short:tm?tm.short:'—',teamName:tm?tm.name:'—',role:mvpP.role,avg:+mvpAvg.toFixed(2)});
+    const hw=[];if(mvpHw.wmvp)hw.push(`${mvpHw.wmvp} World MVP`);if(mvpHw.smvp)hw.push(`${mvpHw.smvp} Major MVP`);
+    feedPush('note',`Season ${s} MVP`,`${nm(mvpP)} is named <b>Season ${s} MVP</b>${tm?` — the season's most valuable player at ${esc(tm.name)}`:''}. ${mvpAvg.toFixed(2)} average Gravity across every stage${hw.length?`, with ${hw.join(' and ')}`:''}.`);
+    timelinePush({kind:'mvp',icon:'✪',short:tm?tm.short:'—',title:`${mvpP.tag} — Season ${s} MVP`,text:`${pfull(mvpP)} is the most valuable player of Season ${s}${tm?` for ${tm.name}`:''} — ${mvpAvg.toFixed(2)} average Gravity across the circuit.`});}
 }
 /* ---- living relationships: core duos, mentor lineages, grudges ---- */
 function pfull(p){return `${p.first} "${p.tag}" ${p.last}`;}
@@ -1768,7 +1801,7 @@ function allPlayers(){const a=[];
 function bar(label,v){return `<div class="atr"><span class="atr-l">${label}</span><span class="atr-bar"><i style="width:${Math.round(v)}%"></i></span><span class="atr-v">${Math.round(v)}</span></div>`;}
 function majorTitles(p){return Math.max(0,(p.titles||0)-(p.worlds||0));}
 function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!==null&&cg>=1.15&&p.titles===0;const r=p.r;const editing=editPid===p.id;
-  const wt=p.worlds||0,mt=majorTitles(p);
+  const wt=p.worlds||0,mt=majorTitles(p);const aw=playerAwards(p);
   const honours=[];if(wt)honours.push(`<span class="good">♛ ${wt} World${wt>1?'s':''}</span>`);if(mt)honours.push(`<span class="good">${mt} Major${mt>1?'s':''}</span>`);
   const attrs=editing
     ? editRow('Aim','aim',r.aim,p.id)+editRow('Read','read',r.read,p.id)+editRow('Entry','entry',r.entry,p.id)+editRow('Clutch','clutch',r.clutch,p.id)+editRow('Util','util',r.util,p.id)+editRow('Consist','consistency',r.consistency,p.id)
@@ -1777,6 +1810,7 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
   return `<div class="scout">
     <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?esc(t.name):'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.onDesk?' · <span class="good">🎙 on the desk</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':honours.length?' · '+honours.join(' · '):''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
     ${traitPills(p)}
+    ${honoursLine(p)}
     ${careerPath(p)}
     ${relLine(p)}
     <div class="scout-cols">
@@ -1785,6 +1819,9 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
         <div class="ss"><span>Gravity</span><b class="grav">${cg!==null?cg.toFixed(2):'—'}</b></div>
         <div class="ss"><span>Potential</span><b class="grav faint" title="developmental ceiling">${p.pot||'—'}</b></div>
         <div class="ss"><span>♛ World / ▲ Major</span><b><span class="${wt?'':'faint'}" style="${wt?'color:var(--ember)':''}">${wt}</span> / ${mt}</b></div>
+        <div class="ss"><span>✪ Season MVP</span><b>${aw.seasonMvp?`<span style="color:var(--ember)">${aw.seasonMvp}</span>`:'—'}</b></div>
+        <div class="ss"><span>MVP ★ Major / ♛ World</span><b>${aw.majorMvp||'—'} / <span class="${aw.worldMvp?'':'faint'}" style="${aw.worldMvp?'color:var(--ember)':''}">${aw.worldMvp||0}</span></b></div>
+        <div class="ss"><span>All-Major · Season All-Star</span><b>${aw.allStar||'—'} · ${aw.seasonAllStar||'—'}</b></div>
         <div class="ss"><span>K / D / A</span><b>${s.k} / ${s.d} / ${s.a}</b></div>
         <div class="ss"><span>K/D · KDA</span><b>${s.rounds?kd(s).toFixed(2):'—'} · ${s.rounds?kda(s).toFixed(2):'—'}</b></div>
         <div class="ss"><span>ADR · KAST</span><b>${adrOf(s)||'—'} · ${s.rounds?kastOf(s)+'%':'—'}</b></div>
@@ -2097,8 +2134,11 @@ function allStarsHtml(){
   const seasons=Object.keys(bySeason).map(Number).sort((a,b)=>b-a);
   if(!seasons.length)return `<p class="faint">No all-star teams yet — the best at each role are named at the end of every season. Play a few seasons.</p>`;
   let h=`<p class="hint">The all-star team named at the end of <b>every</b> season — the best at each role by in-season Gravity, kept for all time. Tap a name for the card.</p>`;
-  seasons.forEach(s=>{const blk=bySeason[s];
-    h+=`<div class="story-card"><div class="lede">Season ${s} · ${blk.year||''} — All-Stars</div><div class="as-team">`;
+  const mvpBy={};(world.seasonMVPs||[]).forEach(e=>mvpBy[e.season]=e);
+  seasons.forEach(s=>{const blk=bySeason[s];const mv=mvpBy[s];
+    h+=`<div class="story-card"><div class="lede">Season ${s} · ${blk.year||''} — All-Stars</div>`;
+    if(mv)h+=`<div class="row2 ${mv.id?'tap':''}"${mv.id?` data-tpid="${mv.id}"`:''} style="margin-bottom:8px"><span><span class="hon hon-mvp">✪ Season MVP</span> <b>${esc(mv.name)}</b> <span class="faint">· ${mv.role} · ${esc(mv.teamName||mv.short)}</span></span><span class="ct" style="color:var(--ember)">${mv.avg.toFixed(2)}</span></div>`;
+    h+=`<div class="as-team">`;
     h+=ROLES.map(role=>{const e=blk.roles[role];if(!e)return `<div class="as-slot nolink"><div class="as-role">${role}</div><div class="as-nm faint">—</div></div>`;
       return `<div class="as-slot" data-tpid="${e.id}"><div class="as-role">${role}</div><div class="as-nm">${esc(e.name)}</div><div class="as-meta">${esc(e.teamName||e.short)} · <span style="color:var(--ember)">${e.grav.toFixed(2)}</span>${e.titles?` · ${e.titles}▲`:''}</div></div>`;}).join('');
     h+=`</div></div>`;});
