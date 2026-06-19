@@ -102,6 +102,7 @@
   .intv-a{font-family:Georgia,serif;color:var(--bone);font-size:14.5px;line-height:1.55;}
   .awards{border-left:2px solid var(--gravl);padding:8px 0 4px 14px;margin-top:10px;}
   .aw-h{font-size:13px;color:var(--bone);margin-bottom:7px;}
+  .aw-h[data-tpid]{cursor:pointer;}
   .aw-team{display:flex;flex-wrap:wrap;gap:6px;}
   .aw-slot{font-size:11px;border:1px solid var(--line);border-radius:9px;padding:2px 9px;background:#1a1610;}
   .aw-slot[data-tpid]{cursor:pointer;}.aw-slot[data-tpid]:hover{border-color:var(--ember-dim);}
@@ -994,16 +995,19 @@ function goatScore(p){
 // sustained impact (career Gravity), peer recognition (All-Star #1s across every role), and longevity.
 function allStarCount(p){return ROLES.reduce((n,r)=>n+(((world.goatLog&&world.goatLog[r])||[]).filter(e=>e.id===p.id).length),0);}
 // The full trophy cabinet for a player: premier MVPs (Major vs World), All-Major team selections, season All-Stars.
-function playerAwards(p){let majorMvp=0,worldMvp=0,majorAllStar=0,worldAllStar=0;
+function playerAwards(p){let tMajor=0,tWorld=0,fMajor=0,fWorld=0,majorAllStar=0,worldAllStar=0;
   (world.majorMVPs||[]).forEach(e=>{const wc=e.tier==='WC';
-    if(e.mvp&&e.mvp.pid===p.id){if(wc)worldMvp++;else majorMvp++;}
+    if(e.mvp&&e.mvp.pid===p.id){if(wc)tWorld++;else tMajor++;}
+    if(e.finalsMvp&&e.finalsMvp.pid===p.id){if(wc)fWorld++;else fMajor++;}
     if(e.allMajor&&e.allMajor.some(a=>a&&a.pid===p.id)){if(wc)worldAllStar++;else majorAllStar++;}});
   const seasonMvp=(world.seasonMVPs||[]).filter(e=>e.id===p.id).length;
-  return {majorMvp,worldMvp,majorAllStar,worldAllStar,allStar:majorAllStar+worldAllStar,seasonAllStar:allStarCount(p),seasonMvp};}
+  return {tourMvp:tMajor+tWorld,tourMvpMajor:tMajor,tourMvpWorld:tWorld,
+    finalsMvp:fMajor+fWorld,finalsMvpMajor:fMajor,finalsMvpWorld:fWorld,
+    majorAllStar,worldAllStar,allStar:majorAllStar+worldAllStar,seasonAllStar:allStarCount(p),seasonMvp};}
 function honoursLine(p){const a=playerAwards(p);const bits=[];
   if(a.seasonMvp)bits.push(`<span class="hon hon-mvp" title="Season MVP — the season's single most valuable player">✪ ${a.seasonMvp}× Season MVP</span>`);
-  if(a.worldMvp)bits.push(`<span class="hon hon-w" title="World Championship MVP">♛ ${a.worldMvp}× World MVP</span>`);
-  if(a.majorMvp)bits.push(`<span class="hon" title="Major MVP">★ ${a.majorMvp}× Major MVP</span>`);
+  if(a.finalsMvp)bits.push(`<span class="hon hon-w" title="Finals MVP — best player in a premier final${a.finalsMvpWorld?` (incl. ${a.finalsMvpWorld} at Worlds)`:''}">◎ ${a.finalsMvp}× Finals MVP</span>`);
+  if(a.tourMvp)bits.push(`<span class="hon" title="Tournament MVP — best player across a whole premier event${a.tourMvpWorld?` (incl. ${a.tourMvpWorld} at Worlds)`:''}">★ ${a.tourMvp}× Tournament MVP</span>`);
   if(a.allStar)bits.push(`<span class="hon" title="All-Major team selections (incl. ${a.worldAllStar} at Worlds)">▲ ${a.allStar}× All-Major</span>`);
   if(a.seasonAllStar)bits.push(`<span class="hon" title="Season All-Star — best at his role that season">◆ ${a.seasonAllStar}× Season All-Star</span>`);
   return bits.length?`<div class="honours">${bits.join('')}</div>`:'';}
@@ -1219,7 +1223,7 @@ function commitMajor(name,champ,run,sfL,qfL,F){
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former),
     standin:usedStandin?(winLine.find(p=>p.standinFor)?`${winLine.find(p=>p.standinFor).first} "${winLine.find(p=>p.standinFor).tag}" ${winLine.find(p=>p.standinFor).last}`:null):null};
   data.interview=mkInterview(data);
-  attachAwards(data,name,'SP');
+  attachAwards(data,name,'SP',F);
   feedPush('final',`${champ.name} win the ${name}`,`<b>Major champions.</b> def. ${run.name} ${F.scoreStr}. They raise a <b>${data.cairnStyle}</b> cairn at ${zone}.`,'Major',data);
   if(usedStandin){const s=winLine.find(p=>p.standinFor);if(s)feedPush('note','A cairn for a borrowed name',`${nm(s)} came in as a stand-in and leaves with a Major. The rarest line in the sport — a cairn raised by someone who wasn't even on the wall a month ago.`);}
   // significant-moment + individual-choke detection
@@ -1276,7 +1280,7 @@ function commitWorlds(name,champ,run,sfL,qfL,F){
     champStar:starC?pname(starC):null,runnerStarUnmarked:(starR&&starR.titles===0)?pname(starR):null,
     champCoach:champ.coach?coachName(champ.coach):null,champCoachFormer:!!(champ.coach&&champ.coach.former)};
   data.interview=mkInterview(data);
-  attachAwards(data,name,'WC');
+  attachAwards(data,name,'WC',F);
   feedPush('final',`${champ.name} are crowned World Champions`,`<b>World champions — Season ${world.season}.</b> def. ${run.name} ${F.scoreStr}. The season's world title, and a <b>crown</b> cairn at ${zone}.`,'World Championship',data);
   timelinePush({kind:'worlds',icon:'♛',short:champ.short,title:`${champ.name} are crowned World Champions`,
     text:`${champ.name} win the ${name}, def. ${run.name} ${F.scoreStr} — the season's world title and the highest honor on the Yard.`});
@@ -1294,8 +1298,8 @@ function staminaFatigue(p,load){const drain=clamp(load,0,16)*(1-(p.stamina||60)/
 // final's production dominates — that box is what makes the MVP reward who went off, not just who's rated highest.
 function accEventPerf(sg,weight,box){if(!world._eventPerf||!sg)return;
   for(const id in sg){const p=findPlayer(+id);if(!p)continue;const t=teamOf(p);
-    const e=world._eventPerf[id]=world._eventPerf[id]||{pid:+id,tag:p.tag,name:`${p.first} "${p.tag}" ${p.last}`,short:t?t.short:'—',role:p.role,sum:0,n:0,best:0,box:blankBox()};
-    e.sum+=sg[id]*weight;e.n+=weight;e.best=Math.max(e.best,sg[id]);if(t)e.short=t.short;
+    const e=world._eventPerf[id]=world._eventPerf[id]||{pid:+id,tag:p.tag,name:`${p.first} "${p.tag}" ${p.last}`,short:t?t.short:'—',role:p.role,sum:0,n:0,best:0,maxStage:0,box:blankBox()};
+    e.sum+=sg[id]*weight;e.n+=weight;e.best=Math.max(e.best,sg[id]);e.maxStage=Math.max(e.maxStage,weight);if(t)e.short=t.short;
     if(box&&box[id]){const b=box[id];for(const k in b)e.box[k]=(e.box[k]||0)+(b[k]||0)*weight;}}
 }
 // An HLTV-1.0-style production rating from the actual box — the metric that says who *performed*, not who's rated.
@@ -1304,24 +1308,38 @@ function eventRating(e){const b=e&&e.box;if(!b||!b.rounds)return 0;
   const r=b.rounds,kpr=b.k/r,dpr=b.d/r,apr=b.a/r,adr=b.dmg/r,kast=100*b.kast/r;
   const impact=2.13*kpr+0.42*apr-0.41;
   return Math.max(0,0.0073*kast+0.3591*kpr-0.5329*dpr+0.2372*impact+0.0032*adr+0.1587);}
-// MVP / All-Major score: production first, then depth (deep runs accrue weighted Gravity), a peak-game nudge,
-// and a champion tiebreak so — all else close — the trophy follows the title, the way real finals MVPs do.
-function eventScore(e,champShort){const depth=(e.sum||0)/9; // ~1.0 for a full finalist run, ~0.3 for a QF exit
-  return eventRating(e)+depth*0.7+(e.best||0)*0.10+((champShort&&e.short===champShort)?0.22:0);}
-function eventAwards(champShort,runShort){
+// Tournament-MVP / All-Major score: production across the WHOLE event, with depth (a deep run accrues weighted
+// Gravity) and a peak-game nudge. No champion bias — this honours the best player of the event, not who lifted it.
+function tournScore(e){return eventRating(e)+((e.sum||0)/9)*0.9+(e.best||0)*0.12;}
+function eventAwards(champShort){
   const arr=Object.values(world._eventPerf||{});if(!arr.length)return null;
   const mk=e=>({pid:e.pid,name:e.name,tag:e.tag,short:e.short,role:e.role,avg:+(e.sum/Math.max(1,e.n)).toFixed(2),rating:+eventRating(e).toFixed(2)});
-  // the MVP comes from the two finalists — a tournament MVP is decided on the biggest stage, not in a quarterfinal
-  const finalists=arr.filter(e=>e.short===champShort||e.short===runShort);
-  const pool=finalists.length?finalists:arr;
-  const mvp=pool.slice().sort((a,b)=>eventScore(b,champShort)-eventScore(a,champShort))[0];
-  const allMajor=ROLES.map(role=>{const c=arr.filter(e=>e.role===role).sort((a,b)=>eventScore(b,champShort)-eventScore(a,champShort))[0];
+  // Tournament MVP: the event's best across every stage — eligible to semifinalists and up (reached SF or the final).
+  // A mild champion lean (far smaller than the Finals MVP's) so the winner is favoured but the award can still diverge.
+  const mvpScore=e=>tournScore(e)+((champShort&&e.short===champShort)?0.12:0);
+  const elig=arr.filter(e=>(e.maxStage||0)>=3),pool=elig.length?elig:arr;
+  const mvp=pool.slice().sort((a,b)=>mvpScore(b)-mvpScore(a))[0];
+  // All-Major team: the best at each role across the whole event, no champion bias
+  const allMajor=ROLES.map(role=>{const c=arr.filter(e=>e.role===role).sort((a,b)=>tournScore(b)-tournScore(a))[0];
     return c?Object.assign({role},mk(c)):{role,name:null};});
   return {mvp:mk(mvp),allMajor};
 }
-function attachAwards(data,name,tier){const aw=eventAwards(data.champ&&data.champ.short,data.runner&&data.runner.short);if(!aw)return;
+// Finals MVP: the standout of the championship series ONLY (the final's box), from the two finalists, with a
+// champion tiebreak — the award tied to the cairn being raised. Often the same as the Tournament MVP, but not always.
+function finalsMVP(F,champShort,runShort){
+  if(!F||!F.box||!F.sg)return null;const cands=[];
+  for(const id in F.box){const b=F.box[id];if(!b||!b.rounds)continue;const p=anyPlayerById(+id);if(!p)continue;
+    const t=findHolderTeam(p),short=t?t.short:'—';if(short!==champShort&&short!==runShort)continue;
+    const rating=eventRating({box:b}),sg=F.sg[+id]||0;
+    const score=rating+(sg-1.0)*0.30+(short===champShort?0.22:0);
+    cands.push({p,short,rating,score});}
+  if(!cands.length)return null;cands.sort((a,b)=>b.score-a.score);const w=cands[0];
+  return {pid:w.p.id,name:pfull(w.p),tag:w.p.tag,short:w.short,role:w.p.role,rating:+w.rating.toFixed(2)};
+}
+function attachAwards(data,name,tier,F){const aw=eventAwards(data.champ&&data.champ.short);if(!aw)return;
   data.mvp=aw.mvp;data.allMajor=aw.allMajor;
-  (world.majorMVPs=world.majorMVPs||[]).push({season:world.season,year:world.year,event:name,tier,mvp:aw.mvp,allMajor:aw.allMajor});
+  data.finalsMvp=finalsMVP(F,data.champ&&data.champ.short,data.runner&&data.runner.short);
+  (world.majorMVPs=world.majorMVPs||[]).push({season:world.season,year:world.year,event:name,tier,mvp:aw.mvp,finalsMvp:data.finalsMvp,allMajor:aw.allMajor});
   world._eventPerf=null;}
 // Every tournament emits a result packet (winner, runner-up, the standout of the final) so the desk can write about it.
 function recordResult(tier,name,champ,run,fin,b){
@@ -1768,9 +1786,13 @@ function renderFeed(){const el=$("p-feed");
     return `<div class="feed-item ${cls}"><div class="kicker"><span>S${f.season}</span><span class="tag-pill">${f.stage||'Dispatch'}</span></div><h3>${f.title}</h3>${body}</div>`;}).join("");}
 function interviewHtml(iv){if(!iv)return '';
   return `<div class="intv"><div class="intv-h">🎙 Post-match · ${esc(iv.host)} with <b>${esc(iv.who)}</b></div><div class="intv-q">“${esc(iv.q)}”</div><div class="intv-a">“${esc(iv.a)}”</div></div>`;}
+function mvpRow(icon,label,m){return `<div class="aw-h"${m.pid?` data-tpid="${m.pid}"`:''}>${icon} ${label} — <b>${esc(m.name)}</b> <span class="faint">· ${m.role} · ${esc(m.short)} · ${m.rating!=null?m.rating+' rating':m.avg+' avg'}</span></div>`;}
 function awardsHtml(d){if(!d||!d.mvp)return '';
-  return `<div class="awards"><div class="aw-h">★ Tournament MVP — <b>${esc(d.mvp.name)}</b> <span class="faint">· ${d.mvp.role} · ${esc(d.mvp.short)} · ${d.mvp.rating!=null?d.mvp.rating+' rating':d.mvp.avg+' avg'}</span></div>`+
-    (d.allMajor?`<div class="aw-team">${d.allMajor.filter(a=>a.name).map(a=>`<span class="aw-slot"${a.pid?` data-tpid="${a.pid}"`:''}><span class="aw-role">${a.role}</span> <span class="tg">${esc(a.tag||a.name)}</span></span>`).join('')}</div>`:'')+`</div>`;}
+  const fm=d.finalsMvp,tm=d.mvp;let h=`<div class="awards">`;
+  if(fm&&tm&&fm.pid===tm.pid)h+=mvpRow('◎★','Finals & Tournament MVP',fm); // one player swept both
+  else{if(fm)h+=mvpRow('◎','Finals MVP',fm);if(tm)h+=mvpRow('★','Tournament MVP',tm);}
+  h+=(d.allMajor?`<div class="aw-team">${d.allMajor.filter(a=>a.name).map(a=>`<span class="aw-slot"${a.pid?` data-tpid="${a.pid}"`:''}><span class="aw-role">${a.role}</span> <span class="tg">${esc(a.tag||a.name)}</span></span>`).join('')}</div>`:'');
+  return h+`</div>`;}
 function renderCal(){const el=$("p-cal");
   if(!world.thisSeasonEvents.length){el.innerHTML=`<div class="feed-empty">No calendar yet — sim a season.</div>`;return;}
   el.innerHTML=`<p class="hint">Season ${world.season} circuit, stage by stage. Every result banks <b>Circuit Points</b>; the premier events build to the World Championship finale.</p>`+
@@ -1820,7 +1842,8 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
         <div class="ss"><span>Potential</span><b class="grav faint" title="developmental ceiling">${p.pot||'—'}</b></div>
         <div class="ss"><span>♛ World / ▲ Major</span><b><span class="${wt?'':'faint'}" style="${wt?'color:var(--ember)':''}">${wt}</span> / ${mt}</b></div>
         <div class="ss"><span>✪ Season MVP</span><b>${aw.seasonMvp?`<span style="color:var(--ember)">${aw.seasonMvp}</span>`:'—'}</b></div>
-        <div class="ss"><span>MVP ★ Major / ♛ World</span><b>${aw.majorMvp||'—'} / <span class="${aw.worldMvp?'':'faint'}" style="${aw.worldMvp?'color:var(--ember)':''}">${aw.worldMvp||0}</span></b></div>
+        <div class="ss"><span>◎ Finals MVP (▲/♛)</span><b>${aw.finalsMvpMajor||'—'} / <span class="${aw.finalsMvpWorld?'':'faint'}" style="${aw.finalsMvpWorld?'color:var(--ember)':''}">${aw.finalsMvpWorld||0}</span></b></div>
+        <div class="ss"><span>★ Tournament MVP (▲/♛)</span><b>${aw.tourMvpMajor||'—'} / <span class="${aw.tourMvpWorld?'':'faint'}" style="${aw.tourMvpWorld?'color:var(--ember)':''}">${aw.tourMvpWorld||0}</span></b></div>
         <div class="ss"><span>All-Major · Season All-Star</span><b>${aw.allStar||'—'} · ${aw.seasonAllStar||'—'}</b></div>
         <div class="ss"><span>K / D / A</span><b>${s.k} / ${s.d} / ${s.a}</b></div>
         <div class="ss"><span>K/D · KDA</span><b>${s.rounds?kd(s).toFixed(2):'—'} · ${s.rounds?kda(s).toFixed(2):'—'}</b></div>
@@ -2678,8 +2701,12 @@ document.getElementById("p-annals").addEventListener("click",e=>{
 });
 document.getElementById("p-story").addEventListener("click",e=>{const pr=e.target.closest("[data-tpid]");if(pr){const pid=+pr.dataset.tpid;const p=anyPlayerById(pid);if(!p)return;selectedPid=pid;editPid=null;movePid=null;
   playerFilter=p.retired?'retired':(world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');}});
-document.getElementById("p-feed").addEventListener("click",e=>{const btn=e.target.closest("[data-narrate]");if(btn)narrate(+btn.dataset.narrate);});
-document.getElementById("p-cast").addEventListener("click",e=>{const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;
+document.getElementById("p-feed").addEventListener("click",e=>{
+  const tp=e.target.closest("[data-tpid]");if(tp){const pid=+tp.dataset.tpid,p=anyPlayerById(pid);if(p){selectedPid=pid;editPid=null;movePid=null;playerFilter=p.retired?'retired':(world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');}return;}
+  const btn=e.target.closest("[data-narrate]");if(btn)narrate(+btn.dataset.narrate);});
+document.getElementById("p-cast").addEventListener("click",e=>{
+  const tp=e.target.closest("[data-tpid]");if(tp){const pid=+tp.dataset.tpid,p=anyPlayerById(pid);if(p){selectedPid=pid;editPid=null;movePid=null;playerFilter=p.retired?'retired':(world.freeAgents.includes(p))?'fa':'active';renderPlayers();switchTab('players');}return;}
+  const el=e.target.closest("[data-act]");if(!el)return;const a=el.dataset.act;
   if(a==='startswiss'){if(world.live){startSwissStage(world.live);renderCast();}}
   else if(a==='smatch'){if(world.live){swissStepMatch(world.live);renderCast();}}
   else if(a==='sround'){if(world.live){swissPlayRound(world.live);renderCast();}}
