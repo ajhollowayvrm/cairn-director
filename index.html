@@ -130,6 +130,23 @@
   .sb-series{font-family:ui-monospace,monospace;font-size:13px;color:var(--muted);}
   .sb-map{font-family:ui-monospace,monospace;font-size:22px;color:var(--ember);margin:2px 0;}
   .sb-zone{font-size:11px;color:var(--faint);}
+  /* live loadout HUD */
+  .hud{display:flex;align-items:stretch;gap:10px;margin:-4px 0 12px;}
+  .hud-side{flex:1;border:1px solid var(--line);border-radius:4px;background:var(--stone-1);padding:8px 10px;min-width:0;}
+  .hud-div{display:flex;align-items:center;color:var(--faint);font-size:11px;letter-spacing:.1em;}
+  .hud-gold{font-family:ui-monospace,monospace;font-size:14px;color:var(--gravl);margin-bottom:6px;letter-spacing:.02em;}
+  .hud-load{display:flex;flex-wrap:wrap;gap:5px;}
+  .ld{font-size:11px;font-family:ui-monospace,monospace;padding:2px 7px;border-radius:10px;border:1px solid var(--line);color:var(--muted);white-space:nowrap;}
+  .ld-m{color:var(--faint);margin-left:3px;}
+  .ld-base{opacity:.62;}
+  .ld-hex{border-color:#6b5a8a;color:#b9a6d6;}
+  .ld-ward{border-color:var(--cold);color:#a9c0cf;}
+  .ld-ember{border-color:var(--ember-dim);color:var(--ember);}
+  .ld-sage{border-color:var(--gravl);color:var(--gravl);background:#241f10;box-shadow:0 0 0 1px #4a3f17 inset;}
+  .wmain{margin-top:7px;font-size:12px;color:var(--muted);}
+  .wmain .wm-g{font-size:14px;margin-right:3px;}
+  .wm-sage{color:var(--gravl);} .wm-sage .faint{color:var(--cairn);}
+  .wm-hex{color:#b9a6d6;} .wm-ember{color:var(--ember);} .wm-ward{color:#a9c0cf;}
   .cast-ctl{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px;}
   .pbp{display:flex;flex-direction:column;max-height:330px;overflow:auto;border:1px solid var(--line);border-radius:3px;background:var(--stone-1);}
   .pbp-line{font-size:12.5px;padding:7px 11px;border-bottom:1px solid #211b13;color:var(--muted);font-family:ui-monospace,monospace;line-height:1.45;}
@@ -315,13 +332,13 @@ const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(r
 function pickW(arr,wf){let tot=0;const ws=arr.map(x=>{const w=Math.max(0.0001,wf(x));tot+=w;return w;});let r=rnd()*tot;for(let i=0;i<arr.length;i++){r-=ws[i];if(r<=0)return arr[i];}return arr[arr.length-1];}
 function sampleN(arr,n,wf){const pool=arr.slice(),out=[];n=Math.min(n,pool.length);for(let i=0;i<n;i++){const p=pickW(pool,wf);out.push(p);pool.splice(pool.indexOf(p),1);}return out;}
 // A single round's raw line for one player.
-function newRoundBox(){return {k:0,d:0,a:0,entry:0,open:0,fd:0,clutch:0,mk:0,trade:0,traded:0,dmg:0,surv:0,kast:0};}
-// An accumulated line (map / series / career). opens=opening kills, fds=first deaths, mk2/3/4/aces=multikills.
-function blankBox(){return {k:0,d:0,a:0,entry:0,vigils:0,opens:0,fds:0,mk2:0,mk3:0,mk4:0,aces:0,trades:0,traded:0,dmg:0,surv:0,kast:0,rounds:0};}
+function newRoundBox(){return {k:0,d:0,a:0,entry:0,open:0,fd:0,clutch:0,mk:0,trade:0,traded:0,dmg:0,surv:0,kast:0,hsk:0};}
+// An accumulated line (map / series / career). opens=opening kills, fds=first deaths, mk2/3/4/aces=multikills, hsk=headshot kills.
+function blankBox(){return {k:0,d:0,a:0,entry:0,vigils:0,opens:0,fds:0,mk2:0,mk3:0,mk4:0,aces:0,trades:0,traded:0,dmg:0,surv:0,kast:0,hsk:0,rounds:0};}
 function addBox(dst,e){dst.k+=e.k;dst.d+=e.d;dst.a+=e.a;dst.entry+=e.entry;dst.opens+=e.open||0;dst.fds+=e.fd||0;
   if(e.clutch)dst.vigils++;
   if(e.mk>=5)dst.aces++;else if(e.mk===4)dst.mk4++;else if(e.mk===3)dst.mk3++;else if(e.mk===2)dst.mk2++;
-  dst.trades+=e.trade||0;dst.traded+=e.traded||0;dst.dmg+=e.dmg||0;dst.surv+=e.surv||0;dst.kast+=e.kast||0;dst.rounds++;}
+  dst.trades+=e.trade||0;dst.traded+=e.traded||0;dst.dmg+=e.dmg||0;dst.surv+=e.surv||0;dst.kast+=e.kast||0;dst.hsk+=e.hsk||0;dst.rounds++;}
 function mergeBox(dst,src){for(const k in src)dst[k]=(dst[k]||0)+(src[k]||0);}
 function accStat(p,e){addBox(p.stat,e);}
 function kd(s){return s.d?s.k/s.d:s.k;}
@@ -515,40 +532,52 @@ function rollStamina(p){let s=56+(p.r.consistency-55)*0.4+gauss()*12; // steadie
   if(hasTrait(p,'ironman'))s=Math.max(s+12,86);
   if(hasTrait(p,'glass'))s-=12;if(hasTrait(p,'hothead'))s-=7;
   return Math.round(clamp(s,30,99));}
-function mkPlayer(first,tag,last,role,age,rt){
+function mkPlayer(first,tag,last,role,age,rt,arche){
   let r,pot;
   if(rt){r=rt;pot=clamp(peakAttr(r)+2+rnd()*6,60,99);}else{const g=ratingsFor(role);r=g.r;pot=g.pot;}
   if(tag)usedTags.add(tag);
   const p={id:pid++,first,tag,last,role,age,r,pot:Math.round(pot),titles:0,worlds:0,gravs:[],games:0,retired:false,stat:blankBox2(),history:[],traits:[]};
-  assignTraits(p);p.stamina=rollStamina(p);return p;
+  if(arche&&ARCHETYPES[arche])p.archetype=arche; // an explicit archetype for hand-authored players
+  assignTraits(p);p.stamina=rollStamina(p);setArchetype(p);return p;
 }
+// stamp a player's combat archetype and the wand identity + headshot signature that flow from it
+function setArchetype(p){const a=p.archetype||(p.archetype=pickArchetype(p)),A=ARCHETYPES[a];
+  p.wandPref=A.wand; // the weapon the buy AI tries to put in his hands
+  p.hsFlair=gauss()*0.07+A.hsTilt; // a wide personal spread, centered on his archetype's tendency
+  if(p.r.adaptability==null){ // how readily he plays a style that isn't his own — steady, cerebral heads flex;
+    const lean={hexblade:-14,duelist:-11,marksman:-3,rifler:7,spellblade:9,warden:4}[a]||0; // ego fraggers stay rigid
+    let ad=42+((p.r.consistency||60)-60)*0.34+((p.r.read||60)-60)*0.16+lean+gauss()*8;
+    if(hasTrait(p,'mentor'))ad+=10;if(hasTrait(p,'loyal'))ad+=5;
+    if(hasTrait(p,'hothead'))ad-=12;if(hasTrait(p,'mercenary'))ad-=6;
+    p.r.adaptability=clamp(Math.round(ad),26,99);}
+  return p;}
 function blankBox2(){return blankBox();}
 function proc(role,age){return mkPlayer(pick(FIRST),freshTag(),pick(LAST),role,age||16+Math.floor(rnd()*8));}
 function procWeak(role,age){const p=proc(role,age||16+Math.floor(rnd()*4));for(const k in p.r)p.r[k]=clamp(p.r[k]-(6+rnd()*9),26,99);p.pot=clamp(p.pot-(5+rnd()*9),42,92);return p;}
 function fillRoles(players){ROLES.forEach(role=>{if(!players.some(p=>p.role===role))players.push(proc(role));});return players;}
-function mkCoach(first,tag,last,rt,former,exId,proteges){return {first,tag:tag||null,last,prep:clamp((rt&&rt.prep)||58+rnd()*32,50,97),composure:clamp((rt&&rt.composure)||58+rnd()*32,50,97),former:!!former,exId:exId||null,proteges:proteges||null};}
-function procCoach(){return mkCoach(pick(FIRST),null,pick(LAST),null,false);}
-function coachMult(t){const c=t.coach;return c?1+((c.prep-70)/520):1;}
+function mkCoach(first,tag,last,rt,former,exId,proteges,phil){return {first,tag:tag||null,last,prep:clamp((rt&&rt.prep)||58+rnd()*32,50,97),composure:clamp((rt&&rt.composure)||58+rnd()*32,50,97),former:!!former,exId:exId||null,proteges:proteges||null,phil:phil||(rt&&rt.phil)||pickPhilosophy()};}
+function procCoach(phil){return mkCoach(pick(FIRST),null,pick(LAST),null,false,null,null,phil);}
+function coachMult(t){return coachContext(t).mult;}
 function coachName(c){return c.tag?`${c.first} "${c.tag}" ${c.last}`:`${c.first} ${c.last}`;}
 
 function canonTeams(){
   const T=[];const P=mkPlayer;
-  T.push({name:"Vantage Gaming",short:"VNG",chem:.62,heart:false,star:"Kaiser",coach:mkCoach("Dieter",null,"Falk",{prep:87,composure:72},false),players:fillRoles([
+  T.push({name:"Vantage Gaming",short:"VNG",chem:.62,heart:false,star:"Kaiser",coach:mkCoach("Dieter",null,"Falk",{prep:87,composure:72},false,null,null,'tempo'),players:fillRoles([
     P("Brian","Voss","Keller","read",27,{aim:60,read:92,clutch:72,entry:58,util:78,consistency:85}),
     P("Jordan","kitt","Vasquez","reach",22,{aim:92,read:68,clutch:80,entry:75,util:60,consistency:80}),
     P("Andrei","Clock","Volkov","anchor",33,{aim:78,read:75,clutch:76,entry:66,util:85,consistency:90}),
     P("Bryce","Kaiser","Holloway","breaker",21,{aim:90,read:72,clutch:84,entry:93,util:62,consistency:82}),
     P("Theo","Patch","Adeyemi","set",21,{aim:74,read:76,clutch:70,entry:64,util:90,consistency:82}),
   ])});
-  T.push({name:"Luminosity",short:"LG",chem:.78,heart:false,star:"vell",coach:mkCoach("Sun-woo",null,"Park",{prep:81,composure:84},false),players:fillRoles([
-    P("Sang-min","vell","Cho","reach",17,{aim:95,read:70,clutch:96,entry:78,util:60,consistency:88}),
+  T.push({name:"Luminosity",short:"LG",chem:.78,heart:false,star:"vell",coach:mkCoach("Sun-woo",null,"Park",{prep:81,composure:84},false,null,null,'control'),players:fillRoles([
+    P("Sang-min","vell","Cho","reach",17,{aim:95,read:70,clutch:96,entry:78,util:60,consistency:88,adaptability:92}),
     P("Aiden","bishop","Tran","read",17,{aim:64,read:84,clutch:70,entry:60,util:76,consistency:75}),
     P("Mateo","rook","Salinas","breaker",16,{aim:90,read:60,clutch:82,entry:88,util:55,consistency:62}),
     proc("anchor",18),proc("set",19),
   ])});
   T.push({name:"FaZe",short:"FAZE",chem:.85,heart:false,star:null,coach:procCoach(),players:fillRoles([proc("reach",20),proc("breaker",19),proc("read",23),proc("anchor",22),proc("set",20)])});
-  T.push({name:"100 Thieves",short:"100T",chem:.74,heart:false,star:"Riptide",coach:procCoach(),players:fillRoles([
-    P("Dontae","Riptide","Sloane","reach",24,{aim:93,read:66,clutch:90,entry:85,util:58,consistency:74}),
+  T.push({name:"100 Thieves",short:"100T",chem:.74,heart:false,star:"Riptide",coach:procCoach('control'),players:fillRoles([
+    P("Dontae","Riptide","Sloane","reach",24,{aim:93,read:66,clutch:90,entry:85,util:58,consistency:74,adaptability:33},'duelist'),
     proc("read",24),proc("breaker",21),proc("anchor",26),proc("set",22)])});
   T.push({name:"Hemisphere",short:"HEMI",chem:.90,heart:true,star:null,coach:mkCoach("Solomon",null,"Adeyemi",{prep:88,composure:89},false),players:fillRoles([
     P("Tomás","Gordo","Reyes","breaker",22,{aim:80,read:64,clutch:74,entry:90,util:60,consistency:66}),
@@ -663,17 +692,6 @@ function momFromStreak(stA,stB,sa,sb){const m={a:1,b:1};
   if(sa-sb>=4)m.b*=1.05+(sa-sb-4)*0.02;
   return m;}
 function mapDone(sa,sb){return (Math.max(sa,sb)>=15&&Math.abs(sa-sb)>=2)||Math.max(sa,sb)>=24;} // first to 15, win by 2 in OT
-// ---- economy: a broken team fields a weak buy, banks, then reloads to full — eco rounds, forces, and steals ----
-const BUYMULT={full:1.0,reload:1.06,force:0.93,eco:0.82};
-// next round's buy for a side, given whether it won this round and whether it's under score pressure.
-// The loss bonus is the key to balance: a saved round banks into a strong "reload" buy — the comeback beat
-// that keeps the economy from simply steepening the snowball.
-function nextBuy(prev,won,pressure){
-  if(won)return 'full';
-  if(prev==='eco')return 'reload';    // banked the save into a fully-kitted buy vs an opponent who just spent
-  if(prev==='reload'||prev==='force')return 'eco'; // the strong buy / force didn't land — save again
-  return (pressure&&rnd()<0.4)?'force':'eco'; // broken off a full buy: usually save, but may force under the gun
-}
 // ---- territory: play doesn't roam at random — it's steered toward a team's comfort callouts on this map ----
 function nextZone(prevZone,winT,loseT,map){
   map=map||defaultMap();const areas=map.areas;
@@ -684,27 +702,170 @@ function nextZone(prevZone,winT,loseT,map){
   let i=0;return pickW(areas,()=>Math.pow(rates[i++]/mean,6)); // lean toward the steerer's strong ground
 }
 
+// ---- the wand economy: a TRUE buy, item by item. Everyone takes the free Base Wand; gold banks from rounds
+// and frags; the best player saves for the Sage's Staff — the league's AWP: lethal on the opening angle,
+// clumsy once a round breaks into a scramble. A fallen wielder DROPS his wand, so feeding the star has teeth. ----
+const WANDS={
+  base: {name:'Base Wand',    cost:0,    duel:1.00, open:1.00, hs:0.95, gl:'▹'}, // the starting sidearm — never lost
+  hex:  {name:'Hex Pistol',   cost:550,  duel:1.06, open:1.05, hs:1.22, gl:'✦'}, // the force-buy staple — lethal point-blank, all headshots
+  ward: {name:'Wardstone',    cost:900,  duel:1.05, open:1.02, hs:1.05, gl:'⛨'}, // armor: a cheap edge on a thin bank
+  ember:{name:'Emberlance',   cost:2200, duel:1.15, open:1.12, hs:1.00, gl:'⚔'}, // the rifle — the standard full buy
+  sage: {name:"Sage's Staff", cost:4200, duel:0.94, open:1.50, hs:0.38, gl:'⚜'}, // the AWP: a body-shot kills, so the marksman posts few headshots
+};
+const wand=k=>WANDS[k]||WANDS.base;
+// ---- combat archetypes: a player's fighting identity. Where CS has only two weapon roles (rifler / AWPer), the
+// wand meta runs deeper — each archetype mains a different wand, posts a different headshot signature, and costs
+// the bank a different amount to kit. `wand` is the weapon the buy tries to put in his hands; `hsTilt` shifts his
+// headshot rate (a Staff marksman body-shots and trends low; a Hexblade one-taps and trends brutally high). ----
+const ARCHETYPES={
+  marksman:  {name:'Marksman',   wand:'sage',  hsTilt:-0.22, aggro:0.70, blurb:'picks from range on the Sage’s Staff — few headshots, owns the open'},
+  rifler:    {name:'Rifler',     wand:'ember', hsTilt: 0.00, aggro:0.50, blurb:'the all-round backbone on the Emberlance'},
+  duelist:   {name:'Duelist',    wand:'ember', hsTilt: 0.03, aggro:0.92, blurb:'hyper-aggressive entry — wins close, tilts headshots high'},
+  hexblade:  {name:'Hexblade',   wand:'hex',   hsTilt: 0.00, aggro:0.95, blurb:'a one-tap hand-cannon specialist — lower power, brutal headshots'},
+  warden:    {name:'Warden',     wand:'ward',  hsTilt:-0.10, aggro:0.15, blurb:'a defensive anchor — armor, survival, holds the site'},
+  spellblade:{name:'Spellblade', wand:'ember', hsTilt:-0.04, aggro:0.32, blurb:'a spray-down volume fragger — trades and utility over flicks'},
+};
+const arch=p=>ARCHETYPES[p&&p.archetype]||ARCHETYPES.rifler;
+const archAggro=p=>arch(p).aggro; // how fast/frag-forward a player naturally plays (0 passive .. 1 all-gas)
+
+// ---- coach philosophies: a coach drills a style. It biases who the club signs and how the team plays a round —
+// fast and frag-first, or slow defaults and map control. A philosophy can be mediocre on paper, but a roster that
+// BUYS IN (fits it, and gels) executes it well anyway; a roster full of players it clashes with fumbles it. The
+// hinge is a player's `adaptability`: a high-adapt player flexes to any system; a low-adapt one only thrives in
+// the style his archetype wants — and grates, then asks out, when a coach drills the opposite. ----
+const PHILOSOPHIES={
+  tempo:    {name:'Tempo',      aggro:0.85, edge: 0.00, favor:['duelist','hexblade','marksman'], blurb:'fast and aggressive — win the opening, take map control by force'},
+  firepower:{name:'Firepower',  aggro:0.66, edge: 0.02, favor:['marksman','duelist','rifler'],   blurb:'raw aim over structure — just out-gun them in the duels'},
+  adaptive: {name:'Adaptive',   aggro:0.50, edge: 0.01, favor:['rifler','spellblade','marksman'], blurb:'no fixed identity — read the game and flex to whatever it asks'},
+  control:  {name:'Methodical', aggro:0.30, edge: 0.00, favor:['spellblade','warden','rifler'],   blurb:'slow defaults, utility and map control — starve the duels'},
+  bastion:  {name:'Bastion',    aggro:0.15, edge:-0.01, favor:['warden','spellblade','rifler'],   blurb:'lock the sites and win on the timer and the retake'},
+};
+const philOf=c=>PHILOSOPHIES[c&&c.phil]||PHILOSOPHIES.adaptive;
+function pickPhilosophy(){return pick(['tempo','firepower','firepower','adaptive','adaptive','control','control','bastion']);} // adaptive/control common, tempo/bastion the extremes
+// a player's stylistic fit with a philosophy: 1.0 dead-on, dropping toward 0 the further his archetype's aggression
+// sits from what the coach drills — then pulled back UP by his adaptability (a flexible pro plays anything asked).
+function playerFit(p,c){const base=clamp(1-Math.abs(archAggro(p)-philOf(c).aggro)*1.5,0,1);
+  const adapt=clamp(((p.r&&p.r.adaptability)||60)/99,0,1);
+  return clamp(base+(1-base)*adapt*0.85,0,1);}
+// how much a team is bought in: average stylistic fit across the five, lifted or dragged by the room's chemistry.
+function teamBuyIn(t){const L=lineup(t);if(!L.length)return 0.6;
+  const avg=L.reduce((s,p)=>s+playerFit(p,t.coach),0)/L.length;
+  return clamp(avg*(0.85+0.30*((t.chem||0.67)-0.67)),0.2,1.1);}
+// the coach's full match effect, computed once per team per round: an overall multiplier (prep + how bought-in the
+// room is + the philosophy's intrinsic edge), plus a phase tilt — a bought-in Tempo side wins the opening but
+// fades in a drawn-out round; a Methodical side is the reverse.
+function coachContext(t){const c=t&&t.coach;if(!c)return {mult:1,open:1,mid:1,buyIn:0.7};
+  const phi=philOf(c),buyIn=teamBuyIn(t),prep=1+((c.prep-70)/520);
+  const tilt=(phi.aggro-0.5)*0.12*clamp(buyIn,0,1.1); // a system's phase identity — meaningful, but it doesn't erase skill
+  return {mult:prep*(1+phi.edge+(buyIn-0.7)*0.07),open:1+tilt,mid:1-tilt,buyIn};}
+// recruiting lean: a coach reaches for players who fit his system (and, a little, for adaptable ones who fit anything)
+function recruitBias(p,c){if(!c)return 0;return (playerFit(p,c)-0.6)*9+(((p.r&&p.r.adaptability)||60)-60)*0.05;}
+// what a player wants to be doing — used to flavor a style clash
+const aggroVerb=p=>archAggro(p)>=0.7?'just go frag':archAggro(p)<=0.35?'play for structure and the timer':'play his own game';
+// a player's wand effect, with his comfort on his weapon of choice folded in (a main is sharper; a borrowed tool, duller)
+function wmul(p,phase){const w=wand(p._wand),base=phase==='open'?w.open:w.duel;
+  return base*(p._wand===p.wandPref?1.04:p._wand!=='base'?0.99:1.0);}
+// did this kill land as a headshot? a real personal signature (aim + archetype tilt), swung by the weapon held.
+// Calibrated to CS: average riflers ~48%, star riflers/entries 55%+, Staff marksmen ~30%, Hexblade one-tappers 65%+.
+function hsRoll(p){return rnd()<clamp((0.49+(p.r.aim-62)/150+(p.hsFlair||0))*wand(p._wand).hs,0.05,0.94);}
+// a player's combat archetype, leaning on his role and ratings, with room for off-profile picks for variety
+function pickArchetype(p){const r=p.r;
+  if((p.role==='reach'||r.aim>=78)&&r.clutch>=64&&rnd()<0.55)return 'marksman'; // the dedicated Staff marksman
+  if(rnd()<0.06)return 'marksman';                                              // a few off-profile snipers
+  if(p.role==='breaker'||r.entry>=76)return rnd()<0.42?'hexblade':'duelist';    // the aggressive front-liner
+  if(p.role==='anchor'&&rnd()<0.55)return 'warden';                             // the site anchor
+  if(p.role==='set'&&rnd()<0.5)return 'spellblade';                             // the support fragger
+  if(rnd()<0.16)return pick(['duelist','hexblade','warden','spellblade']);      // texture across the rest
+  return 'rifler';                                                              // the backbone
+}
+const ECON={start:1000, cap:16000, win:3500, lossBase:1500, lossStep:600, lossCap:5, perK:250, perA:60, perClutch:300};
+// a fresh bank for a map — everyone resets to the Base Wand (the pistol round)
+function newEcon(a,b){const hand={};lineup(a).concat(lineup(b)).forEach(p=>{hand[p.id]='base';p._wand='base';});
+  return {gold:{a:ECON.start,b:ECON.start},loss:{a:0,b:0},hand,plan:{a:'',b:''}};}
+// one team's buy. Survivors keep their wand for free; the unarmed kit toward each man's archetype weapon. On a full
+// buy every player gets his main (the priciest — a Staff — claimed first, so the marksman lives on it and his
+// headshots stay low). If the bank can't reach the ideal loadout it falls to all-rifles, then a hex force, then a save.
+// The coach's philosophy steers the gamble: an aggressive side commits to a force on a thin bank; a disciplined one banks it.
+function econBuy(E,team,side,pressure){
+  const L=lineup(team);let gold=E.gold[side];
+  const cur=p=>E.hand[p.id]||'base';                       // the wand he carries into the buy
+  const need=L.filter(p=>cur(p)==='base'); // dead men reset to base; survivors carry theirs in
+  const want=p=>p.wandPref||'ember';                       // his archetype's weapon of choice
+  const costIdeal=need.reduce((s,p)=>s+wand(want(p)).cost,0);
+  const costRifle=need.length*WANDS.ember.cost, costForce=need.length*WANDS.hex.cost;
+  const ag=philOf(team.coach).aggro; // 0.15 (Bastion, saves and resets) .. 0.85 (Tempo, forces and commits)
+  // under score pressure anyone may force; on a calm thin bank only the aggressive commit (a flavor edge, not a handicap)
+  const willForce=gold>=costForce&&(pressure?rnd()<0.35+ag*0.4:(ag>=0.55&&rnd()<(ag-0.5)*0.6));
+  let plan = gold>=costIdeal?'full' : gold>=costRifle?'rifle' : willForce?'force' : 'eco';
+  let staffer=null;
+  if(plan==='full'){ // kit toward each man's main, priciest-first so the Staff is locked before the bank runs thin.
+    // includes survivors stranded below their main (a force-buy pistol they lived on) — they drop it and upgrade.
+    const kit=L.filter(p=>wand(want(p)).cost>wand(cur(p)).cost).sort((x,y)=>wand(want(y)).cost-wand(want(x)).cost);
+    for(const p of kit){const w=want(p);
+      if(gold>=wand(w).cost){if(w!=='base'){gold-=wand(w).cost;E.hand[p.id]=w;}if(w==='sage')staffer=p;}
+      else if(cur(p)==='base'&&gold>=WANDS.hex.cost){gold-=WANDS.hex.cost;E.hand[p.id]='hex';}} // a stranded dead man falls to a hex
+  } else if(plan==='rifle'){ // couldn't afford the ideal kit — everyone onto rifles, the marksman saves his Staff
+    for(const p of need){let w='ember';if(gold<wand(w).cost)w=gold>=WANDS.ward.cost?'ward':gold>=WANDS.hex.cost?'hex':'base';
+      if(w!=='base'){gold-=wand(w).cost;E.hand[p.id]=w;}}
+  } else if(plan==='force'){
+    for(const p of need){if(gold>=WANDS.hex.cost){gold-=WANDS.hex.cost;E.hand[p.id]='hex';}}
+  }
+  E.gold[side]=gold;
+  for(const p of L)p._wand=E.hand[p.id]||'base'; // arm the lineup for the round that's about to play
+  const prev=E.plan[side];E.plan[side]=plan; // remember the posture so a save-into-buy reads as a reload
+  let label=plan==='rifle'?'full':plan; // 'full' | 'force' | 'eco' — the desk's economy flavor
+  if((plan==='full'||plan==='rifle')&&prev==='eco')label='reload'; // banked the save into a full buy — the comeback beat
+  const note=staffer?`${team.short} hand ${staffer.tag} the Sage's Staff`:plan==='force'?`${team.short} force-buy`:'';
+  return {label,note};
+}
+// both sides buy before the round; writes legacy buy labels for the close-flavor, returns a desk note when dramatic.
+function econBuyBoth(E,a,b,sa,sb,stA,stB,buyOut){
+  const ra=econBuy(E,a,'a',sb>=13||stB>=3||sb-sa>=3),rb=econBuy(E,b,'b',sa>=13||stA>=3||sa-sb>=3);
+  if(buyOut){buyOut.a=ra.label;buyOut.b=rb.label;}
+  return [ra.note,rb.note].filter(Boolean).join('; ');
+}
+// after the round: bank the payouts (win bonus, escalating loss bonus, per-frag bounties) and drop the fallen's wands.
+function econSettle(E,r,a,b){
+  const w=r.winA?'a':'b',l=r.winA?'b':'a';
+  E.gold[w]+=ECON.win;E.loss[w]=0;
+  E.loss[l]=Math.min(E.loss[l]+1,ECON.lossCap);
+  E.gold[l]+=ECON.lossBase+(E.loss[l]-1)*ECON.lossStep; // the loss-bonus reload that keeps the snowball honest
+  const sides={a:lineup(a),b:lineup(b)};
+  for(const s of ['a','b'])for(const p of sides[s]){const e=r.box[p.id];if(!e)continue;
+    E.gold[s]+=e.k*ECON.perK+e.a*ECON.perA+(e.clutch?ECON.perClutch:0);
+    if(!e.surv)E.hand[p.id]='base';} // he fell — the wand stays on the floor, base next buy
+  E.gold.a=Math.min(E.gold.a,ECON.cap);E.gold.b=Math.min(E.gold.b,ECON.cap); // a bank ceiling — keeps the buy a live decision even when you're rolling
+}
+
 // A round, played as duels: an opening pick, then man-advantage trades, then an objective close or a clutch hold.
 function simRound(a,b,opts){
   opts=opts||{};const stage=opts.stage||0;const mom=opts.mom||{a:1,b:1};
   const z=opts.zone||pickZone();
-  const buy=opts.buy||{a:'full',b:'full'};const ecoA=BUYMULT[buy.a]||1,ecoB=BUYMULT[buy.b]||1; // a thin buy drags the whole round
+  const buy=opts.buy||{a:'full',b:'full'}; // a buy label, set from the real wand posture — flavors the close
   const A=lineup(a),B=lineup(b);
   const box={};A.concat(B).forEach(p=>box[p.id]=newRoundBox());
   const side={};A.forEach(p=>side[p.id]='a');B.forEach(p=>side[p.id]='b');
   const loadA=a._load||0,loadB=b._load||0; // tournament fatigue is felt per player, scaled by his stamina
-  const rate=p=>zoneSkill(p,z)*formMult(p)*confMult(p)*staminaFatigue(p,side[p.id]==='a'?loadA:loadB)*(side[p.id]==='a'?ecoA:ecoB);
+  // the coach's system, resolved once per side: an overall multiplier + a phase tilt (Tempo wins the open, Methodical
+  // the drawn-out round), and each player's stylistic fit — a man in a system that clashes with his game frags a touch worse.
+  const cxA=coachContext(a),cxB=coachContext(b);
+  const pfit={};A.forEach(p=>pfit[p.id]=playerFit(p,a.coach));B.forEach(p=>pfit[p.id]=playerFit(p,b.coach));
+  const fitMult=p=>0.975+0.05*(pfit[p.id]==null?0.7:pfit[p.id]);
+  // a player's effectiveness, with the wand he's holding folded in — 'open' phase rewards the opening angle (the Staff)
+  const rate=(p,ph)=>zoneSkill(p,z)*formMult(p)*confMult(p)*staminaFatigue(p,side[p.id]==='a'?loadA:loadB)*wmul(p,ph)*fitMult(p);
   const fragW=p=>Math.max(0.2,rate(p)*(0.7+0.6*rnd()));
-  const tchem=t=>(0.78+0.46*t.chem)*coachMult(t);
-  // opening duel — the entry/star players contest the ember first
-  const oa=pickW(A,p=>p.r.entry*1.5+p.r.aim+1),ob=pickW(B,p=>p.r.entry*1.5+p.r.aim+1);
-  const ra=rate(oa)*mom.a*tchem(a),rb=rate(ob)*mom.b*tchem(b);
+  const tchem=t=>(0.78+0.46*t.chem)*(t===a?cxA.mult:cxB.mult);
+  // opening duel — the entry/star players contest the ember first, and the Staff-holder holds the angle hardest
+  const owt=p=>(p.r.entry*1.5+p.r.aim+1)*wmul(p,'open');
+  const oa=pickW(A,owt),ob=pickW(B,owt);
+  const ra=rate(oa,'open')*mom.a*tchem(a)*cxA.open,rb=rate(ob,'open')*mom.b*tchem(b)*cxB.open;
   const aOpen=rnd()<ra/(ra+rb);
   const opW=aOpen?oa:ob,opL=aOpen?ob:oa;
   box[opW.id].k++;box[opW.id].open++;box[opW.id].entry++;box[opL.id].d++;box[opL.id].fd++;
+  const opHS=hsRoll(opW);if(opHS)box[opW.id].hsk++;
   // kill-by-kill event log — only built when the live desk wants to call it (off the season-sim path)
   const evs=opts.events?[]:null;const runK={};
-  if(evs){runK[opW.id]=1;evs.push({t:'open',k:opW.id,v:opL.id,zone:z.name});}
+  if(evs){runK[opW.id]=1;evs.push({t:'open',k:opW.id,v:opL.id,zone:z.name,kw:opW._wand,vw:opL._wand,hs:opHS?1:0});}
   let aliveA=A.slice(),aliveB=B.slice();
   const drop=(arr,p)=>{const i=arr.indexOf(p);if(i>=0)arr.splice(i,1);};
   drop(side[opL.id]==='a'?aliveA:aliveB,opL);
@@ -715,19 +876,20 @@ function simRound(a,b,opts){
     if(!aliveB.length){winA=true;break;}
     const adv=aliveA.length-aliveB.length;
     if(adv!==0){if(rnd()<0.10+Math.abs(adv)*0.10){winA=adv>0;break;}}
-    else if(rnd()<0.06){const sa=aliveA.reduce((s,p)=>s+rate(p),0)*mom.a*tchem(a),sb=aliveB.reduce((s,p)=>s+rate(p),0)*mom.b*tchem(b);winA=rnd()<sa/(sa+sb);break;}
+    else if(rnd()<0.06){const sa=aliveA.reduce((s,p)=>s+rate(p),0)*mom.a*tchem(a)*cxA.mid,sb=aliveB.reduce((s,p)=>s+rate(p),0)*mom.b*tchem(b)*cxB.mid;winA=rnd()<sa/(sa+sb);break;}
     const x=pickW(aliveA,fragW),y=pickW(aliveB,fragW);
     const ax=fragW(x)*(1+0.16*adv)*mom.a,by=fragW(y)*(1-0.16*adv)*mom.b;
     const aKills=rnd()<ax/(ax+by);
     const killer=aKills?x:y,victim=aKills?y:x;
     box[killer.id].k++;box[victim.id].d++;
+    const hs=hsRoll(killer);if(hs)box[killer.id].hsk++;
     const kmates=(aKills?aliveA:aliveB).filter(p=>p!==killer);
     let assistId=null;
     if(kmates.length&&rnd()<0.32){const mt=pickW(kmates,p=>p.r.util+p.r.read);box[mt.id].a++;assistId=mt.id;}
     drop(aKills?aliveB:aliveA,victim);
-    if(evs){runK[killer.id]=(runK[killer.id]||0)+1;evs.push({t:'kill',k:killer.id,v:victim.id,a:assistId,n:runK[killer.id],adv:aKills?adv:-adv});}
+    if(evs){runK[killer.id]=(runK[killer.id]||0)+1;evs.push({t:'kill',k:killer.id,v:victim.id,a:assistId,n:runK[killer.id],adv:aKills?adv:-adv,hs:hs?1:0});}
     const tmates=(aKills?aliveB:aliveA).filter(p=>p!==victim);
-    if(tmates.length&&rnd()<0.30){const tr=pickW(tmates,p=>p.r.read*0.7+p.r.aim*0.6);box[tr.id].k++;box[tr.id].trade++;box[killer.id].d++;box[killer.id].traded=1;drop(aKills?aliveA:aliveB,killer);
+    if(tmates.length&&rnd()<0.30){const tr=pickW(tmates,p=>p.r.read*0.7+p.r.aim*0.6);box[tr.id].k++;box[tr.id].trade++;if(hsRoll(tr))box[tr.id].hsk++;box[killer.id].d++;box[killer.id].traded=1;drop(aKills?aliveA:aliveB,killer);
       if(evs){runK[tr.id]=(runK[tr.id]||0)+1;evs.push({t:'trade',k:tr.id,v:killer.id,n:runK[tr.id]});}}
     if(aliveA.length===1&&aliveB.length>=2)mark(aliveA[0],aliveB.length);
     if(aliveB.length===1&&aliveA.length>=2)mark(aliveB[0],aliveA.length);
@@ -764,13 +926,14 @@ function simMap(a,b,ctx,opts){
   opts=opts||{};const stage=opts.stage||0;
   initMapForm(a,b);
   let sa=0,sb=0,stA=0,stB=0;const perf={},mbox={};const vigils=[];let lastZone="the Aisle";
-  let zone=pickZone();const buy={a:'full',b:'full'};
+  let zone=pickZone();const buy={a:'full',b:'full'};const E=newEcon(a,b);
   const roster=lineup(a).concat(lineup(b));
   roster.forEach(p=>mbox[p.id]=blankBox());
   while(!mapDone(sa,sb)){
+    econBuyBoth(E,a,b,sa,sb,stA,stB,buy); // the buy: gold spent, wands handed out, labels set for the close-flavor
     const r=simRound(a,b,{stage,mom:momFromStreak(stA,stB,sa,sb),zone,buy});lastZone=r.zone;
     if(r.winA){sa++;stA++;stB=0;}else{sb++;stB++;stA=0;}
-    buy.a=nextBuy(buy.a,r.winA,sb>=13||stB>=3);buy.b=nextBuy(buy.b,!r.winA,sa>=13||stA>=3);
+    econSettle(E,r,a,b); // bank the payouts, drop the fallen's wands
     zone=nextZone(zone,r.winA?a:b,r.winA?b:a);
     for(const id in r.grav)(perf[id]=perf[id]||[]).push(r.grav[id]);
     roster.forEach(p=>{const e=r.box[p.id];if(e){addBox(mbox[p.id],e);accStat(p,e);}});
@@ -971,6 +1134,15 @@ function seriesBlurb(s){
   return {score,text:parts.join(" ")};
 }
 function nm(p){return `<span class="nm">${p.first} "<span class="tg">${p.tag}</span>" ${p.last}</span>`;}
+// a player's combat archetype + weapon main — shown on the scouting card
+function wandMainHtml(p){const A=arch(p),w=wand(A.wand);
+  return `<div class="wmain wm-${A.wand}"><span class="wm-g">${w.gl}</span> <b>${esc(A.name)}</b> <span class="faint">· ${esc(A.blurb)}</span></div>`;}
+// whether a player buys into his current coach's system — the new style-fit dynamic, surfaced on the card
+function coachFitHtml(p,t){if(!t||!t.coach)return '';const phi=philOf(t.coach),fit=playerFit(p,t.coach);
+  const col=fit>=0.72?'var(--good)':fit>=0.5?'var(--cairn)':'var(--bad)',lab=fit>=0.72?'✓ Fits':fit>=0.5?'~ Tolerates':'✗ Clashes with';
+  const tail=fit<0.5?` — he wants to ${esc(aggroVerb(p))}`:'';
+  const ad=p.r.adaptability==null?62:p.r.adaptability;
+  return `<div class="wmain" style="color:${col}">${lab} coach ${esc(t.coach.last)}'s <b>${esc(phi.name)}</b> system${tail} <span class="faint">· adapt ${ad}</span></div>`;}
 function traitPills(p){if(!p.traits||!p.traits.length)return '';
   return `<div class="traits">${p.traits.map(t=>{const d=TRAITS[t];return d?`<span class="trait" style="border-color:${d.col};color:${d.col}" title="${esc(d.blurb)}">${esc(d.name)}</span>`:'';}).join('')}</div>`;}
 function relLine(p){const bits=[];
@@ -991,7 +1163,7 @@ function timelinePush(o){world.timeline.push(Object.assign({season:world.season,
 // A frozen box score (both lineups) for a notable game/final, so history can be replayed in the Annals.
 // `box` is keyed by player id; we snapshot the rosters as they were the moment it was recorded.
 function teamBoxRows(t,box){return lineup(t).map(p=>{const e=box[p.id]||blankBox();
-    return {tag:p.tag,role:p.role,k:e.k,d:e.d,a:e.a,entry:e.entry,opens:e.opens||0,vigils:e.vigils||0,adr:adrOf(e),kast:kastOf(e),mk:multiK(e),aces:e.aces||0};})
+    return {tag:p.tag,role:p.role,k:e.k,d:e.d,a:e.a,entry:e.entry,opens:e.opens||0,vigils:e.vigils||0,adr:adrOf(e),kast:kastOf(e),mk:multiK(e),aces:e.aces||0,hs:e.k?Math.round(100*(e.hsk||0)/e.k):null};})
   .sort((x,y)=>(y.k-y.d)-(x.k-x.d)||y.k-x.k);}
 function finalBoxSnapshot(a,b,box){if(!box)return null;return {teams:[{name:a.name,short:a.short,rows:teamBoxRows(a,box)},{name:b.name,short:b.short,rows:teamBoxRows(b,box)}]};}
 // single-map standout — the best individual game on one map (premier events only)
@@ -1173,6 +1345,8 @@ function updateMorale(){
       if(skillIndex(p)>=70&&(p.titles||0)===0&&(t.majors||0)===0&&p.age>=24)d+=0.16;      // ambition
       if(p===weakest&&strongTeam&&(skillIndex(p)<60||p.age>=29))d+=0.12;                   // insecurity
       if(hasTrait(p,'mercenary'))d+=0.14;
+      const fit=playerFit(p,t.coach),clash=Math.max(0,0.6-fit);                              // a style he can't get behind
+      if(clash>0)d+=clash*0.32;                                                              // grates a little more each season
       if(hasTrait(p,'hothead'))d*=1.4;                                                      // volatility amplifies
       d-=0.06;                                                                              // unrest fades by default
       if(won)d-=0.7;                                                                        // a title cures the room
@@ -1181,7 +1355,10 @@ function updateMorale(){
       p.unrest=clamp((p.unrest||0)+d,0,1);
       if(p.unrest>=0.6&&!p.wantsOut&&!hasTrait(p,'loyal')&&p.age<=31&&rnd()<0.55){
         p.wantsOut=world.season;
-        const why=skillIndex(p)>=70&&(t.majors||0)===0?`wants to compete for titles ${esc(t.name)} can't reach`:`has fallen out with the room at ${esc(t.name)}`;
+        const styleClash=fit<0.5; // a poor stylistic fit is the loudest grievance
+        const why=styleClash
+          ?`can't play the ${philOf(t.coach).name} system coach ${esc(t.coach.last)} drills — he wants to ${aggroVerb(p)}`
+          :skillIndex(p)>=70&&(t.majors||0)===0?`wants to compete for titles ${esc(t.name)} can't reach`:`has fallen out with the room at ${esc(t.name)}`;
         feedPush('note','A transfer request',`${nm(p)} ${why} — and asks to be moved. ${t.short} have a call to make.`);
         txn('drop',`${nm(p)} (${t.short}) hands in a transfer request.`);
       }
@@ -1532,7 +1709,7 @@ function pendName(e){return typeof e==='string'?e:e.name;}
 function pendTier(e){return typeof e==='string'?'SP':(e.tier||'SP');}
 function autoOneEvent(name,tier){world.thisSeasonEvents.push(runEvent(tier||'SP',name));world.pendingMajors=(world.pendingMajors||[]).filter(e=>pendName(e)!==name);}
 function autoResolveMajors(){if((world.pendingMajors||[]).length)transactionWindow();(world.pendingMajors||[]).slice().forEach(e=>autoOneEvent(pendName(e),pendTier(e)));world.pendingMajors=[];}
-function bestFor(pool,role){const av=pool.filter(p=>!p.retired);const exact=av.filter(p=>p.role===role);const c=exact.length?exact:av;if(!c.length)return null;return c.reduce((m,p)=>skillIndex(p)>skillIndex(m)?p:m,c[0]);}
+function bestFor(pool,role,coach){const av=pool.filter(p=>!p.retired);const exact=av.filter(p=>p.role===role);const c=exact.length?exact:av;if(!c.length)return null;const sc=p=>skillIndex(p)+recruitBias(p,coach);return c.reduce((m,p)=>sc(p)>sc(m)?p:m,c[0]);}
 function takeFA(role){const p=bestFor(world.freeAgents,role);if(p)world.freeAgents=world.freeAgents.filter(x=>x!==p);return p;}
 // Competitive balance: no club may stockpile stars through the market. An "elite" is a top-end talent; a
 // roster auto-acquires at most two of them (manual commissioner moves still build super-teams freely).
@@ -1550,9 +1727,9 @@ function signFor(t,role){
       txn('sign',`${t.short} reunite ${nm(prot)} with his old mentor, coach ${t.coach.tag}.`);
       feedPush('note','Reunited with his mentor',`${nm(prot)} signs for ${esc(t.name)} — back alongside ${t.coach.first} "${t.coach.tag}" ${t.coach.last}, the mentor who brought him up, now in the coach's chair.`);return;}}
   const cap=eliteCount(t)>=2;const ok=p=>(!cap||skillIndex(p)<ELITE)&&!p.pinned&&!justSigned(p);
-  const faCand=bestFor(world.freeAgents.filter(ok),role);
-  let t2=null,t2team=null;
-  world.teams.filter(x=>x.div===2).forEach(x=>contracted(x).filter(p=>p.role===role&&ok(p)).forEach(p=>{if(!t2||skillIndex(p)>skillIndex(t2)){t2=p;t2team=x;}}));
+  const faCand=bestFor(world.freeAgents.filter(ok),role,t.coach);
+  let t2=null,t2team=null;const t2sc=p=>skillIndex(p)+recruitBias(p,t.coach); // call up players who fit the coach's system too
+  world.teams.filter(x=>x.div===2).forEach(x=>contracted(x).filter(p=>p.role===role&&ok(p)).forEach(p=>{if(!t2||t2sc(p)>t2sc(t2)){t2=p;t2team=x;}}));
   const faS=faCand?skillIndex(faCand):-1,t2S=t2?skillIndex(t2):-1;
   let signed;
   if(t2&&t2S>faS+3&&t2S>52){t2team.players=t2team.players.filter(p=>p!==t2);joinTeam(procWeak(role),t2team);signed=t2;txn('callup',`${nm(signed)} called up to ${t.short} (Div 1) from ${t2team.short}.`);feedPush('small','Called up',`${esc(t.name)} call up ${nm(signed)} <span class="role">${role}</span> from ${esc(t2team.name)} (tier 2).`);}
@@ -1570,7 +1747,8 @@ function promoteRelegate(){
 }
 /* anytime transactions */
 function retire(p,t,opts){opts=opts||{};p.retired=true;p.standinFor=null;
-  if(opts.toCoach&&t){t.coach=mkCoach(p.first,p.tag,p.last,{prep:clamp(p.r.read+gauss()*4,58,96),composure:clamp(p.r.consistency,55,95)},true,p.id,(p.proteges||[]).slice());
+  if(opts.toCoach&&t){const ag=archAggro(p),exPhil=ag>=0.8?'tempo':ag>=0.6?'firepower':ag>=0.42?'adaptive':ag>=0.25?'control':'bastion'; // he coaches the way he played
+    t.coach=mkCoach(p.first,p.tag,p.last,{prep:clamp(p.r.read+gauss()*4,58,96),composure:clamp(p.r.consistency,55,95)},true,p.id,(p.proteges||[]).slice(),exPhil);
     feedPush('note','To the touchline',`${nm(p)} hangs up the mouse and takes the ${t.short} coaching chair${p.titles?` — ${p.titles} Major${p.titles>1?'s':''} as a player`:', still unmarked'}. The read never really leaves.`);}
   else if(!opts.silent){let tail=p.titles===0?" — unmarked to the end.":` with ${p.titles} Major${p.titles>1?"s":""} to his name.`;
     const clubs=1+((p.formerTeams||[]).length);
@@ -1666,7 +1844,7 @@ function poach(){
       if(atCap&&skillIndex(p)>=ELITE)return;
       const merc=hasTrait(p,'mercenary');const reunite=duoPartnerOn(p,buyer); // getting the band back together
       const wo=!!p.wantsOut; // an unhappy player is gettable, and cheap
-      const gapNeed=merc||reunite||wo?2:6;const pri=skillIndex(p)+(merc?6:0)+(reunite?16:0)+(wo?10:0);
+      const gapNeed=merc||reunite||wo?2:6;const pri=skillIndex(p)+(merc?6:0)+(reunite?16:0)+(wo?10:0)+recruitBias(p,buyer.coach);
       if(skillIndex(p)>skillIndex(weak)+gapNeed&&pri>bestPri){target=p;seller=t;bestPri=pri;}});});
     if(!target)continue;
     buyer.players=buyer.players.filter(p=>p!==weak);toFA(weak);
@@ -1884,12 +2062,14 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
   const wt=p.worlds||0,mt=majorTitles(p);const aw=playerAwards(p);
   const honours=[];if(wt)honours.push(`<span class="good">♛ ${wt} World${wt>1?'s':''}</span>`);if(mt)honours.push(`<span class="good">${mt} Major${mt>1?'s':''}</span>`);
   const attrs=editing
-    ? editRow('Aim','aim',r.aim,p.id)+editRow('Read','read',r.read,p.id)+editRow('Entry','entry',r.entry,p.id)+editRow('Clutch','clutch',r.clutch,p.id)+editRow('Util','util',r.util,p.id)+editRow('Consist','consistency',r.consistency,p.id)
+    ? editRow('Aim','aim',r.aim,p.id)+editRow('Read','read',r.read,p.id)+editRow('Entry','entry',r.entry,p.id)+editRow('Clutch','clutch',r.clutch,p.id)+editRow('Util','util',r.util,p.id)+editRow('Consist','consistency',r.consistency,p.id)+editRow('Adapt','adaptability',r.adaptability==null?62:r.adaptability,p.id)
       +`<div class="editmeta">age <button class="step" data-act="agedn" data-p="${p.id}">−</button> ${p.age} <button class="step" data-act="ageup" data-p="${p.id}">+</button> · role <button class="mact" data-act="rolecycle" data-p="${p.id}">${p.role}</button></div>`+bar('Stamina',p.stamina||60)
-    : bar('Aim',r.aim)+bar('Read',r.read)+bar('Entry',r.entry)+bar('Clutch',r.clutch)+bar('Util',r.util)+bar('Consist',r.consistency)+bar('Stamina',p.stamina||60);
+    : bar('Aim',r.aim)+bar('Read',r.read)+bar('Entry',r.entry)+bar('Clutch',r.clutch)+bar('Util',r.util)+bar('Consist',r.consistency)+bar('Adapt',r.adaptability==null?62:r.adaptability)+bar('Stamina',p.stamina||60);
   return `<div class="scout">
     <div class="scout-top"><div><div class="scout-nm">${nm(p)}</div><div class="scout-sub">${t?esc(t.name):'Free agent'} · <span class="role">${p.role}</span> · age ${p.age}${p.retired?' · <span class="unmarked">retired</span>':''}${p.onDesk?' · <span class="good">🎙 on the desk</span>':''}${p.standinFor?' · <span class="t2pill">stand-in</span>':''}${p.injured?' · <span class="unmarked">injured</span>':''}${p.pinned?' · <span class="t2pill">pinned</span>':''}${unm?' · <span class="unmarked">● unmarked</span>':honours.length?' · '+honours.join(' · '):''}</div></div><button class="ctl" data-pid="${p.id}">close</button></div>
     ${traitPills(p)}
+    ${wandMainHtml(p)}
+    ${coachFitHtml(p,t)}
     ${honoursLine(p)}
     ${careerPath(p)}
     ${relLine(p)}
@@ -1906,6 +2086,7 @@ function scoutCard(p,t){const s=p.stat,cg=p.games>=1?careerGrav(p):null,unm=cg!=
         <div class="ss"><span>K / D / A</span><b>${s.k} / ${s.d} / ${s.a}</b></div>
         <div class="ss"><span>K/D · KDA</span><b>${s.rounds?kd(s).toFixed(2):'—'} · ${s.rounds?kda(s).toFixed(2):'—'}</b></div>
         <div class="ss"><span>ADR · KAST</span><b>${adrOf(s)||'—'} · ${s.rounds?kastOf(s)+'%':'—'}</b></div>
+        <div class="ss"><span>Headshot %</span><b>${s.k?Math.round(100*(s.hsk||0)/s.k)+'%':'—'}</b></div>
         <div class="ss"><span>Openings · First deaths</span><b>${s.opens||0} · ${s.fds||0}</b></div>
         <div class="ss"><span>Multikills · Aces</span><b>${multiK(s)} · <span class="${s.aces?'bx-v':''}">${s.aces||0}</span></b></div>
         <div class="ss"><span>Trades · Entries</span><b>${s.trades||0} · ${s.entry}</b></div>
@@ -2063,7 +2244,8 @@ function teamCard(t,rankAll){
   const roster=contracted(t).concat(t.standins||[]);
   let h=`<div class="scout teamcard">
     <div class="scout-top"><div><div class="scout-nm">${t.name} <span class="role">${t.short}</span></div>
-      <div class="scout-sub"><span class="${t.div===2?'t2pill':'role'}">Div ${t.div}</span> · ${t.heart?'<span class="good">♥ heart side</span>':'<span class="faint">marquee side</span>'} · coach ${esc(coachName(t.coach))}${t.coach.former?' <span class="good">◇ ex-player</span>':''}${t.bb?' · <span class="t2pill">Beastie Bois</span>':''}</div></div>
+      <div class="scout-sub"><span class="${t.div===2?'t2pill':'role'}">Div ${t.div}</span> · ${t.heart?'<span class="good">♥ heart side</span>':'<span class="faint">marquee side</span>'} · coach ${esc(coachName(t.coach))}${t.coach.former?' <span class="good">◇ ex-player</span>':''}${t.bb?' · <span class="t2pill">Beastie Bois</span>':''}</div>
+      <div class="scout-sub" style="margin-top:3px" title="${esc(philOf(t.coach).blurb)}"><span class="gravl-mark">${esc(philOf(t.coach).name)}</span> <span class="faint">system · roster buy-in ${Math.round(clamp(teamBuyIn(t),0,1.1)*100)}%</span></div></div>
       <button class="ctl" data-tclose="1">close</button></div>
     <div class="scout-cols"><div class="scout-stats" style="flex:1">
       <div class="ss"><span>GRAVL</span><b class="grav" style="color:var(--gravl)">${Math.round(t.gravl)}</b></div>
@@ -2075,8 +2257,9 @@ function teamCard(t,rankAll){
     </div></div>
     <div class="tc-sec"><div class="lede">Roster</div>
     ${roster.map(p=>{const cg=p.games>=1?careerGrav(p):null;const unmp=cg!==null&&cg>=1.15&&p.titles===0;
-      return `<div class="trow" data-tpid="${p.id}"><span class="trole">${p.role.slice(0,3)}</span><span class="tnm">${nm(p)}${p===star?' <span class="t2pill">★</span>':''}${p.standinFor?' <span class="t2pill">sub</span>':''}${p.injured?' <span class="t2pill" style="color:var(--unmarked);border-color:var(--unmarked)">inj</span>':''}${unmp?' <span class="unmarked">●</span>':p.titles?` <span class="good">▲${p.titles}</span>`:''}</span><span class="tstat grav">${cg!==null?cg.toFixed(2):'—'}</span><span class="tstat grav">${p.stat.rounds?kd(p.stat).toFixed(2):'—'}</span></div>`;}).join("")}
-    <div class="hint" style="margin-top:4px">Gravity · K/D. Tap a player for the full scouting card.</div></div>
+      const fit=playerFit(p,t.coach);
+      return `<div class="trow" data-tpid="${p.id}"><span class="trole">${p.role.slice(0,3)}</span><span class="tnm">${nm(p)} <span class="wm-${arch(p).wand}" title="${esc(arch(p).name)}">${wand(arch(p).wand).gl}</span>${p===star?' <span class="t2pill">★</span>':''}${p.standinFor?' <span class="t2pill">sub</span>':''}${p.injured?' <span class="t2pill" style="color:var(--unmarked);border-color:var(--unmarked)">inj</span>':''}${fit<0.5?` <span style="color:var(--bad)" title="clashes with the ${esc(philOf(t.coach).name)} system — wants to ${esc(aggroVerb(p))}">✗ clash</span>`:''}${unmp?' <span class="unmarked">●</span>':p.titles?` <span class="good">▲${p.titles}</span>`:''}</span><span class="tstat grav">${cg!==null?cg.toFixed(2):'—'}</span><span class="tstat grav">${p.stat.rounds?kd(p.stat).toFixed(2):'—'}</span></div>`;}).join("")}
+    <div class="hint" style="margin-top:4px">Gravity · K/D · ${esc(philOf(t.coach).name)} system. Tap a player for the full scouting card.</div></div>
     ${worldCairns.length?`<div class="tc-sec"><div class="lede">♛ World Championships</div>
     ${worldCairns.map(c=>`<div class="row2"><span><span class="unmarked">♛</span> ${esc(c.event)} <span class="faint">· ${esc(c.zone)}</span></span><span class="ct" style="color:var(--ember)">S${c.season}</span></div>`).join("")}</div>`:''}
     <div class="tc-sec"><div class="lede">Majors won</div>
@@ -2133,8 +2316,8 @@ function renderTeams(){const el=$("p-teams");
 
 // A frozen box score, rendered inline in the Annals (and the live broadcast) when a record is expanded.
 function boxSideHtml(tm){return `<div class="bx-team">${esc(tm.name||tm.short)} <span class="bx-coach">${esc(tm.short)}</span></div>
-  <table class="bx"><thead><tr><th>Player</th><th title="kills">K</th><th title="deaths">D</th><th title="assists">A</th><th title="avg damage/round">ADR</th><th title="K/A/S/T rounds %">KAST</th><th title="opening kills">OP</th><th title="multikills">MK</th><th title="clutches (vigils)">Vg</th></tr></thead><tbody>
-  ${tm.rows.map(r=>`<tr><td class="bx-nm"><span class="tg">${esc(r.tag)}</span> <span class="role">${esc((r.role||'').slice(0,3))}</span>${r.aces?` <span class="bx-v" title="aces">${'★'.repeat(Math.min(r.aces,3))}</span>`:''}</td><td class="bx-k">${r.k}</td><td>${r.d}</td><td>${r.a}</td><td>${r.adr||'·'}</td><td>${r.kast?r.kast+'%':'·'}</td><td>${r.opens||'·'}</td><td>${r.mk||'·'}</td><td class="${r.vigils?'bx-v':''}">${r.vigils||'·'}</td></tr>`).join('')}
+  <table class="bx"><thead><tr><th>Player</th><th title="kills">K</th><th title="deaths">D</th><th title="assists">A</th><th title="avg damage/round">ADR</th><th title="K/A/S/T rounds %">KAST</th><th title="headshot % of kills">HS%</th><th title="opening kills">OP</th><th title="multikills">MK</th><th title="clutches (vigils)">Vg</th></tr></thead><tbody>
+  ${tm.rows.map(r=>`<tr><td class="bx-nm"><span class="tg">${esc(r.tag)}</span> <span class="role">${esc((r.role||'').slice(0,3))}</span>${r.aces?` <span class="bx-v" title="aces">${'★'.repeat(Math.min(r.aces,3))}</span>`:''}</td><td class="bx-k">${r.k}</td><td>${r.d}</td><td>${r.a}</td><td>${r.adr||'·'}</td><td>${r.kast?r.kast+'%':'·'}</td><td>${r.hs!=null?r.hs+'%':'·'}</td><td>${r.opens||'·'}</td><td>${r.mk||'·'}</td><td class="${r.vigils?'bx-v':''}">${r.vigils||'·'}</td></tr>`).join('')}
   </tbody></table>`;}
 function storedBoxHtml(box){
   if(!box||!box.teams)return '';
@@ -2515,10 +2698,13 @@ function playoffPreLine(a,b,L){const bits=[];
     if(ra&&rb&&ra.l!==rb.l){const cleaner=ra.l<rb.l?a:b,cr=ra.l<rb.l?ra:rb;bits.push(`${cleaner.short} came through the Swiss cleaner (${cr.w}–${cr.l})`);}}
   const sa=starOf(a),sb=starOf(b);
   if(sa&&sb){const riv=Object.values(world.rivalries).find(x=>(x.a.id===sa.id&&x.b.id===sb.id)||(x.a.id===sb.id&&x.b.id===sa.id));if(riv&&riv.count>=1)bits.push(`${sa.tag} v ${sb.tag} renewed`);}
+  // a star at war with his own coach's system is a story the desk loves
+  [a,b].forEach(t=>{const s=starOf(t);if(s&&playerFit(s,t.coach)<0.45)bits.push(`${s.tag} has been chafing in ${t.short}'s ${philOf(t.coach).name} system — he wants to ${aggroVerb(s)}`);});
+  {const pa=philOf(a.coach),pb=philOf(b.coach);if(Math.abs(pa.aggro-pb.aggro)>=0.4)bits.push(`a contrast in styles — ${a.short}'s ${pa.name} against ${b.short}'s ${pb.name}`);}
   if(sa&&sa.titles===0&&careerGrav(sa)>=1.15)bits.push(`${sa.tag} chasing a first title`);
   else if(sb&&sb.titles===0&&careerGrav(sb)>=1.15)bits.push(`${sb.tag} chasing a first title`);
   return bits.length?bits[0]+'.':'';}
-function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box,zone:pickZone(),buy:{a:'full',b:'full'}};}
+function startMap(L){const m=L.match;initMapForm(m.a,m.b);const box={};lineup(m.a).concat(lineup(m.b)).forEach(p=>box[p.id]=blankBox());m.map={sa:0,sb:0,round:0,stA:0,stB:0,lastZone:'the Aisle',mapVigils:[],perf:{},box,zone:pickZone(),buy:{a:'full',b:'full'},econ:newEcon(m.a,m.b)};}
 function roundLine(r,m,mp){
   const score=`${mp.sa}–${mp.sb}`;const w=r.winnerTeam;
   // mp here is post-round — flag if a side is now ON map/match point (unless the map just ended)
@@ -2556,7 +2742,9 @@ function eventKind(ev){
 function eventLine(ev,m,mp){
   const K=ev.k!=null?anyPlayerById(ev.k):null,V=ev.v!=null?anyPlayerById(ev.v):null;
   const kt=K?K.tag:'?',vt=V?V.tag:'?',ksh=K?sideShortOf(m,ev.k):'';
-  if(ev.t==='open')return `▸ ${ksh} draw first blood — ${pick([`${kt} catches ${vt} stepping into ${ev.zone}`,`${kt} wins the opening duel over ${vt} at ${ev.zone}`,`${kt} snaps ${vt} off the entry into ${ev.zone}`])}.`;
+  if(ev.t==='open'){const body=pick([`${kt} catches ${vt} stepping into ${ev.zone}`,`${kt} wins the opening duel over ${vt} at ${ev.zone}`,`${kt} snaps ${vt} off the entry into ${ev.zone}`]);
+    const tail=ev.kw==='sage'?` — the Sage's Staff sings`:ev.vw==='sage'?` — and ${vt}'s Staff is silenced before it speaks, a brutal bank to lose`:ev.hs?` — a clean headshot`:'';
+    return `▸ ${ksh} draw first blood — ${body}${tail}.`;}
   if(ev.t==='trade')return `↺ ${kt} trades it straight back — ${vt} doesn't get to live with it.`;
   if(ev.t==='clutch')return `◆ ${kt} the last man standing, 1v${ev.x} at ${ev.zone}… and he STANDS it. The vigil holds.`;
   if(ev.t==='close'){const wsh=ev.winA?m.a.short:m.b.short,lsh=ev.winA?m.b.short:m.a.short,wa=ev.winA?mp.sa+1:mp.sa,wb=ev.winA?mp.sb:mp.sb+1;
@@ -2571,6 +2759,7 @@ function eventLine(ev,m,mp){
   if(ev.n>=4)return `${flank}${kt} — FOUR. Is anyone going to stop him?! ${vt} the latest.`;
   if(ev.n===3)return `${flank}${kt} THREE on the round — ${vt} down, he is unconscious right now!`;
   if(ev.n===2)return `${flank}${kt} again — that's TWO, ${vt} drops.`;
+  if(ev.hs)return `${flank}${pick([`${kt} snaps ${vt}'s head back`,`${kt} headshots ${vt} clean`,`${kt} drops ${vt} with one through the head`])}.`;
   return `${flank}${pick([`${kt} tags ${vt}`,`${kt} drops ${vt}`,`${kt} wins the duel over ${vt}`])}.`;
 }
 // ---- reactions: a player's temperament shows in the moment (Ice stays cold, Volatile erupts) ----
@@ -2622,11 +2811,14 @@ function reactionLine(ev,m,mp){
   const sideA=lineup(m.a).some(q=>q.id===p.id),behind=sideA?mp.sa<mp.sb:mp.sb<mp.sa;
   return reactFlavor(p,big,behind);}
 // ---- the round, committed: shared bookkeeping for both the fast path and the kill-by-kill reveal ----
-function roundOpts(L,mp,ev){return {stage:L.stage==='f'?1:0,mom:momFromStreak(mp.stA||0,mp.stB||0,mp.sa,mp.sb),zone:mp.zone,buy:mp.buy,events:!!ev};}
+function roundOpts(L,mp,ev){
+  const note=econBuyBoth(mp.econ,L.match.a,L.match.b,mp.sa,mp.sb,mp.stA||0,mp.stB||0,mp.buy); // the buy, before the round
+  if(note)pushLog(L,`💰 ${note}.`,'map');
+  return {stage:L.stage==='f'?1:0,mom:momFromStreak(mp.stA||0,mp.stB||0,mp.sa,mp.sb),zone:mp.zone,buy:mp.buy,events:!!ev};}
 function commitRound(L,r,summary){
   const m=L.match,mp=m.map;
   mp.lastZone=r.zone;if(r.winA){mp.sa++;mp.stA=(mp.stA||0)+1;mp.stB=0;}else{mp.sb++;mp.stB=(mp.stB||0)+1;mp.stA=0;}mp.round++;
-  mp.buy.a=nextBuy(mp.buy.a,r.winA,mp.sb>=13||mp.stB>=3);mp.buy.b=nextBuy(mp.buy.b,!r.winA,mp.sa>=13||mp.stA>=3);
+  econSettle(mp.econ,r,m.a,m.b); // bank the round's payouts and drop the fallen's wands
   mp.zone=nextZone(mp.zone,r.winA?m.a:m.b,r.winA?m.b:m.a);
   for(const id in r.grav)(m.perf[id]=m.perf[id]||[]).push(r.grav[id]);
   for(const id in r.grav)(mp.perf[id]=mp.perf[id]||[]).push(r.grav[id]);
@@ -2814,6 +3006,12 @@ function previewView(L){const host=(world.casters||[]).find(c=>c.host);
   h+=`<div class="pv-card"><div class="pv-h">🎙 ${host?esc(host.name)+' sets the stage':'The desk sets the stage'}</div>${previewBodyHtml(L.preview)}</div>`;
   h+=`<div class="cast-ctl"><button class="ctl primary" data-act="startswiss">▶ ${L.tier==='SP'?'Begin the Challengers Stage':'Begin the Swiss'}</button><button class="ctl" data-act="auto">⏹ Auto the whole event</button></div>`;
   return h;}
+// the live loadout HUD: each team's bank and the wand in every player's hands, the Staff lit up gold
+function loadoutHud(m,mp){const E=mp.econ;if(!E)return '';
+  const sideHtml=(t,key)=>{const chips=lineup(t).map(p=>{const wk=E.hand[p.id]||'base',w=wand(wk),mine=p.wandPref===wk;
+      return `<span class="ld ld-${wk}" title="${esc(w.name)}${mine?' · his main':''}">${w.gl} ${esc(p.tag)}${mine?'<span class="ld-m">◦</span>':''}</span>`;}).join('');
+    return `<div class="hud-side"><div class="hud-gold">⛁ ${(E.gold[key]||0).toLocaleString()}</div><div class="hud-load">${chips}</div></div>`;};
+  return `<div class="hud">${sideHtml(m.a,'a')}<div class="hud-div">vs</div>${sideHtml(m.b,'b')}</div>`;}
 function renderCast(){
   const el=$("p-cast");const L=world.live;
   if(L&&!L.done&&L.stage==='preview'){el.innerHTML=previewView(L);return;}
@@ -2825,6 +3023,7 @@ function renderCast(){
     let h=`<div class="cast-head"><div class="cast-title">${L.name}</div><div class="cast-stage">${stageName}${matchNo}</div></div>`;
     if(!sw)h+=bracketStrip(L);
     h+=`<div class="scoreboard"><div class="sb-team">${esc(m.a.name)}</div><div class="sb-mid"><div class="sb-series">series ${m.wins.a}–${m.wins.b}</div><div class="sb-map">${mp.sa}–${mp.sb}</div><div class="sb-zone">${mp.cur?`◉ ${mp.cur.upA}v${mp.cur.upB} · ${mp.cur.r.zone}`:mp.round?`map ${m.maps.length+1} · last: ${mp.lastZone}`:`map ${m.maps.length+1} · first to 15`}</div></div><div class="sb-team">${esc(m.b.name)}</div></div>`;
+    h+=loadoutHud(m,mp);
     if(L.stage==='f'&&mp.round===0&&m.maps.length===0){
       if(L.stagePreview)h+=`<div class="desk"><div class="desk-label">From the desk · the stage</div>${fmtAI(L.stagePreview)}</div>`;
       else if(L.stagePreviewLoading)h+=`<div class="desk-loading">the desk is setting the stage…</div>`;
