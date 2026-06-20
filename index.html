@@ -2734,7 +2734,7 @@ async function narrate(id){
 /* live broadcast */
 const CAIRN_BIBLE=`You write for "Cairn," a fictional 5v5 esport. World facts: every match is in one permanent arena, the Yard; a roaming objective, the ember, decides each round; roles are reach (star aimer), breaker (entry), read (in-game leader), anchor, set (support); "Gravity" is the per-round impact rating (1.00 average, 1.40+ historic); a "vigil" is a clutch 1vX; a "deadlift" is a 0-2 reverse sweep; only a Major win lets a team build a permanent cosmetic "cairn" at the callout where the title turned; an elite player or team with zero cairns is "unmarked," the sport's central tragedy. Voice: reverent cathedral-gravity fused with grassroots warmth; humor and grief coexist; concrete detail; never cliched or hype-y.`;
 function seedField(){return [...world.teams].sort((a,b)=>b.gravl-a.gravl).slice(0,8);}
-function pushLog(L,text,kind){L.log.unshift({text,kind});if(L.log.length>140)L.log.pop();}
+function pushLog(L,text,kind){L.log.unshift({text,kind});if(L.log.length>200)L.log.pop();}
 // ---- the desk notices: emergent color from the analysts, biased by the clubs they used to call home ----
 function homerFor(team){return (world.casters||[]).find(c=>c.former&&c.former===team.short);}
 function pickAnalyst(pref){if(pref)return pref;const cs=world.casters||[];const an=cs.filter(c=>!c.host);return an.length?pick(an):(cs[0]||null);}
@@ -2762,15 +2762,76 @@ function deskMatchColor(L,a,b){
       `Don't take ${vet.tag} for granted — at ${vet.age}, every final out here could be the goodbye.`])]);}});}
   if(lines.length){const c=pick(lines);deskSay(L,c[0],c[1]);}
 }
-// in-round: a rookie taking a legend off the opening duel — the kind of moment the desk lives for
+// between rounds: the desk reads the game state — a streak, a comeback, the brink, a heater, a Ground upset.
+// Candidates are gathered with a priority; the loudest story (that hasn't been told yet) gets the mic.
 function deskRoundColor(L,r){
-  if(!r.open)return;const killer=anyPlayerById(r.open.w),victim=anyPlayerById(r.open.l);
-  if(!killer||!victim)return;L._rkNoted=L._rkNoted||{};
-  if(isRookie(killer)&&isLegend(victim)&&!L._rkNoted[killer.id]&&rnd()<0.7){L._rkNoted[killer.id]=1;
-    deskSay(L,pickAnalyst(),pick([
-      `Did you SEE that? ${killer.tag} — a kid in his first season — just took ${victim.tag} clean off the opening. Welcome to the big stage.`,
-      `${killer.tag} opens on ${victim.tag}. The rookie, against a legend of this game — he will not forget that one.`,
-      `That's ${victim.tag}, one of the greats, and a teenager just walked through his front door. Remember the name: ${killer.tag}.`]));}
+  const m=L.match,mp=m&&m.map;if(!mp)return;
+  // (1) a rookie taking a legend off the opening — top priority, its own gate
+  if(r.open){const killer=anyPlayerById(r.open.w),victim=anyPlayerById(r.open.l);
+    if(killer&&victim){L._rkNoted=L._rkNoted||{};
+      if(isRookie(killer)&&isLegend(victim)&&!L._rkNoted[killer.id]&&rnd()<0.7){L._rkNoted[killer.id]=1;
+        return deskSay(L,pickAnalyst(),pick([
+          `Did you SEE that? ${killer.tag} — a kid in his first season — just took ${victim.tag} clean off the opening. Welcome to the big stage.`,
+          `${killer.tag} opens on ${victim.tag}. The rookie, against a legend of this game — he will not forget that one.`,
+          `That's ${victim.tag}, one of the greats, and a teenager just walked through his front door. Remember the name: ${killer.tag}.`]));}}}
+  if(mapDone(mp.sa,mp.sb))return; // the map close gets its own color
+  const sa=mp.sa,sb=mp.sb,lead=Math.abs(sa-sb),wsh=r.winnerTeam.short,cands=[]; // [priority, line]
+  mp._def=mp._def||{a:0,b:0};mp._def.a=Math.max(mp._def.a,sb-sa);mp._def.b=Math.max(mp._def.b,sa-sb); // worst deficit each side has faced
+  // a winning streak building into a procession
+  const stA=mp.stA||0,stB=mp.stB||0,streak=Math.max(stA,stB),stTeam=stA>=stB?m.a:m.b;
+  L._stNoted=L._stNoted||{};
+  if(streak>=4&&!L._stNoted[stTeam.short+':'+streak]){L._stNoted[stTeam.short+':'+streak]=1;cands.push([7,pick([
+    `${stTeam.short} have won ${streak} on the bounce — this is becoming a procession.`,
+    `${streak} straight for ${stTeam.short}. The other side cannot buy a round right now.`,
+    `Whatever ${stTeam.short} found between rounds, bottle it — ${streak} in a row and the momentum is a tidal wave.`])]);}
+  // a comeback completing — a side that was buried drawing level
+  L._cbNoted=L._cbNoted||{};
+  ['a','b'].forEach(s=>{const me=s==='a'?m.a:m.b,myS=s==='a'?sa:sb,opS=s==='a'?sb:sa;
+    if(mp._def[s]>=5&&myS>=opS&&!L._cbNoted[me.short]){L._cbNoted[me.short]=1;cands.push([9,pick([
+      `${me.short} were DEAD and buried — down ${mp._def[s]} — and they have hauled this all the way back. Unbelievable.`,
+      `From ${mp._def[s]} down to level. ${me.short} have authored a comeback for the ages.`,
+      `Never write ${me.short} off again — that deficit was a grave and they climbed out of it.`])]);}});
+  // the brink — map point or, one map from the series, match point
+  L._brNoted=L._brNoted||{};
+  ['a','b'].forEach(s=>{const myS=s==='a'?sa:sb,opS=s==='a'?sb:sa,me=s==='a'?m.a:m.b;
+    if(isMapPoint(myS,opS)){const mpt=m.wins&&m.wins[s]===m.target-1,key=me.short+(mpt?'M':'m');
+      if(!L._brNoted[key]){L._brNoted[key]=1;cands.push([mpt?9:5,mpt?pick([
+        `MATCH POINT ${me.short}. One round from the series — the pressure is suffocating now.`,
+        `${me.short} stand on match point. Everything, right here on this round.`]):pick([
+        `Map point ${me.short} — one round to bank it.`,
+        `${me.short} can close the map next round. The bench is up.`])]);}}});
+  // a player heating up — map-kill milestones
+  let topId=null,topK=-1;for(const id in mp.box){const k=mp.box[id].k;if(k>topK){topK=k;topId=+id;}}
+  L._tallyNoted=L._tallyNoted||{};
+  if(topId!=null){const thr=topK>=20?20:topK>=15?15:topK>=10?10:0;
+    if(thr&&!L._tallyNoted[topId+':'+thr]){L._tallyNoted[topId+':'+thr]=1;const tp=anyPlayerById(topId);
+      if(tp)cands.push([6,pick([
+        `${tp.tag} is up to ${topK} on the map — unconscious right now.`,
+        `${topK} frags already for ${tp.tag}, carrying his side single-handed.`,
+        `Look at the scoreboard: ${tp.tag}, ${topK} and climbing. Somebody has to answer him.`])]);}}
+  // an upset on a Ground — the side that doesn't own this map out-playing the side that does
+  if(mp.groundMap&&!mp._profNoted){const G=mp.groundMap,cA=mapComfort(m.a,G),cB=mapComfort(m.b,G);
+    if(Math.abs(cA-cB)>=0.3){const fav=cA>cB?m.a:m.b,und=cA>cB?m.b:m.a,favS=fav===m.a?sa:sb,undS=und===m.a?sa:sb;
+      if(undS>favS+1){mp._profNoted=1;cands.push([7,pick([
+        `${und.short} are beating ${fav.short} on ${G.name} — ${fav.short}'s own Ground. That is a statement.`,
+        `This is supposed to be ${fav.short}'s map. ${und.short} clearly didn't get the memo — ${undS}–${favS} up.`])]);}}}
+  // a blowout taking shape
+  if(lead>=8&&!mp._blowNoted){mp._blowNoted=1;cands.push([3,pick([
+    `${wsh} are running away with this — ${Math.max(sa,sb)}–${Math.min(sa,sb)}, and it is not close.`,
+    `This is a demolition. ${wsh} look untouchable on this Ground.`])]);}
+  // a tight map deep in — atmosphere, allowed to recur on a cooldown
+  if(mp.round>=18&&lead<=1&&(mp._tightAt==null||mp.round-mp._tightAt>=4)){mp._tightAt=mp.round;cands.push([4,pick([
+    `Every round is a final now — ${sa}–${sb}, nerves of steel required.`,
+    `Round ${mp.round} and you cannot split them. What a map this is.`,
+    `Going right to the wire — ${sa}–${sb}, nobody in this building is breathing.`])]);}
+  // a flawless round — nobody lost
+  const winRoster=lineup(r.winA?m.a:m.b);
+  if(r.box&&!r.vigil&&winRoster.length&&winRoster.every(p=>{const e=r.box[p.id];return e&&e.surv;})&&rnd()<0.35)cands.push([2,pick([
+    `A flawless round for ${wsh} — not a man lost. Textbook.`,`${wsh} take that one without a scratch. Clinical.`])]);
+  if(!cands.length)return;
+  cands.sort((a,b)=>b[0]-a[0]);const topP=cands[0][0];
+  const fireP=topP>=8?0.97:topP>=6?0.72:topP>=4?0.5:0.32; // the louder the story, the likelier the desk calls it
+  if(rnd()<fireP){const tier=cands.filter(c=>c[0]>=topP-1);deskSay(L,pickAnalyst(),pick(tier)[1]);}
 }
 // between maps: a player who keeps being the best man on the server — a tournament heater
 function deskMapColor(L,mg){
@@ -3024,10 +3085,10 @@ function eventKind(ev){
 function eventLine(ev,m,mp){
   const K=ev.k!=null?anyPlayerById(ev.k):null,V=ev.v!=null?anyPlayerById(ev.v):null;
   const kt=K?K.tag:'?',vt=V?V.tag:'?',ksh=K?sideShortOf(m,ev.k):'';
-  if(ev.t==='open'){const body=pick([`${kt} catches ${vt} stepping into ${ev.zone}`,`${kt} wins the opening duel over ${vt} at ${ev.zone}`,`${kt} snaps ${vt} off the entry into ${ev.zone}`]);
-    const tail=ev.kw==='sage'?` — the Sage's Staff sings`:ev.vw==='sage'?` — and ${vt}'s Staff is silenced before it speaks, a brutal bank to lose`:ev.hs?` — a clean headshot`:'';
+  if(ev.t==='open'){const body=pick([`${kt} catches ${vt} stepping into ${ev.zone}`,`${kt} wins the opening duel over ${vt} at ${ev.zone}`,`${kt} snaps ${vt} off the entry into ${ev.zone}`,`${kt} beats ${vt} to the angle at ${ev.zone}`,`first contact at ${ev.zone} — ${kt} gets there first and ${vt} pays`,`${kt} reads the entry into ${ev.zone} and punishes ${vt}`]);
+    const tail=ev.kw==='sage'?` — the Sage's Staff sings`:ev.vw==='sage'?` — and ${vt}'s Staff is silenced before it speaks, a brutal bank to lose`:ev.hs?` — a clean headshot to open`:'';
     return `▸ ${ksh} draw first blood — ${body}${tail}.`;}
-  if(ev.t==='trade')return `↺ ${kt} trades it straight back — ${vt} doesn't get to live with it.`;
+  if(ev.t==='trade')return `↺ ${pick([`${kt} trades it straight back — ${vt} doesn't get to live with it`,`${kt} is right there to refrag — ${vt} joins him on the floor instantly`,`no free kills here — ${kt} trades ${vt} the second he steps out`,`${kt} cleans it up, the trade immediate`])}.`;
   if(ev.t==='clutch')return `◆ ${kt} the last man standing, 1v${ev.x} at ${ev.zone}… and he STANDS it. The vigil holds.`;
   if(ev.t==='close'){const wsh=ev.winA?m.a.short:m.b.short,lsh=ev.winA?m.b.short:m.a.short,wa=ev.winA?mp.sa+1:mp.sa,wb=ev.winA?mp.sb:mp.sb+1;
     const v=ev.winA?pick(['crack it open','take the contest','break the hold','force the ember']):pick(['win the stand','hold the line','deny the break','smother it']);
@@ -3036,13 +3097,15 @@ function eventLine(ev,m,mp){
     const econ=(wb2==='eco'&&behind)?` ${wsh} steal it on the save!`:(lb2==='force')?` ${lsh}'s force comes up empty.`:'';
     return `▪ ${wsh} ${v} — round to ${wsh}. ${m.a.short} ${wa}–${wb} ${m.b.short}.${econ}`;}
   // a standard duel kill, escalating with the killer's running count this round
-  const flank=ev.adv<0&&ev.n>=2?pick(['Swinging wide off the flank, ','Re-peeking from the back, ','Off a sneaky flank, ']):'';
+  const flank=ev.adv<0&&ev.n>=2?pick(['Swinging wide off the flank, ','Re-peeking from the back, ','Off a sneaky flank, ','Holding the off-angle, ']):'';
   if(ev.n>=5)return `${flank}${kt} — an ACE! Five for ${kt}, the entire server cleared single-handed!`;
   if(ev.n>=4)return `${flank}${kt} — FOUR. Is anyone going to stop him?! ${vt} the latest.`;
   if(ev.n===3)return `${flank}${kt} THREE on the round — ${vt} down, he is unconscious right now!`;
   if(ev.n===2)return `${flank}${kt} again — that's TWO, ${vt} drops.`;
-  if(ev.hs)return `${flank}${pick([`${kt} snaps ${vt}'s head back`,`${kt} headshots ${vt} clean`,`${kt} drops ${vt} with one through the head`])}.`;
-  return `${flank}${pick([`${kt} tags ${vt}`,`${kt} drops ${vt}`,`${kt} wins the duel over ${vt}`])}.`;
+  // a passing read of the man-count — ev.adv is the killer's advantage before the kill
+  const ms=rnd()<0.34?(ev.adv===-1?pick([` — and that levels the numbers`,` — clawed right back to even`]):ev.adv===0?` — ${ksh} nose in front now`:ev.adv>=2?pick([` — ${ksh} running away with it`,` — bodies everywhere, ${ksh} on top`]):ev.adv<=-2?` — ${ksh} chipping at the deficit`:''):'';
+  if(ev.hs)return `${flank}${pick([`${kt} snaps ${vt}'s head back`,`${kt} headshots ${vt} clean`,`${kt} drops ${vt} with one through the head`,`${kt} flicks — headshot, ${vt} gone`])}${ms}.`;
+  return `${flank}${pick([`${kt} tags ${vt}`,`${kt} drops ${vt}`,`${kt} wins the duel over ${vt}`,`${kt} puts ${vt} down`,`${kt} beats ${vt} clean`,`${kt} clips ${vt} on the peek`])}${ms}.`;
 }
 // ---- reactions: a player's temperament shows in the moment (Ice stays cold, Volatile erupts) ----
 function reactFlavor(p,big,behind){
@@ -3059,22 +3122,22 @@ function reactFlavor(p,big,behind){
     if(hasTrait(p,'bigGame'))return `🎙 ${tag} owns this stage — and he knows it.`;
     return `🎙 ${tag} lets it all out. What a moment for him.`;}
   if(big===3){
-    if(hot)return `🎙 ${tag} FISTS THE AIR and screams to his bench!`;
-    if(ice)return `🎙 ${tag} barely blinks. Cold as you like.`;
-    if(hasTrait(p,'bigGame'))return `🎙 ${tag} feeds off the noise — this is his stage.`;
-    return `🎙 ${tag} pumps the fist.`;}
+    if(hot)return pick([`🎙 ${tag} FISTS THE AIR and screams to his bench!`,`🎙 ${tag} is up out of the chair, roaring at his side!`]);
+    if(ice)return pick([`🎙 ${tag} barely blinks. Cold as you like.`,`🎙 ${tag} doesn't change expression. Machine-like.`]);
+    if(hasTrait(p,'bigGame'))return pick([`🎙 ${tag} feeds off the noise — this is his stage.`,`🎙 ${tag} lives for this. Three on the round and loving it.`]);
+    return pick([`🎙 ${tag} pumps the fist.`,`🎙 ${tag} nods to his crew — three down, keep it going.`,`🎙 ${tag} lets a little out — that was a big one.`]);}
   // big===2
-  if(hot)return `🎙 ${tag} barks at his side, fired right up.`;
-  if(ice)return `🎙 ${tag} stays level — onto the next.`;
-  if(hasTrait(p,'bigGame'))return `🎙 ${tag} rising to it.`;
-  return null;}
+  if(hot)return pick([`🎙 ${tag} barks at his side, fired right up.`,`🎙 ${tag} is animated now, talking fast.`]);
+  if(ice)return pick([`🎙 ${tag} stays level — onto the next.`,`🎙 ${tag} resets, no fuss.`]);
+  if(hasTrait(p,'bigGame'))return pick([`🎙 ${tag} rising to it.`,`🎙 ${tag} settling into the game now.`]);
+  return rnd()<0.5?pick([`🎙 ${tag} steady — two on the round.`,`🎙 ${tag} quietly stacking frags.`]):null;}
 function ambientReaction(m,mp){
-  if(rnd()>=0.12)return null;
+  if(rnd()>=0.2)return null;
   const p=pick(lineup(m.a).concat(lineup(m.b)));if(!p)return null;
-  if(hasTrait(p,'clutch')||poise(p)>=0.78)return pick([`🎙 ${p.tag} calmly calls the reload — unhurried.`,`🎙 ${p.tag} resets his crew with a flat hand. No panic.`]);
-  if(hasTrait(p,'hothead')||poise(p)<=0.45)return pick([`🎙 ${p.tag} is jawing across the server already.`,`🎙 ${p.tag} slams the desk after that exchange.`]);
-  if(hasTrait(p,'mentor'))return `🎙 ${p.tag} steadies the young ones — a quiet word between rounds.`;
-  return pick([`🎙 ${p.tag} re-checks the angles, all business.`,`🎙 ${p.tag} shrugs it off and re-stacks.`]);}
+  if(hasTrait(p,'clutch')||poise(p)>=0.78)return pick([`🎙 ${p.tag} calmly calls the reload — unhurried.`,`🎙 ${p.tag} resets his crew with a flat hand. No panic.`,`🎙 ${p.tag} talks it through, slow and level, between rounds.`]);
+  if(hasTrait(p,'hothead')||poise(p)<=0.45)return pick([`🎙 ${p.tag} is jawing across the server already.`,`🎙 ${p.tag} slams the desk after that exchange.`,`🎙 ${p.tag} fires something across the server — the ref glances over.`]);
+  if(hasTrait(p,'mentor'))return pick([`🎙 ${p.tag} steadies the young ones — a quiet word between rounds.`,`🎙 ${p.tag} gathers the crew, calm hand on the shoulder of the youngest.`]);
+  return pick([`🎙 ${p.tag} re-checks the angles, all business.`,`🎙 ${p.tag} shrugs it off and re-stacks.`,`🎙 ${p.tag} rolls his shoulders, resets, eyes back up.`,`🎙 ${p.tag} taps the desk twice and locks back in.`]);}
 // a kill lands between two players with real history — blood, a beef, or an old friendship. The desk lives for these.
 function relReaction(p,V,ev){if(!V)return null;
   const kr=kinRel(p.id,V.id),v=sentiment(p.id,V.id),hot=hasTrait(p,'hothead');
@@ -3102,6 +3165,38 @@ function reactionLine(ev,m,mp){
   if(big<2)return null;
   const sideA=lineup(m.a).some(q=>q.id===p.id),behind=sideA?mp.sa<mp.sb:mp.sb<mp.sa;
   return reactFlavor(p,big,behind);}
+// ---- in-round analyst color: the desk talking OVER the action as it unfolds (a clutch building, a heater,
+// the numbers swinging). At most one per round so the play-by-play still breathes. ----
+function midRoundColor(L,ev,cur,m,mp){
+  if(cur._color||(ev.t!=='kill'&&ev.t!=='open'&&ev.t!=='trade'))return;
+  const lo=Math.min(cur.upA,cur.upB),hi=Math.max(cur.upA,cur.upB);
+  // a clutch arising — the most electric in-round moment, and one the kill-feed alone never sells
+  if(lo===1&&hi>=2&&!cur._clutchArose){
+    if(hi===2&&rnd()>=0.45)return; // a 1v2 is routine — only sometimes worth the call; a 1v3+ always is
+    cur._clutchArose=1;cur._color=1;
+    const last=cur.upA===1?m.a:m.b,other=cur.upA===1?m.b:m.a;
+    return deskSay(L,pickAnalyst(),hi>=3?pick([
+      `${last.short} are down to ONE — 1v${hi}. This is the stuff careers are remembered for. Can he do the impossible?`,
+      `1v${hi} for ${last.short}'s last man, the whole ${other.short} side bearing down. The building is shaking.`,
+      `Everyone on their feet — 1v${hi}, ${last.short} hanging by a thread. Do not breathe.`]):pick([
+      `${last.short} down to their last, ${hi}v1 — he has to thread this himself.`,
+      `${hi}v1, ${last.short} on the back foot. Big moment for one man.`,
+      `Last man up for ${last.short} in a ${hi}v1 — can he steal it?`]));}
+  // a multikill spiralling out of control — the analyst piling on top of the call
+  if(ev.t==='kill'&&ev.n>=4&&rnd()<0.85){cur._color=1;const k=anyPlayerById(ev.k);
+    if(k)return deskSay(L,pickAnalyst(),pick([
+      `I have no words for ${k.tag} right now — get this man on every highlight tonight.`,
+      `${k.tag} is single-handedly stealing this round. Absolute larceny.`,
+      `Somebody check on ${k.tag} — that is NOT normal. ${ev.n} down and counting.`,
+      `You are watching ${k.tag} do something special. Do not look away.`]));}
+  // the kill that levels the numbers — a momentum hinge worth a word (on a cooldown so it never drones)
+  if(ev.t==='kill'&&ev.adv===-1&&rnd()<0.3&&(mp._levelAt==null||mp.round-mp._levelAt>=3)){cur._color=1;mp._levelAt=mp.round;
+    return deskSay(L,pickAnalyst(),pick([`And just like that, back to even numbers — anyone's round now.`,`That trade levels it — fresh fight, even men, hold on.`,`Numbers even again — this round just reset itself.`,`Right back to level — whoever blinks first loses this one.`]));}
+  // an early double off the open — a side seizing the round fast
+  if(ev.t==='kill'&&ev.n===2&&hi-lo>=2&&rnd()<0.22){cur._color=1;const k=anyPlayerById(ev.k);
+    if(k)return deskSay(L,pickAnalyst(),pick([`${k.tag} is forcing the issue early — ${ksh2(m,ev)} have the man-advantage and the initiative.`,`Fast start to the round — ${k.tag} swinging the numbers before anyone's set.`]));}
+}
+function ksh2(m,ev){return ev.k!=null?sideShortOf(m,ev.k):'';}
 // ---- the round, committed: shared bookkeeping for both the fast path and the kill-by-kill reveal ----
 function roundOpts(L,mp,ev){
   const note=econBuyBoth(mp.econ,L.match.a,L.match.b,mp.sa,mp.sb,mp.stA||0,mp.stB||0,mp.buy); // the buy, before the round
@@ -3143,6 +3238,7 @@ function revealEvent(L){const m=L.match,mp=m.map,cur=mp.cur;if(!cur)return 'roun
   if(ev.v!=null&&(ev.t==='open'||ev.t==='kill'||ev.t==='trade')){if(sideOf(m,ev.v)==='a')cur.upA--;else cur.upB--;} // live man-count
   pushLog(L,eventLine(ev,m,mp),eventKind(ev));
   const rx=reactionLine(ev,m,mp);if(rx)pushLog(L,rx,'color');
+  midRoundColor(L,ev,cur,m,mp); // an analyst beat over the top of the action
   if(cur.ei>=cur.ev.length)return finishRound(L);
   return 'event';}
 function finishRound(L){const mp=L.match.map,r=mp.cur.r;mp.cur=null;return commitRound(L,r,false);}
